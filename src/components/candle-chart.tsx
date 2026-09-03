@@ -70,7 +70,12 @@ export function CandleChart({
 
   if (!stats || candles.length < 2) {
     return (
-      <div className={cn("flex h-56 items-center justify-center bg-surface text-2xs text-muted", className)}>
+      <div
+        className={cn(
+          "flex h-56 items-center justify-center bg-surface text-2xs text-muted",
+          className,
+        )}
+      >
         {msg("chartWait")}
       </div>
     );
@@ -118,11 +123,7 @@ export function CandleChart({
           const bot = y(Math.min(c.o, c.c));
           const body = Math.max(1.2, bot - top);
           return (
-            <g
-              key={c.t}
-              onMouseEnter={() => setHover(i)}
-              className="cursor-crosshair"
-            >
+            <g key={c.t} onMouseEnter={() => setHover(i)} className="cursor-crosshair">
               <rect x={x - slot / 2} y={0} width={slot} height={h} fill="transparent" />
               <line
                 x1={x}

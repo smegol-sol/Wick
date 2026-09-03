@@ -62,7 +62,14 @@ function securityOf(complete: boolean, chain?: MintFlags): Security {
       onchain: true,
     };
   }
-  return { mintable: false, freeze: false, lpBurned: complete, renounced: false, top10: null, onchain: false };
+  return {
+    mintable: false,
+    freeze: false,
+    lpBurned: complete,
+    renounced: false,
+    top10: null,
+    onchain: false,
+  };
 }
 
 function coinToToken(coin: PumpCoin, now: number, sol: number | null): Token | null {
@@ -161,7 +168,10 @@ async function fetchPulse(): Promise<Pulse> {
       if (tokens.length >= 56) break;
     }
     const mints = tokens.map((tk) => tk.mint);
-    const [flags, stats] = await Promise.all([auditMints(mints), fetchDexStats(mints, ctrl.signal)]);
+    const [flags, stats] = await Promise.all([
+      auditMints(mints),
+      fetchDexStats(mints, ctrl.signal),
+    ]);
     for (const tk of tokens) {
       const chain = flags.get(tk.mint);
       if (chain) {

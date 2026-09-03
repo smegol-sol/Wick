@@ -44,7 +44,12 @@ export async function auditMints(mints: string[]): Promise<Map<string, MintFlags
     if (!isB58(mint)) continue;
     const hit = cache.get(mint);
     if (hit && now - hit.at < TTL) {
-      out.set(mint, { mintable: hit.mintable, freeze: hit.freeze, decimals: hit.decimals, supply: hit.supply });
+      out.set(mint, {
+        mintable: hit.mintable,
+        freeze: hit.freeze,
+        decimals: hit.decimals,
+        supply: hit.supply,
+      });
     } else if (need.length < 100) {
       need.push(mint);
     }

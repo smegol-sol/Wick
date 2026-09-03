@@ -30,7 +30,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       void pullLive()
         .then((data) => {
           if (stop || !data) return;
-          useDesk.getState().ingestLive(data.tokens ?? [], typeof data.solUsd === "number" ? data.solUsd : null);
+          useDesk
+            .getState()
+            .ingestLive(data.tokens ?? [], typeof data.solUsd === "number" ? data.solUsd : null);
         })
         .finally(() => {
           inflight = false;

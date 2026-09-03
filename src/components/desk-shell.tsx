@@ -64,7 +64,9 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
   const hits = useMemo(() => {
     const query = q.trim().toLowerCase();
     if (query.length < 1) return [];
-    return tokens.filter((t) => `${t.symbol} ${t.name} ${t.mint}`.toLowerCase().includes(query)).slice(0, 6);
+    return tokens
+      .filter((t) => `${t.symbol} ${t.name} ${t.mint}`.toLowerCase().includes(query))
+      .slice(0, 6);
   }, [q, tokens]);
 
   return (
@@ -75,7 +77,9 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-2 px-3 py-2">
           <Link to="/" className="flex items-center gap-2 pe-1">
             <WickMark className="size-6" />
-            <span className="text-[11px] font-semibold tracking-[0.22em] uppercase">{msg("app")}</span>
+            <span className="text-[11px] font-semibold tracking-[0.22em] uppercase">
+              {msg("app")}
+            </span>
           </Link>
           <nav className="hidden items-center gap-0.5 xl:flex">
             {NAV.map((n) => {
@@ -84,7 +88,10 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={n.to}
                   to={n.to}
-                  className={cn("flex h-11 items-center rounded-sm px-3 text-xs font-medium tracking-wide", on ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
+                  className={cn(
+                    "flex h-11 items-center rounded-sm px-3 text-xs font-medium tracking-wide",
+                    on ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                  )}
                 >
                   {msg(n.key)}
                 </Link>
@@ -92,12 +99,23 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
           <div className="relative ms-auto min-w-0 flex-1 max-w-[11rem] sm:max-w-xs">
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={msg("search")} aria-label={msg("search")} className="h-11 text-base md:text-sm" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={msg("search")}
+              aria-label={msg("search")}
+              className="h-11 text-base md:text-sm"
+            />
             {hits.length ? (
               <ul className="absolute inset-x-0 top-full z-40 mt-1 overflow-hidden rounded-md bg-surface shadow-[var(--shadow-border)]">
                 {hits.map((t) => (
                   <li key={t.id}>
-                    <Link to="/token/$id" params={{ id: t.id }} className="flex items-center justify-between px-3 py-2 text-sm hover:bg-elevated" onClick={() => setQ("")}>
+                    <Link
+                      to="/token/$id"
+                      params={{ id: t.id }}
+                      className="flex items-center justify-between px-3 py-2 text-sm hover:bg-elevated"
+                      onClick={() => setQ("")}
+                    >
                       <span>{t.symbol}</span>
                       <span className="font-mono text-2xs text-muted">{t.chain}</span>
                     </Link>
@@ -107,8 +125,12 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
             ) : null}
           </div>
           <span className="hidden h-9 items-center gap-2 rounded-sm px-2 font-mono text-2xs uppercase sm:flex">
-            <span className={liveOk ? "text-up" : "text-subtle"}>{liveOk ? msg("liveOn") : msg("liveDown")}</span>
-            <span className={signing ? "text-warn" : "text-subtle"}>{signing ? msg("execArmed") : msg("hotLocked")}</span>
+            <span className={liveOk ? "text-up" : "text-subtle"}>
+              {liveOk ? msg("liveOn") : msg("liveDown")}
+            </span>
+            <span className={signing ? "text-warn" : "text-subtle"}>
+              {signing ? msg("execArmed") : msg("hotLocked")}
+            </span>
             {settings.snipeLive ? <span className="text-warn">{msg("snipeLive")}</span> : null}
           </span>
           <RiskChip />
@@ -133,7 +155,10 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
           </button>
           <button
             type="button"
-            className={cn("relative flex size-11 items-center justify-center rounded-sm", profile ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
+            className={cn(
+              "relative flex size-11 items-center justify-center rounded-sm",
+              profile ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+            )}
             onClick={() => {
               setRadar(false);
               setProfile((v) => !v);
@@ -141,7 +166,9 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
             aria-label={msg("profile")}
           >
             <CircleUser className="size-4" />
-            {signing ? <span className="absolute top-1.5 end-1.5 size-1.5 rounded-full bg-warn" /> : null}
+            {signing ? (
+              <span className="absolute top-1.5 end-1.5 size-1.5 rounded-full bg-warn" />
+            ) : null}
           </button>
         </div>
       </header>
@@ -173,7 +200,10 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
             <Link
               key={n.to}
               to={n.to}
-              className={cn("relative flex min-h-12 flex-col items-center justify-center gap-0.5 text-[10px] tracking-wide", on ? "text-fg" : "text-muted")}
+              className={cn(
+                "relative flex min-h-12 flex-col items-center justify-center gap-0.5 text-[10px] tracking-wide",
+                on ? "text-fg" : "text-muted",
+              )}
             >
               {on ? <span className="absolute inset-x-4 top-0 h-px bg-fg" /> : null}
               <Icon className="size-4" />

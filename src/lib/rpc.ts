@@ -36,7 +36,11 @@ export async function rpcCall<T>(
   const res = await fetch(url, {
     method: "POST",
     signal,
-    headers: { "content-type": "application/json", accept: "application/json", "user-agent": "WICK/1" },
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json",
+      "user-agent": "WICK/1",
+    },
     redirect: "error",
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
@@ -47,7 +51,11 @@ export async function rpcCall<T>(
 }
 
 /** Try each RPC in order until one answers. */
-export async function rpcAny<T>(method: string, params: unknown[], signal: AbortSignal): Promise<T | null> {
+export async function rpcAny<T>(
+  method: string,
+  params: unknown[],
+  signal: AbortSignal,
+): Promise<T | null> {
   for (const url of rpcUrls()) {
     if (signal.aborted) break;
     try {

@@ -4,7 +4,8 @@ import { MarketProvider } from "@/components/market-provider";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "WICK";
-const DESCRIPTION = "WICK. Solana meme spot desk. Live pulse, on-chain audit, self-custodied execution.";
+const DESCRIPTION =
+  "WICK. Solana meme spot desk. Live pulse, on-chain audit, self-custodied execution.";
 
 export const Route = createRootRoute({
   head: () => ({

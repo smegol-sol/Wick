@@ -100,7 +100,14 @@ export function nameFlowOf(tk: Token, prints: Print[]): NameFlow {
 export function bookSmartFlow(tokens: Token[], follows: Follow[], prints: Print[]): BookFlow {
   const deskMap = new Map<string, DeskFlow>();
   for (const f of follows) {
-    deskMap.set(f.pk, { walletId: f.pk, name: f.label || shortPk(f.pk), buySol: 0, sellSol: 0, net: 0, names: 0 });
+    deskMap.set(f.pk, {
+      walletId: f.pk,
+      name: f.label || shortPk(f.pk),
+      buySol: 0,
+      sellSol: 0,
+      net: 0,
+      names: 0,
+    });
   }
   const names: NameFlow[] = [];
   const byMint = new Map(tokens.map((t) => [t.mint, t]));

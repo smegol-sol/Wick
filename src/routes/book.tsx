@@ -57,103 +57,124 @@ function BookPage() {
 
       {tab === "chain" ? (
         <>
-          <h2 className="mb-1 text-xs font-medium tracking-wide text-muted uppercase">{msg("holdings")}</h2>
+          <h2 className="mb-1 text-xs font-medium tracking-wide text-muted uppercase">
+            {msg("holdings")}
+          </h2>
           <p className="mb-2 font-mono text-2xs text-subtle">{msg("chainRead")}</p>
           <HoldingsPanel />
           <WalletTape />
           <LiveFillsPanel />
 
-      <h2 className="mt-6 mb-2 text-xs font-medium tracking-wide text-muted uppercase">{msg("ladder")}</h2>
-      <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
-        {ladders.filter((p) => p.status === "live").length === 0 ? (
-          <p className="p-4 text-sm text-muted">{msg("ladderHint")}</p>
-        ) : (
-          ladders
-            .filter((p) => p.status === "live")
-            .map((p) => {
-              const tk = tokens.find((t) => t.id === p.tokenId);
-              const wait = Math.max(0, Math.ceil((p.nextAt - now) / 1000));
-              const phaseKey: Record<LadderPhase, Msg> = {
-                confirm: "phaseConfirm",
-                dip: "phaseDip",
-                twap: "phaseTwap",
-              };
-              const step =
-                p.phase === "confirm"
-                  ? `${p.confirms}/${p.confirmNeed}`
-                  : p.phase === "dip"
-                    ? `${p.dipDone}/${p.dipNeed}`
-                    : `${p.twapDone}/${p.twapNeed}`;
-              return (
-                <div key={p.id} className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-                  <Link to="/token/$id" params={{ id: p.tokenId }} className="min-w-0 text-sm">
-                    {tk?.symbol ?? p.tokenId}
-                    <span className="ms-2 font-mono text-2xs text-muted num">
-                      {msg(phaseKey[p.phase])} {step} · {formatSol(p.budget - p.spent)} · {msg("dcaNext")} {wait}s
-                      {p.pendingSol >= 0.05 ? ` · ${msg("signing")}` : ""}
-                    </span>
-                  </Link>
-                  <Button size="sm" variant="quiet" onClick={() => cancelLadder(p.tokenId)}>
-                    {msg("cancel")}
-                  </Button>
-                </div>
-              );
-            })
-        )}
-      </div>
+          <h2 className="mt-6 mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+            {msg("ladder")}
+          </h2>
+          <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
+            {ladders.filter((p) => p.status === "live").length === 0 ? (
+              <p className="p-4 text-sm text-muted">{msg("ladderHint")}</p>
+            ) : (
+              ladders
+                .filter((p) => p.status === "live")
+                .map((p) => {
+                  const tk = tokens.find((t) => t.id === p.tokenId);
+                  const wait = Math.max(0, Math.ceil((p.nextAt - now) / 1000));
+                  const phaseKey: Record<LadderPhase, Msg> = {
+                    confirm: "phaseConfirm",
+                    dip: "phaseDip",
+                    twap: "phaseTwap",
+                  };
+                  const step =
+                    p.phase === "confirm"
+                      ? `${p.confirms}/${p.confirmNeed}`
+                      : p.phase === "dip"
+                        ? `${p.dipDone}/${p.dipNeed}`
+                        : `${p.twapDone}/${p.twapNeed}`;
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between gap-2 border-b border-border px-3 py-2"
+                    >
+                      <Link to="/token/$id" params={{ id: p.tokenId }} className="min-w-0 text-sm">
+                        {tk?.symbol ?? p.tokenId}
+                        <span className="ms-2 font-mono text-2xs text-muted num">
+                          {msg(phaseKey[p.phase])} {step} · {formatSol(p.budget - p.spent)} ·{" "}
+                          {msg("dcaNext")} {wait}s
+                          {p.pendingSol >= 0.05 ? ` · ${msg("signing")}` : ""}
+                        </span>
+                      </Link>
+                      <Button size="sm" variant="quiet" onClick={() => cancelLadder(p.tokenId)}>
+                        {msg("cancel")}
+                      </Button>
+                    </div>
+                  );
+                })
+            )}
+          </div>
 
-      <h2 className="mt-6 mb-2 text-xs font-medium tracking-wide text-muted uppercase">{msg("dca")}</h2>
-      <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
-        {dcaPlans.filter((p) => p.status === "live").length === 0 ? (
-          <p className="p-4 text-sm text-muted">{msg("emptyTape")}</p>
-        ) : (
-          dcaPlans
-            .filter((p) => p.status === "live")
-            .map((p) => {
-              const tk = tokens.find((t) => t.id === p.tokenId);
-              const wait = Math.max(0, Math.ceil((p.nextAt - now) / 1000));
-              return (
-                <div key={p.id} className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-                  <Link to="/token/$id" params={{ id: p.tokenId }} className="min-w-0 text-sm">
-                    {tk?.symbol ?? p.tokenId}
-                    <span className="ms-2 font-mono text-2xs text-muted num">
-                      {p.done}/{p.slices} · {formatSol(p.sol)} · {msg("dcaNext")} {wait}s
-                      {p.pendingSol >= 0.05 ? ` · ${msg("signing")}` : ""}
-                    </span>
-                  </Link>
-                  <Button size="sm" variant="quiet" onClick={() => cancelDca(p.tokenId)}>
-                    {msg("cancel")}
-                  </Button>
-                </div>
-              );
-            })
-        )}
-      </div>
+          <h2 className="mt-6 mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+            {msg("dca")}
+          </h2>
+          <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
+            {dcaPlans.filter((p) => p.status === "live").length === 0 ? (
+              <p className="p-4 text-sm text-muted">{msg("emptyTape")}</p>
+            ) : (
+              dcaPlans
+                .filter((p) => p.status === "live")
+                .map((p) => {
+                  const tk = tokens.find((t) => t.id === p.tokenId);
+                  const wait = Math.max(0, Math.ceil((p.nextAt - now) / 1000));
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between gap-2 border-b border-border px-3 py-2"
+                    >
+                      <Link to="/token/$id" params={{ id: p.tokenId }} className="min-w-0 text-sm">
+                        {tk?.symbol ?? p.tokenId}
+                        <span className="ms-2 font-mono text-2xs text-muted num">
+                          {p.done}/{p.slices} · {formatSol(p.sol)} · {msg("dcaNext")} {wait}s
+                          {p.pendingSol >= 0.05 ? ` · ${msg("signing")}` : ""}
+                        </span>
+                      </Link>
+                      <Button size="sm" variant="quiet" onClick={() => cancelDca(p.tokenId)}>
+                        {msg("cancel")}
+                      </Button>
+                    </div>
+                  );
+                })
+            )}
+          </div>
 
-      <h2 className="mt-6 mb-2 text-xs font-medium tracking-wide text-muted uppercase">{msg("orderResting")}</h2>
-      <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
-        {limits.filter((o) => o.status === "open" || o.status === "triggered").length === 0 ? (
-          <p className="p-4 text-sm text-muted">{msg("emptyTape")}</p>
-        ) : (
-          limits
-            .filter((o) => o.status === "open" || o.status === "triggered")
-            .map((o) => {
-              const tk = tokens.find((t) => t.id === o.tokenId);
-              return (
-                <div key={o.id} className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-                  <span className="text-sm">
-                    {o.side === "buy" ? msg("buy") : msg("sell")} {tk?.symbol ?? o.tokenId.slice(0, 6)} @{" "}
-                    {formatUsd(o.triggerMc, 0)} · {formatSol(o.sol)}
-                    {o.status === "triggered" ? <span className="ms-2 text-warn">{msg("signing")}</span> : null}
-                  </span>
-                  <Button size="sm" variant="quiet" onClick={() => cancel(o.id)}>
-                    {msg("cancel")}
-                  </Button>
-                </div>
-              );
-            })
-        )}
-      </div>
+          <h2 className="mt-6 mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+            {msg("orderResting")}
+          </h2>
+          <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
+            {limits.filter((o) => o.status === "open" || o.status === "triggered").length === 0 ? (
+              <p className="p-4 text-sm text-muted">{msg("emptyTape")}</p>
+            ) : (
+              limits
+                .filter((o) => o.status === "open" || o.status === "triggered")
+                .map((o) => {
+                  const tk = tokens.find((t) => t.id === o.tokenId);
+                  return (
+                    <div
+                      key={o.id}
+                      className="flex items-center justify-between gap-2 border-b border-border px-3 py-2"
+                    >
+                      <span className="text-sm">
+                        {o.side === "buy" ? msg("buy") : msg("sell")}{" "}
+                        {tk?.symbol ?? o.tokenId.slice(0, 6)} @ {formatUsd(o.triggerMc, 0)} ·{" "}
+                        {formatSol(o.sol)}
+                        {o.status === "triggered" ? (
+                          <span className="ms-2 text-warn">{msg("signing")}</span>
+                        ) : null}
+                      </span>
+                      <Button size="sm" variant="quiet" onClick={() => cancel(o.id)}>
+                        {msg("cancel")}
+                      </Button>
+                    </div>
+                  );
+                })
+            )}
+          </div>
         </>
       ) : null}
 
@@ -161,29 +182,34 @@ function BookPage() {
 
       {tab === "fills" ? (
         <>
-      <h2 className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">{msg("history")}</h2>
-      <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
-        {liveFills.length === 0 ? (
-          <p className="p-4 text-sm text-muted">{msg("emptyLiveFills")}</p>
-        ) : (
-          liveFills.slice(0, 40).map((f) => {
-            const tk = tokens.find((t) => t.id === f.tokenId || t.mint === f.mint);
-            return (
-              <div key={f.id} className="flex items-center justify-between border-b border-border px-3 py-2 text-sm">
-                <span>
-                  <span className={f.side === "buy" ? "text-up" : "text-down"}>
-                    {f.side === "buy" ? msg("buy") : msg("sell")}
-                  </span>{" "}
-                  {tk?.symbol ?? f.mint.slice(0, 6)}
-                </span>
-                <span className="font-mono text-2xs text-muted num">
-                  {f.sol.toFixed(3)} · {f.status}
-                </span>
-              </div>
-            );
-          })
-        )}
-      </div>
+          <h2 className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+            {msg("history")}
+          </h2>
+          <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
+            {liveFills.length === 0 ? (
+              <p className="p-4 text-sm text-muted">{msg("emptyLiveFills")}</p>
+            ) : (
+              liveFills.slice(0, 40).map((f) => {
+                const tk = tokens.find((t) => t.id === f.tokenId || t.mint === f.mint);
+                return (
+                  <div
+                    key={f.id}
+                    className="flex items-center justify-between border-b border-border px-3 py-2 text-sm"
+                  >
+                    <span>
+                      <span className={f.side === "buy" ? "text-up" : "text-down"}>
+                        {f.side === "buy" ? msg("buy") : msg("sell")}
+                      </span>{" "}
+                      {tk?.symbol ?? f.mint.slice(0, 6)}
+                    </span>
+                    <span className="font-mono text-2xs text-muted num">
+                      {f.sol.toFixed(3)} · {f.status}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </>
       ) : null}
     </div>
@@ -266,10 +292,14 @@ function HoldingsPanel() {
               <div className="text-sm font-medium">SOL</div>
               <div className="font-mono text-2xs text-muted">{msg("sol")}</div>
             </div>
-            <div className="text-end font-mono text-sm num">{chainSol != null ? formatSol(chainSol) : "—"}</div>
+            <div className="text-end font-mono text-sm num">
+              {chainSol != null ? formatSol(chainSol) : "—"}
+            </div>
           </div>
           {ranked.length === 0 ? (
-            <p className="p-4 text-sm text-muted">{tokensOk ? msg("emptyHoldings") : msg("holdingsPartial")}</p>
+            <p className="p-4 text-sm text-muted">
+              {tokensOk ? msg("emptyHoldings") : msg("holdingsPartial")}
+            </p>
           ) : (
             ranked.map((h) => {
               const tk = tokens.find((t) => t.mint === h.mint || t.id === h.mint);
@@ -278,23 +308,34 @@ function HoldingsPanel() {
               const label = tk?.symbol || h.symbol || shortMint(h.mint);
               const ex = tk ? chainExits.find((e) => e.tokenId === tk.id) : undefined;
               return (
-                <div key={h.mint} className="flex items-center gap-2 border-b border-border px-3 py-2">
+                <div
+                  key={h.mint}
+                  className="flex items-center gap-2 border-b border-border px-3 py-2"
+                >
                   <TokenMark id={tk?.id ?? h.mint} symbol={label} />
                   <div className="min-w-0 flex-1">
                     {tk ? (
-                      <Link to="/token/$id" params={{ id: tk.id }} className="block truncate text-sm font-medium">
+                      <Link
+                        to="/token/$id"
+                        params={{ id: tk.id }}
+                        className="block truncate text-sm font-medium"
+                      >
                         {label}
                       </Link>
                     ) : (
                       <div className="truncate text-sm font-medium">{label}</div>
                     )}
                     <div className="flex items-center gap-1.5">
-                      <span className="truncate font-mono text-2xs text-muted num">{shortMint(h.mint)}</span>
+                      <span className="truncate font-mono text-2xs text-muted num">
+                        {shortMint(h.mint)}
+                      </span>
                       {tk ? <span className="text-2xs text-accent">{msg("onTape")}</span> : null}
                     </div>
                     {ex && (ex.tpPct != null || ex.slPct != null || ex.devExit) ? (
                       <div className="mt-0.5 flex flex-wrap gap-2 font-mono text-2xs num">
-                        {ex.pendingKind ? <span className="text-warn">{msg("signing")}</span> : null}
+                        {ex.pendingKind ? (
+                          <span className="text-warn">{msg("signing")}</span>
+                        ) : null}
                         {ex.tpPct != null ? (
                           <span className="text-up">
                             {msg("sourceTp")} {ex.tpPct}%
@@ -310,7 +351,9 @@ function HoldingsPanel() {
                     ) : null}
                   </div>
                   <div className="text-end">
-                    <div className="font-mono text-sm num">{val != null ? formatUsd(val) : formatQty(h.amount)}</div>
+                    <div className="font-mono text-sm num">
+                      {val != null ? formatUsd(val) : formatQty(h.amount)}
+                    </div>
                     <div className="font-mono text-2xs text-muted num">{formatQty(h.amount)}</div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
@@ -368,7 +411,9 @@ function WatchHoldings() {
 
   return (
     <div className="mt-4 overflow-hidden rounded-lg bg-surface p-3 shadow-[var(--shadow-border)]">
-      <h3 className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">{msg("watching")}</h3>
+      <h3 className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+        {msg("watching")}
+      </h3>
       <WatchAddrForm />
       {other ? (
         <div className="mt-3">
@@ -378,13 +423,17 @@ function WatchHoldings() {
               {msg("close")}
             </Button>
           </div>
-          <p className="font-mono text-xs num">SOL {sol != null ? formatSol(sol) : bagAt === 0 ? "…" : "—"}</p>
+          <p className="font-mono text-xs num">
+            SOL {sol != null ? formatSol(sol) : bagAt === 0 ? "…" : "—"}
+          </p>
           {holdings.slice(0, 8).map((h) => {
             const tk = tokens.find((t) => t.mint === h.mint || t.id === h.mint);
             return (
               <div key={h.mint} className="flex items-center justify-between py-1 text-2xs">
                 <span className="truncate">{tk?.symbol || h.symbol || shortMint(h.mint)}</span>
-                <span className="font-mono num">{h.usd != null ? formatUsd(h.usd) : formatQty(h.amount)}</span>
+                <span className="font-mono num">
+                  {h.usd != null ? formatUsd(h.usd) : formatQty(h.amount)}
+                </span>
               </div>
             );
           })}
@@ -402,20 +451,33 @@ function WalletTape() {
   if (!pk) return null;
   return (
     <>
-      <h2 className="mt-6 mb-1 text-xs font-medium tracking-wide text-muted uppercase">{msg("chainTape")}</h2>
+      <h2 className="mt-6 mb-1 text-xs font-medium tracking-wide text-muted uppercase">
+        {msg("chainTape")}
+      </h2>
       <p className="mb-2 font-mono text-2xs text-subtle">{msg("chainRead")}</p>
       <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
         {prints.length === 0 ? (
           <p className="p-4 text-sm text-muted">{msg("emptyChainTape")}</p>
         ) : (
           prints.map((p) => {
-            const tk = p.mint ? tokens.find((t) => t.mint === p.mint || t.id === p.mint) : undefined;
+            const tk = p.mint
+              ? tokens.find((t) => t.mint === p.mint || t.id === p.mint)
+              : undefined;
             const label = tk?.symbol || p.symbol || (p.mint ? shortMint(p.mint) : "SOL");
             const buyish = p.side === "buy" || p.side === "in";
             return (
-              <div key={p.sig} className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm">
+              <div
+                key={p.sig}
+                className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm"
+              >
                 <span className={buyish ? "text-up" : "text-down"}>
-                  {p.side === "buy" ? msg("buy") : p.side === "sell" ? msg("sell") : p.side === "in" ? msg("bought") : msg("sold")}{" "}
+                  {p.side === "buy"
+                    ? msg("buy")
+                    : p.side === "sell"
+                      ? msg("sell")
+                      : p.side === "in"
+                        ? msg("bought")
+                        : msg("sold")}{" "}
                   {label}
                 </span>
                 <span className="font-mono text-2xs text-muted num">
@@ -437,7 +499,9 @@ function LiveFillsPanel() {
   const tokens = useDesk((s) => s.tokens);
   return (
     <>
-      <h2 className="mt-6 mb-1 text-xs font-medium tracking-wide text-muted uppercase">{msg("liveFills")}</h2>
+      <h2 className="mt-6 mb-1 text-xs font-medium tracking-wide text-muted uppercase">
+        {msg("liveFills")}
+      </h2>
       <p className="mb-2 font-mono text-2xs text-subtle">{msg("execHint")}</p>
       <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
         {fills.length === 0 ? (
@@ -447,7 +511,10 @@ function LiveFillsPanel() {
             const tk = tokens.find((t) => t.id === f.tokenId || t.mint === f.mint);
             const label = tk?.symbol || shortMint(f.mint);
             return (
-              <div key={f.sig} className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm">
+              <div
+                key={f.sig}
+                className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm"
+              >
                 <span className={f.side === "buy" ? "text-up" : "text-down"}>
                   {f.side === "buy" ? msg("signBuy") : msg("signSell")} {label}
                 </span>
@@ -457,8 +524,12 @@ function LiveFillsPanel() {
                   rel="noreferrer"
                   className="shrink-0 font-mono text-2xs text-muted num hover:text-fg"
                 >
-                  {f.status === "ok" ? msg("signOk") : f.status === "fail" ? msg("signFail") : msg("signSent")} ·{" "}
-                  {formatSol(f.sol)} · {shortMint(f.sig)}
+                  {f.status === "ok"
+                    ? msg("signOk")
+                    : f.status === "fail"
+                      ? msg("signFail")
+                      : msg("signSent")}{" "}
+                  · {formatSol(f.sol)} · {shortMint(f.sig)}
                 </a>
               </div>
             );

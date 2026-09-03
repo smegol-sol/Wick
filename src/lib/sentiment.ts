@@ -115,6 +115,9 @@ export function marketMood(tokens: Token[], prints: Print[]): MarketMood {
     smart,
     breadth: tokens.length ? up / tokens.length : 0,
     leaders: [...rows].sort((a, b) => b.score - a.score).slice(0, 6),
-    fades: rows.filter((r) => r.tone === "fade").sort((a, b) => b.social - a.social).slice(0, 6),
+    fades: rows
+      .filter((r) => r.tone === "fade")
+      .sort((a, b) => b.social - a.social)
+      .slice(0, 6),
   };
 }

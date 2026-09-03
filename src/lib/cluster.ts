@@ -26,7 +26,10 @@ const RULES: Array<[Cluster, RegExp]> = [
 const FALLBACK: Cluster[] = ["dog", "ai", "tick", "cult", "frog", "other"];
 
 function hay(symbol: string, name?: string): string {
-  return `${symbol} ${name ?? ""}`.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return `${symbol} ${name ?? ""}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function hash(s: string): number {
@@ -77,7 +80,8 @@ export function hottestCluster(
   let best: { cluster: Cluster; names: number; cost: number } | null = null;
   for (const [cluster, v] of map) {
     const row = { cluster, names: v.names.size, cost: v.cost };
-    if (!best || row.names > best.names || (row.names === best.names && row.cost > best.cost)) best = row;
+    if (!best || row.names > best.names || (row.names === best.names && row.cost > best.cost))
+      best = row;
   }
   return best;
 }

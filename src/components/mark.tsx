@@ -10,7 +10,15 @@ export function WickMark({ className }: { className?: string }) {
   );
 }
 
-export function TokenMark({ id, symbol, className }: { id: string; symbol: string; className?: string }) {
+export function TokenMark({
+  id,
+  symbol,
+  className,
+}: {
+  id: string;
+  symbol: string;
+  className?: string;
+}) {
   const n = id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
   const rot = (n % 4) * 90;
   return (

@@ -8,7 +8,11 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "playwright";
 
-const CHROME = process.env.CHROME_PATH || ["/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/opt/pw-browsers/chromium"].find((p) => existsSync(p));
+const CHROME =
+  process.env.CHROME_PATH ||
+  ["/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/opt/pw-browsers/chromium"].find((p) =>
+    existsSync(p),
+  );
 
 const url = process.argv[2] || "http://127.0.0.1:8080/";
 const outDir = process.argv[3] || "screenshots";
@@ -30,7 +34,9 @@ try {
     const res = await page.goto(url, { waitUntil: "networkidle", timeout: 60_000 });
     await page.waitForTimeout(1500);
     const text = (await page.textContent("body"))?.replace(/\s+/g, " ").trim() ?? "";
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    );
     const file = `${outDir}/smoke-${name}.png`;
     await page.screenshot({ path: file, fullPage: false });
     const verdict = {

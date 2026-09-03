@@ -46,7 +46,8 @@ async function broadcast(signed: string): Promise<LiveSwapResult> {
     });
     if (res.status === 429) return { ok: false, error: "rate" };
     const data = (await res.json().catch(() => null)) as { ok?: boolean; sig?: string } | null;
-    if (!data?.ok || typeof data.sig !== "string" || !isSig(data.sig)) return { ok: false, error: "fail" };
+    if (!data?.ok || typeof data.sig !== "string" || !isSig(data.sig))
+      return { ok: false, error: "fail" };
     const status = await waitTx(data.sig);
     return { ok: true, sig: data.sig, status };
   } catch {
@@ -56,7 +57,8 @@ async function broadcast(signed: string): Promise<LiveSwapResult> {
 
 export async function sendLiveSwap(req: LiveSwapReq): Promise<LiveSwapResult> {
   if (!isB58(req.mint) || !isB58(req.user)) return { ok: false, error: "bad" };
-  if (!canSignHot(req.vault ?? null, !!req.unlocked, req.user)) return { ok: false, error: "needWallet" };
+  if (!canSignHot(req.vault ?? null, !!req.unlocked, req.user))
+    return { ok: false, error: "needWallet" };
 
   let res: Response;
   try {
@@ -77,9 +79,11 @@ export async function sendLiveSwap(req: LiveSwapReq): Promise<LiveSwapResult> {
     return { ok: false, error: "fail" };
   }
   if (res.status === 429) return { ok: false, error: "rate" };
-  const data = (await res.json().catch(() => null)) as
-    | { ok?: boolean; error?: string; swapTransaction?: string }
-    | null;
+  const data = (await res.json().catch(() => null)) as {
+    ok?: boolean;
+    error?: string;
+    swapTransaction?: string;
+  } | null;
   if (!data || data.ok !== true || typeof data.swapTransaction !== "string") {
     if (data?.error === "route") return { ok: false, error: "route" };
     if (data?.error === "bad") return { ok: false, error: "bad" };

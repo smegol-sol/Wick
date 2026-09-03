@@ -19,7 +19,11 @@ export function Scorecard({ row }: { row: LabRow }) {
   const fraud = token ? fraudOf(token) : null;
   const cells: Array<{ k: string; v: string; tone?: "up" | "down" | "warn" | "muted" }> = [
     { k: msg("grade"), v: row.grade, tone: row.grade === "F" || row.grade === "D" ? "down" : "up" },
-    { k: msg("edge"), v: row.edge.toFixed(1), tone: row.edge >= 0.7 ? "up" : row.edge < 0 ? "down" : "muted" },
+    {
+      k: msg("edge"),
+      v: row.edge.toFixed(1),
+      tone: row.edge >= 0.7 ? "up" : row.edge < 0 ? "down" : "muted",
+    },
     { k: msg("ath"), v: formatUsd(row.ath, 6) },
     { k: msg("drawdown"), v: formatPct(-row.dd * 100), tone: row.dd >= 0.2 ? "down" : "muted" },
     { k: msg("volMc"), v: row.volMc == null ? "n/a" : row.volMc.toFixed(2) },
@@ -31,15 +35,35 @@ export function Scorecard({ row }: { row: LabRow }) {
     { k: msg("clusterHeat"), v: msg(CLUSTER_MSG[row.cluster]) },
     {
       k: msg("lab"),
-      v: msg(row.kind === "setup" ? "setups" : row.kind === "heat" ? "chasing" : row.kind === "toxic" ? "toxic" : "labWatch"),
-      tone: row.kind === "setup" ? "up" : row.kind === "toxic" ? "down" : row.kind === "heat" ? "warn" : "muted",
+      v: msg(
+        row.kind === "setup"
+          ? "setups"
+          : row.kind === "heat"
+            ? "chasing"
+            : row.kind === "toxic"
+              ? "toxic"
+              : "labWatch",
+      ),
+      tone:
+        row.kind === "setup"
+          ? "up"
+          : row.kind === "toxic"
+            ? "down"
+            : row.kind === "heat"
+              ? "warn"
+              : "muted",
     },
   ];
   if (fraud) {
     cells.push({
       k: msg("fraud"),
       v: fraud.checked === 0 ? "n/a" : `${fraud.score} ${msg(FRAUD_MSG[fraud.tag])}`,
-      tone: fraud.tag === "clean" ? "up" : fraud.tag === "trap" || fraud.tag === "wash" ? "down" : "warn",
+      tone:
+        fraud.tag === "clean"
+          ? "up"
+          : fraud.tag === "trap" || fraud.tag === "wash"
+            ? "down"
+            : "warn",
     });
   }
   return (

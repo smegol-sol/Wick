@@ -68,7 +68,9 @@ function PulsePage() {
           <PulseColumn title={msg("watch")} tokens={watched} empty={msg("emptyWatch")} />
         ) : (
           <PulseColumn
-            title={col === "new" ? msg("newPairs") : col === "bonding" ? msg("bonding") : msg("migrated")}
+            title={
+              col === "new" ? msg("newPairs") : col === "bonding" ? msg("bonding") : msg("migrated")
+            }
             tokens={col === "new" ? neu : col === "bonding" ? bond : mig}
           />
         )}

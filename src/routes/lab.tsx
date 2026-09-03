@@ -36,7 +36,10 @@ function LabPage() {
   const [kind, setKind] = useState<SetupKind | "all">("setup");
   const [tab, setTab] = useState<"mood" | "board" | "fraud">("mood");
   const pool = useMemo(() => filteredTokens({ tokens, settings }), [tokens, settings]);
-  const prints = useMemo(() => followPrints(follows, followTape, solUsd), [follows, followTape, solUsd]);
+  const prints = useMemo(
+    () => followPrints(follows, followTape, solUsd),
+    [follows, followTape, solUsd],
+  );
   const rows = useMemo(() => labBoard(pool, now), [pool, now]);
   const heat = useMemo(() => clusterHeat(rows), [rows]);
   const mood = useMemo(() => marketMood(pool, prints), [pool, prints]);
@@ -76,7 +79,14 @@ function LabPage() {
       {tab === "mood" ? (
         <>
           <div className="mb-4">
-            <MoodStrip mood={mood.mood} score={mood.score} tape={mood.tape} social={mood.social} smart={mood.smart} breadth={mood.breadth} />
+            <MoodStrip
+              mood={mood.mood}
+              score={mood.score}
+              tape={mood.tape}
+              social={mood.social}
+              smart={mood.smart}
+              breadth={mood.breadth}
+            />
           </div>
           <p className="mb-3 font-mono text-2xs text-subtle">{msg("moodSources")}</p>
           <div className="mb-4 grid gap-3 md:grid-cols-2">
@@ -89,7 +99,9 @@ function LabPage() {
 
       {tab === "fraud" ? (
         <>
-          <h2 className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">{msg("fraud")}</h2>
+          <h2 className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+            {msg("fraud")}
+          </h2>
           <p className="mb-2 text-2xs text-subtle">{msg("fraudHint")}</p>
           <div className="mb-4 overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
             {dirty.length === 0 ? (
@@ -106,11 +118,27 @@ function LabPage() {
                     <TokenMark id={t.id} symbol={t.symbol} />
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium">{t.symbol}</div>
-                      <div className="truncate font-mono text-2xs text-muted">{f.flags.join(" · ")}</div>
+                      <div className="truncate font-mono text-2xs text-muted">
+                        {f.flags.join(" · ")}
+                      </div>
                     </div>
                   </div>
-                  <div className={cn("shrink-0 text-end font-mono text-xs num", f.tag === "trap" || f.tag === "wash" ? "text-down" : "text-warn")}>
-                    {f.score} {msg(f.tag === "wash" ? "wash" : f.tag === "trap" ? "trap" : f.tag === "insider" ? "insiders" : "spoofVol")}
+                  <div
+                    className={cn(
+                      "shrink-0 text-end font-mono text-xs num",
+                      f.tag === "trap" || f.tag === "wash" ? "text-down" : "text-warn",
+                    )}
+                  >
+                    {f.score}{" "}
+                    {msg(
+                      f.tag === "wash"
+                        ? "wash"
+                        : f.tag === "trap"
+                          ? "trap"
+                          : f.tag === "insider"
+                            ? "insiders"
+                            : "spoofVol",
+                    )}
                   </div>
                 </Link>
               ))
@@ -125,7 +153,10 @@ function LabPage() {
             <button
               type="button"
               onClick={() => setKind("all")}
-              className={cn("h-9 rounded-sm px-3 text-2xs font-medium", kind === "all" ? "bg-elevated text-fg" : "text-muted")}
+              className={cn(
+                "h-9 rounded-sm px-3 text-2xs font-medium",
+                kind === "all" ? "bg-elevated text-fg" : "text-muted",
+              )}
             >
               {msg("scan")} {rows.length}
             </button>
@@ -134,14 +165,19 @@ function LabPage() {
                 key={k}
                 type="button"
                 onClick={() => setKind(k)}
-                className={cn("h-9 rounded-sm px-3 text-2xs font-medium", kind === k ? "bg-elevated text-fg" : "text-muted")}
+                className={cn(
+                  "h-9 rounded-sm px-3 text-2xs font-medium",
+                  kind === k ? "bg-elevated text-fg" : "text-muted",
+                )}
               >
                 {msg(kindMsg(k))} {counts[k]}
               </button>
             ))}
           </div>
 
-          <h2 className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">{msg("clusterHeat")}</h2>
+          <h2 className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+            {msg("clusterHeat")}
+          </h2>
           <div className="mb-4 overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
             {heat.length === 0 ? (
               <p className="p-4 text-sm text-muted">{msg("emptyFilter")}</p>
@@ -153,7 +189,14 @@ function LabPage() {
                       <span className="text-xs">{msg(CLUSTER_MSG[c.cluster])}</span>
                       <span className="font-mono text-2xs text-muted num">{c.n}</span>
                     </div>
-                    <div className={cn("font-mono text-xs num", c.avg5m >= 0 ? "text-up" : "text-down")}>{formatPct(c.avg5m)}</div>
+                    <div
+                      className={cn(
+                        "font-mono text-xs num",
+                        c.avg5m >= 0 ? "text-up" : "text-down",
+                      )}
+                    >
+                      {formatPct(c.avg5m)}
+                    </div>
                     {c.hot ? <div className="text-2xs text-warn">{msg("chasing")}</div> : null}
                   </div>
                 ))}
@@ -161,7 +204,9 @@ function LabPage() {
             )}
           </div>
 
-          <h2 className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">{kind === "all" ? msg("scan") : msg(kindMsg(kind))}</h2>
+          <h2 className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+            {kind === "all" ? msg("scan") : msg(kindMsg(kind))}
+          </h2>
           <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
             <div className="hidden grid-cols-[minmax(0,1.4fr)_repeat(6,minmax(0,1fr))] gap-2 border-b border-border px-3 py-2 font-mono text-2xs text-subtle md:grid">
               <span />
@@ -194,14 +239,34 @@ function LabPage() {
                         </div>
                       </div>
                     </div>
-                    <div className={cn("text-end font-mono text-xs num", r.grade === "F" || r.grade === "D" ? "text-down" : "text-up")}>{r.grade}</div>
-                    <div className="hidden text-end font-mono text-2xs num md:block">{r.edge.toFixed(1)}</div>
-                    <div className="hidden text-end font-mono text-2xs num text-down md:block">{formatPct(-r.dd * 100)}</div>
-                    <div className="hidden text-end font-mono text-2xs num md:block">{r.volMc == null ? "n/a" : r.volMc.toFixed(2)}</div>
-                    <div className={cn("hidden text-end font-mono text-2xs num md:block", r.pressure >= 0 ? "text-up" : "text-down")}>
+                    <div
+                      className={cn(
+                        "text-end font-mono text-xs num",
+                        r.grade === "F" || r.grade === "D" ? "text-down" : "text-up",
+                      )}
+                    >
+                      {r.grade}
+                    </div>
+                    <div className="hidden text-end font-mono text-2xs num md:block">
+                      {r.edge.toFixed(1)}
+                    </div>
+                    <div className="hidden text-end font-mono text-2xs num text-down md:block">
+                      {formatPct(-r.dd * 100)}
+                    </div>
+                    <div className="hidden text-end font-mono text-2xs num md:block">
+                      {r.volMc == null ? "n/a" : r.volMc.toFixed(2)}
+                    </div>
+                    <div
+                      className={cn(
+                        "hidden text-end font-mono text-2xs num md:block",
+                        r.pressure >= 0 ? "text-up" : "text-down",
+                      )}
+                    >
                       {formatPct(r.pressure * 100, 0)}
                     </div>
-                    <div className="text-end font-mono text-2xs text-muted num">{tk ? formatMc(tk.mc) : "—"}</div>
+                    <div className="text-end font-mono text-2xs text-muted num">
+                      {tk ? formatMc(tk.mc) : "—"}
+                    </div>
                   </Link>
                 );
               })

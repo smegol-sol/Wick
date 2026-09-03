@@ -107,17 +107,23 @@ async function jupPrices(mints: string[], signal: AbortSignal): Promise<Map<stri
   return out;
 }
 
-async function jupMeta(mint: string, signal: AbortSignal): Promise<{ symbol: string; name: string } | null> {
+async function jupMeta(
+  mint: string,
+  signal: AbortSignal,
+): Promise<{ symbol: string; name: string } | null> {
   const ctrl = new AbortController();
   const onAbort = () => ctrl.abort();
   signal.addEventListener("abort", onAbort, { once: true });
   const t = setTimeout(() => ctrl.abort(), 2_200);
   try {
-    const res = await fetch(`https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(mint)}`, {
-      signal: ctrl.signal,
-      headers: { Accept: "application/json" },
-      redirect: "error",
-    });
+    const res = await fetch(
+      `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(mint)}`,
+      {
+        signal: ctrl.signal,
+        headers: { Accept: "application/json" },
+        redirect: "error",
+      },
+    );
     if (!res.ok) return null;
     const data = (await res.json()) as Array<{ id?: string; symbol?: string; name?: string }>;
     const hit = Array.isArray(data) ? data.find((row) => row.id === mint) : null;
@@ -134,7 +140,10 @@ async function jupMeta(mint: string, signal: AbortSignal): Promise<{ symbol: str
 }
 
 async function enrich(holdings: ChainHolding[], signal: AbortSignal): Promise<ChainHolding[]> {
-  const filtered = holdings.filter((h) => !isSpam(h)).sort((a, b) => b.amount - a.amount).slice(0, 80);
+  const filtered = holdings
+    .filter((h) => !isSpam(h))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 80);
   if (!filtered.length) return [];
   const prices = await jupPrices(
     filtered.map((h) => h.mint),
@@ -282,10 +291,26 @@ function parsePrint(pk: string, sig: string, tx: ParsedTx | null): ChainPrint | 
   const ts = (tx.blockTime ?? 0) * 1000;
   const known = tok?.mint ? KNOWN[tok.mint] : undefined;
   if (tok && solDelta < -0.002 && tok.amount > 0) {
-    return { sig, ts, side: "buy", sol: Math.abs(solDelta), mint: tok.mint, amount: tok.amount, symbol: known?.symbol };
+    return {
+      sig,
+      ts,
+      side: "buy",
+      sol: Math.abs(solDelta),
+      mint: tok.mint,
+      amount: tok.amount,
+      symbol: known?.symbol,
+    };
   }
   if (tok && solDelta > 0.002 && tok.amount < 0) {
-    return { sig, ts, side: "sell", sol: solDelta, mint: tok.mint, amount: Math.abs(tok.amount), symbol: known?.symbol };
+    return {
+      sig,
+      ts,
+      side: "sell",
+      sol: solDelta,
+      mint: tok.mint,
+      amount: Math.abs(tok.amount),
+      symbol: known?.symbol,
+    };
   }
   if (Math.abs(solDelta) >= 0.002) {
     return { sig, ts, side: solDelta > 0 ? "in" : "out", sol: Math.abs(solDelta) };
@@ -309,7 +334,12 @@ async function loadTape(pk: string, signal: AbortSignal): Promise<ChainPrint[]> 
   if (hit && Date.now() - hit.at < TTL) return hit.prints;
   for (const url of rpcUrls()) {
     if (signal.aborted) break;
-    const sigs = await rpcCall<Array<{ signature?: string }>>(url, "getSignaturesForAddress", [pk, { limit: 8 }], signal);
+    const sigs = await rpcCall<Array<{ signature?: string }>>(
+      url,
+      "getSignaturesForAddress",
+      [pk, { limit: 8 }],
+      signal,
+    );
     if (!sigs?.length) continue;
     const rows = await Promise.all(
       sigs.slice(0, 6).map(async (s) => {

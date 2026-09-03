@@ -32,7 +32,13 @@ export function nextChainJob(): ChainJob | null {
   const now = Date.now();
   const ex = s.chainExits.find((e) => e.pendingFrac >= 0.05 && e.pendingKind);
   if (ex) {
-    return { kind: "exit", tokenId: ex.tokenId, mint: ex.mint, frac: ex.pendingFrac, exitKind: ex.pendingKind ?? undefined };
+    return {
+      kind: "exit",
+      tokenId: ex.tokenId,
+      mint: ex.mint,
+      frac: ex.pendingFrac,
+      exitKind: ex.pendingKind ?? undefined,
+    };
   }
   if (s.settings.snipeLive) {
     const sn = s.snipeJobs.find((j) => !(j.pendingSince ?? 0));
@@ -40,16 +46,37 @@ export function nextChainJob(): ChainJob | null {
     const copy = s.copyPending.find((p) => p.fireAt <= now && !(p.pendingSince ?? 0));
     if (copy) {
       const rule = s.copyRules.find((r) => r.walletId === copy.walletId);
-      const sol = styleSize(styleOf(rule?.style), rule?.sizePct ?? 10, rule?.maxSol ?? 2, copy.srcSol);
-      return { kind: "copy", tokenId: copy.tokenId, mint: copy.mint, sol, side: copy.side, jobId: copy.id };
+      const sol = styleSize(
+        styleOf(rule?.style),
+        rule?.sizePct ?? 10,
+        rule?.maxSol ?? 2,
+        copy.srcSol,
+      );
+      return {
+        kind: "copy",
+        tokenId: copy.tokenId,
+        mint: copy.mint,
+        sol,
+        side: copy.side,
+        jobId: copy.id,
+      };
     }
   }
   const lim = s.limits.find((o) => o.status === "triggered" && !(o.pendingSince ?? 0));
-  if (lim) return { kind: "limit", tokenId: lim.tokenId, mint: lim.mint, sol: lim.sol, side: lim.side, jobId: lim.id };
+  if (lim)
+    return {
+      kind: "limit",
+      tokenId: lim.tokenId,
+      mint: lim.mint,
+      sol: lim.sol,
+      side: lim.side,
+      jobId: lim.id,
+    };
   const lad = s.ladders.find((l) => l.status === "live" && l.chain && l.pendingSol >= 0.05);
   if (lad) {
     const tk = s.tokens.find((t) => t.id === lad.tokenId);
-    if (tk?.mint) return { kind: "ladder", tokenId: lad.tokenId, mint: tk.mint, sol: lad.pendingSol };
+    if (tk?.mint)
+      return { kind: "ladder", tokenId: lad.tokenId, mint: tk.mint, sol: lad.pendingSol };
   }
   const dca = s.dcaPlans.find((p) => p.status === "live" && p.pendingSol >= 0.05);
   if (dca) return { kind: "dca", tokenId: dca.tokenId, mint: dca.mint, sol: dca.pendingSol };
@@ -62,7 +89,8 @@ function failJob(job: ChainJob): void {
   else if (job.kind === "copy" && job.jobId) s.finishCopyJob(job.jobId, false);
   else if (job.kind === "snipe" && job.jobId) s.finishSnipeJob(job.jobId, false);
   else if (job.kind === "limit" && job.jobId) s.finishLimitJob(job.jobId, false);
-  else if (job.kind === "ladder" || job.kind === "dca") s.finishChainSlice(job.kind, job.tokenId, false);
+  else if (job.kind === "ladder" || job.kind === "dca")
+    s.finishChainSlice(job.kind, job.tokenId, false);
 }
 
 function doneJob(job: ChainJob, px: number): void {
@@ -71,7 +99,8 @@ function doneJob(job: ChainJob, px: number): void {
   else if (job.kind === "copy" && job.jobId) s.finishCopyJob(job.jobId, true);
   else if (job.kind === "snipe" && job.jobId) s.finishSnipeJob(job.jobId, true);
   else if (job.kind === "limit" && job.jobId) s.finishLimitJob(job.jobId, true);
-  else if (job.kind === "ladder" || job.kind === "dca") s.finishChainSlice(job.kind, job.tokenId, true, px);
+  else if (job.kind === "ladder" || job.kind === "dca")
+    s.finishChainSlice(job.kind, job.tokenId, true, px);
 }
 
 export async function pumpLiveAuto(): Promise<void> {
@@ -103,11 +132,15 @@ export async function pumpLiveAuto(): Promise<void> {
   if (job.kind === "snipe" && job.jobId) s.armSnipeJob(job.jobId);
   if (job.kind === "limit" && job.jobId) s.armLimitJob(job.jobId);
 
-  const sellSide = job.kind === "exit" || ((job.kind === "copy" || job.kind === "limit") && job.side === "sell");
+  const sellSide =
+    job.kind === "exit" || ((job.kind === "copy" || job.kind === "limit") && job.side === "sell");
   if (sellSide) {
     const hold = s.chainHoldings.find((h) => h.mint === job.mint);
     const holdSol = hold && s.solUsd ? (hold.amount * tk.price) / s.solUsd : 0;
-    const want = job.kind === "exit" ? holdSol * Math.min(1, job.frac ?? 1) : liveSpendCap(job.sol ?? 0, holdSol, 0);
+    const want =
+      job.kind === "exit"
+        ? holdSol * Math.min(1, job.frac ?? 1)
+        : liveSpendCap(job.sol ?? 0, holdSol, 0);
     if (!hold || want < 0.05) {
       failJob(job);
       return;
@@ -119,20 +152,40 @@ export async function pumpLiveAuto(): Promise<void> {
     }
     busy = true;
     try {
-      const res = await sendLiveSwap({ mint: job.mint, user, side: "sell", amountRaw: raw, slip, priorityLamports: tip, vault: s.hotVault, unlocked: s.hotUnlocked });
+      const res = await sendLiveSwap({
+        mint: job.mint,
+        user,
+        side: "sell",
+        amountRaw: raw,
+        slip,
+        priorityLamports: tip,
+        vault: s.hotVault,
+        unlocked: s.hotUnlocked,
+      });
       if (!res.ok) {
         failJob(job);
         return;
       }
       doneJob(job, tk.price);
-      s.recordLiveFill({ sig: res.sig, mint: job.mint, tokenId: job.tokenId, side: "sell", sol: want, status: res.status });
+      s.recordLiveFill({
+        sig: res.sig,
+        mint: job.mint,
+        tokenId: job.tokenId,
+        side: "sell",
+        sol: want,
+        status: res.status,
+      });
     } finally {
       busy = false;
     }
     return;
   }
 
-  if (s.riskHalt || (s.settings.guardMint && tk.security.onchain && tk.security.freeze) || (s.settings.hideRugs && isRug(tk.security))) {
+  if (
+    s.riskHalt ||
+    (s.settings.guardMint && tk.security.onchain && tk.security.freeze) ||
+    (s.settings.hideRugs && isRug(tk.security))
+  ) {
     failJob(job);
     return;
   }
@@ -158,13 +211,29 @@ export async function pumpLiveAuto(): Promise<void> {
   }
   busy = true;
   try {
-    const res = await sendLiveSwap({ mint: job.mint, user, side: "buy", lamports: Math.round(spend * 1e9), slip, priorityLamports: tip, vault: s.hotVault, unlocked: s.hotUnlocked });
+    const res = await sendLiveSwap({
+      mint: job.mint,
+      user,
+      side: "buy",
+      lamports: Math.round(spend * 1e9),
+      slip,
+      priorityLamports: tip,
+      vault: s.hotVault,
+      unlocked: s.hotUnlocked,
+    });
     if (!res.ok) {
       failJob(job);
       return;
     }
     doneJob(job, tk.price);
-    s.recordLiveFill({ sig: res.sig, mint: job.mint, tokenId: job.tokenId, side: "buy", sol: spend, status: res.status });
+    s.recordLiveFill({
+      sig: res.sig,
+      mint: job.mint,
+      tokenId: job.tokenId,
+      side: "buy",
+      sol: spend,
+      status: res.status,
+    });
   } finally {
     busy = false;
   }

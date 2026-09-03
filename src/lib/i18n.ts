@@ -196,7 +196,8 @@ export const copy = {
     riskAuto: "Auto",
     riskToken: "Skipped — token risk",
     riskScale: "Scale",
-    riskHint: "Autos size by grade × heat × streak × day loss. Same-topic names are capped. Launch snipes pick the best print and trail 22%. Zero = off.",
+    riskHint:
+      "Autos size by grade × heat × streak × day loss. Same-topic names are capped. Launch snipes pick the best print and trail 22%. Zero = off.",
     pctMax: "Max",
     flow: "Flow",
     insufficient: "Not enough SOL",
@@ -224,7 +225,8 @@ export const copy = {
     minGrade: "Grade",
     skipFraud: "Skip fraud",
     sieve: "Query",
-    sieveHint: "liq mc vol vol5m tx holders top10 age bond chg5m chg1h grade freeze mint x fraud topic. A rule on an unreported field fails.",
+    sieveHint:
+      "liq mc vol vol5m tx holders top10 age bond chg5m chg1h grade freeze mint x fraud topic. A rule on an unreported field fails.",
     maxBundled: "Max bundled",
     maxDev: "Max dev",
     maxSnipers: "Max snipers",
@@ -271,7 +273,8 @@ export const copy = {
     mevCapped: "MEV cap 18 slip",
     execLive: "Sign live",
     execArmed: "LIVE — signing",
-    execHint: "Real money. Every buy, sell, ladder, DCA, snipe and copy signs a Jupiter swap from the desk wallet.",
+    execHint:
+      "Real money. Every buy, sell, ladder, DCA, snipe and copy signs a Jupiter swap from the desk wallet.",
     execNeed: "Unlock the desk wallet to sign. A watched address cannot spend.",
     execOpenWallet: "Unlock the desk wallet in the chip to the right.",
     signBuy: "Sign buy",
@@ -305,7 +308,8 @@ export const copy = {
     hotKeep: "Continue",
     hotExport: "Secret",
     hotAddr: "Address",
-    hotHint: "Hot wallet in this browser. AES-GCM, PBKDF2. Secret never leaves the device. Copy it once. Fund only what you can lose. Locks on idle.",
+    hotHint:
+      "Hot wallet in this browser. AES-GCM, PBKDF2. Secret never leaves the device. Copy it once. Fund only what you can lose. Locks on idle.",
     hotOn: "Desk wallet — can sign.",
     hotLocked: "Desk wallet locked.",
     hotNeedExport: "Copy the secret before signing.",
@@ -315,7 +319,8 @@ export const copy = {
     labMood: "Mood",
     labBoard: "Board",
     labFraud: "Fraud",
-    tapeHint: "Signal keeps fills, snipes, risk and sized copies. Desk adds followed-wallet swaps. Raw is everything.",
+    tapeHint:
+      "Signal keeps fills, snipes, risk and sized copies. Desk adds followed-wallet swaps. Raw is everything.",
     tapeSignal: "Signal",
     tapeDesk: "Desk",
     tapeRaw: "Raw",
@@ -362,7 +367,8 @@ export const copy = {
     liveFollows: "Live follows",
     paperDesks: "Paper desks",
     followAdd: "Follow address",
-    followHint: "Paste a wallet. Its swaps show here from the chain. Turn copy on to mirror, shadow, confirm or scale them.",
+    followHint:
+      "Paste a wallet. Its swaps show here from the chain. Turn copy on to mirror, shadow, confirm or scale them.",
     followMax: "Three addresses max.",
     followDup: "Already followed.",
     followOwn: "That's the desk wallet.",
@@ -372,7 +378,8 @@ export const copy = {
     copyConfirm: "Confirm",
     copyScale: "Scale",
     fraud: "Fraud",
-    fraudHint: "Wash volume, top-heavy holders, freeze traps, spoofed chatter. Only checks with data count.",
+    fraudHint:
+      "Wash volume, top-heavy holders, freeze traps, spoofed chatter. Only checks with data count.",
     fraudClean: "Clean",
     wash: "Wash",
     bundleRing: "Ring",
@@ -381,29 +388,37 @@ export const copy = {
     washVol: "Vol vs holders",
     washTape: "Tape vs price",
     emptyFraud: "No wash or trap flags on the book.",
-    about: "WICK is a self-custodied Solana desk. Prices and launches come from pump.fun, volume and transactions from DexScreener, authorities and holders from the chain, swaps from Jupiter. A stat with no source shows n/a. Not affiliated with any venue.",
-    introRealMoney: "Every buy, sell, snipe, copy, ladder and DCA signs a real Jupiter swap from the desk wallet.",
-    introSources: "Numbers come from pump.fun, DexScreener and the chain. A number nobody reported shows n/a, never a guess.",
-    introCustody: "The desk wallet is a key in this browser. Keep only what you are ready to lose here.",
+    about:
+      "WICK is a self-custodied Solana desk. Prices and launches come from pump.fun, volume and transactions from DexScreener, authorities and holders from the chain, swaps from Jupiter. A stat with no source shows n/a. Not affiliated with any venue.",
+    introRealMoney:
+      "Every buy, sell, snipe, copy, ladder and DCA signs a real Jupiter swap from the desk wallet.",
+    introSources:
+      "Numbers come from pump.fun, DexScreener and the chain. A number nobody reported shows n/a, never a guess.",
+    introCustody:
+      "The desk wallet is a key in this browser. Keep only what you are ready to lose here.",
     liveDown: "Pulse down",
     quickHint: "Queue a live buy at the quick size.",
     snipeLiveOff: "Live sniping is off. Turn it on in the desk panel to let auto buys sign.",
-    snipeLiveHint: "Auto snipes and copies never sign unless live sniping is on. Manual tickets always sign.",
+    snipeLiveHint:
+      "Auto snipes and copies never sign unless live sniping is on. Manual tickets always sign.",
     confirmLive: "Confirm before manual trades",
     confirmTitle: "Real money",
-    confirmBody: "This signs and broadcasts a Jupiter swap from the desk wallet. It cannot be undone.",
+    confirmBody:
+      "This signs and broadcasts a Jupiter swap from the desk wallet. It cannot be undone.",
     confirmGo: "Sign and send",
     impact: "Impact",
     limitHint: "signs when MC crosses the trigger",
     curveLp: "Curve",
     holdersNeedRpc: "needs SOLANA_RPC_URL",
-    holdersNoRpc: "The public RPCs refuse holder queries. Set SOLANA_RPC_URL to a dedicated endpoint to read top holders and holder counts.",
+    holdersNoRpc:
+      "The public RPCs refuse holder queries. Set SOLANA_RPC_URL to a dedicated endpoint to read top holders and holder counts.",
     guardPending: "Not read yet",
     topHolders: "Top holders",
     checks: "checks",
     fraudNoData: "No reported data to check.",
     names: "names",
-    moodSources: "Tape from 5m/1h change · Social from pump.fun replies and X · Smart from wallets you follow.",
+    moodSources:
+      "Tape from 5m/1h change · Social from pump.fun replies and X · Smart from wallets you follow.",
     followLabel: "Label",
     copyNeedsLive: "Copies are queued but will not sign until live sniping is on.",
     chainOnly: "chain",
@@ -606,7 +621,8 @@ export const copy = {
     riskAuto: "آلي",
     riskToken: "تخطي — مخاطرة العملة",
     riskScale: "معامل",
-    riskHint: "التلقائي يُوزَّن بالدرجة × الحرارة × السلسلة × خسارة اليوم. سقف للأسماء من نفس الموضوع. القنص يختار أفضل إطلاق ويتبع وقف 22٪. صفر = إيقاف.",
+    riskHint:
+      "التلقائي يُوزَّن بالدرجة × الحرارة × السلسلة × خسارة اليوم. سقف للأسماء من نفس الموضوع. القنص يختار أفضل إطلاق ويتبع وقف 22٪. صفر = إيقاف.",
     pctMax: "حد أقصى",
     flow: "تدفق",
     insufficient: "رصيد SOL غير كافٍ",
@@ -716,7 +732,8 @@ export const copy = {
     hotKeep: "متابعة",
     hotExport: "السر",
     hotAddr: "العنوان",
-    hotHint: "محفظة ساخنة في هذا المتصفح. AES-GCM وPBKDF2. السر لا يغادر الجهاز. انسخه مرة. موّل فقط ما تحتمل خسارته. تُقفل عند الخمول.",
+    hotHint:
+      "محفظة ساخنة في هذا المتصفح. AES-GCM وPBKDF2. السر لا يغادر الجهاز. انسخه مرة. موّل فقط ما تحتمل خسارته. تُقفل عند الخمول.",
     hotOn: "محفظة المكتب — يمكن التوقيع.",
     hotLocked: "محفظة المكتب مقفلة.",
     hotNeedExport: "انسخ السر قبل التوقيع.",
@@ -726,7 +743,8 @@ export const copy = {
     labMood: "مزاج",
     labBoard: "لوحة",
     labFraud: "احتيال",
-    tapeHint: "الإشارة تبقي التنفيذ والقنص والخطر والنسخ الموزون. المكتب يضيف التأكيد. الخام كل شيء.",
+    tapeHint:
+      "الإشارة تبقي التنفيذ والقنص والخطر والنسخ الموزون. المكتب يضيف التأكيد. الخام كل شيء.",
     tapeSignal: "إشارة",
     tapeDesk: "مكتب",
     tapeRaw: "خام",
@@ -794,13 +812,16 @@ export const copy = {
     emptyFraud: "لا غسل ولا فخ على الدفتر.",
     about:
       "ويك مكتب سولانا بحفظ ذاتي. الأسعار والإطلاقات من pump.fun، الحجم والعمليات من DexScreener، الصلاحيات والحاملون من السلسلة، المبادلات من Jupiter. أي رقم بلا مصدر يظهر n/a. غير مرتبط بأي منصة.",
-    introRealMoney: "كل شراء وبيع وقنص ونسخ وسلّم وDCA يوقّع مبادلة Jupiter حقيقية من محفظة المكتب.",
-    introSources: "الأرقام من pump.fun وDexScreener والسلسلة. الرقم الذي لم يبلّغ عنه أحد يظهر n/a وليس تخمينًا.",
+    introRealMoney:
+      "كل شراء وبيع وقنص ونسخ وسلّم وDCA يوقّع مبادلة Jupiter حقيقية من محفظة المكتب.",
+    introSources:
+      "الأرقام من pump.fun وDexScreener والسلسلة. الرقم الذي لم يبلّغ عنه أحد يظهر n/a وليس تخمينًا.",
     introCustody: "محفظة المكتب مفتاح في هذا المتصفح. لا تضع فيها إلا ما تستطيع خسارته.",
     liveDown: "النبض متوقف",
     quickHint: "أضف شراءً حيًا بالحجم السريع.",
     snipeLiveOff: "القنص الحي مطفأ. شغّله من لوحة المكتب حتى توقّع المشتريات التلقائية.",
-    snipeLiveHint: "القنص والنسخ التلقائي لا يوقّعان إلا والقنص الحي مفعّل. التذكرة اليدوية توقّع دائمًا.",
+    snipeLiveHint:
+      "القنص والنسخ التلقائي لا يوقّعان إلا والقنص الحي مفعّل. التذكرة اليدوية توقّع دائمًا.",
     confirmLive: "تأكيد قبل الصفقات اليدوية",
     confirmTitle: "فلوس حقيقية",
     confirmBody: "هذا يوقّع ويبث مبادلة Jupiter من محفظة المكتب. لا يمكن التراجع.",
@@ -809,13 +830,15 @@ export const copy = {
     limitHint: "يوقّع عند عبور القيمة السوقية للمحفّز",
     curveLp: "منحنى",
     holdersNeedRpc: "يحتاج SOLANA_RPC_URL",
-    holdersNoRpc: "الـ RPC العامة ترفض استعلامات الحاملين. اضبط SOLANA_RPC_URL على نقطة مخصصة لقراءة أكبر الحاملين وعددهم.",
+    holdersNoRpc:
+      "الـ RPC العامة ترفض استعلامات الحاملين. اضبط SOLANA_RPC_URL على نقطة مخصصة لقراءة أكبر الحاملين وعددهم.",
     guardPending: "لم يُقرأ بعد",
     topHolders: "أكبر الحاملين",
     checks: "فحوص",
     fraudNoData: "لا بيانات مبلّغة للفحص.",
     names: "أسماء",
-    moodSources: "الشريط من تغيّر 5د/1س · الاجتماعي من ردود pump.fun وX · الذكي من المحافظ التي تتابعها.",
+    moodSources:
+      "الشريط من تغيّر 5د/1س · الاجتماعي من ردود pump.fun وX · الذكي من المحافظ التي تتابعها.",
     followLabel: "تسمية",
     copyNeedsLive: "النسخ يُصفّ لكنه لا يوقّع حتى يُفعّل القنص الحي.",
     chainOnly: "سلسلة",

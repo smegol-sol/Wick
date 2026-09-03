@@ -30,7 +30,12 @@ export function copySize(sizePct: number, maxSol: number, srcSol: number): numbe
 }
 
 /** Shadow halves. Scale skips dust and weights whales toward the cap. */
-export function styleSize(style: CopyStyle, sizePct: number, maxSol: number, srcSol: number): number {
+export function styleSize(
+  style: CopyStyle,
+  sizePct: number,
+  maxSol: number,
+  srcSol: number,
+): number {
   const base = copySize(sizePct, maxSol, srcSol);
   if (style === "shadow") return base * 0.45;
   if (style === "scale") {
@@ -70,7 +75,9 @@ export function bumpConfirm(hits: CopyHit[], pk: string, mint: string, now: numb
   return [...hits.filter((h) => now - h.ts < CONFIRM_MS), { pk, mint, ts: now }].slice(-40);
 }
 
-export function swapPrint(p: ChainPrint): (ChainPrint & { mint: string; side: "buy" | "sell" }) | null {
+export function swapPrint(
+  p: ChainPrint,
+): (ChainPrint & { mint: string; side: "buy" | "sell" }) | null {
   if (p.side !== "buy" && p.side !== "sell") return null;
   if (!p.mint || !isB58(p.mint) || STABLE.has(p.mint)) return null;
   if (!(p.sol >= 0.05)) return null;
@@ -105,6 +112,12 @@ export function slimFollow(raw: unknown): Follow | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   if (typeof r.pk !== "string" || !isB58(r.pk)) return null;
-  const label = typeof r.label === "string" ? r.label.replace(/[^\w\s.\-_$]/g, "").trim().slice(0, 24) : "";
+  const label =
+    typeof r.label === "string"
+      ? r.label
+          .replace(/[^\w\s.\-_$]/g, "")
+          .trim()
+          .slice(0, 24)
+      : "";
   return { pk: r.pk, label };
 }

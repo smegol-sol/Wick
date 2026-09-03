@@ -84,7 +84,10 @@ export function makeLadder(args: {
   };
 }
 
-export function startLadder(ladders: Ladder[], args: Parameters<typeof makeLadder>[0]): { ladders: Ladder[]; born: boolean } {
+export function startLadder(
+  ladders: Ladder[],
+  args: Parameters<typeof makeLadder>[0],
+): { ladders: Ladder[]; born: boolean } {
   const live = ladders.find((l) => l.tokenId === args.tokenId && l.status === "live");
   if (live) return { ladders: confirmLadder(ladders, args.tokenId, args.now), born: false };
   return {
@@ -149,7 +152,12 @@ function queueSlice(l: Ladder, now: number, sol: number, source: "dca" | "twap")
   };
 }
 
-export function commitLadderSlice(ladders: Ladder[], tokenId: string, px: number, now: number): Ladder[] {
+export function commitLadderSlice(
+  ladders: Ladder[],
+  tokenId: string,
+  px: number,
+  now: number,
+): Ladder[] {
   return ladders.map((l) => {
     if (l.tokenId !== tokenId || l.pendingSol < 0.05) return l;
     const sol = l.pendingSol;
@@ -209,7 +217,12 @@ export function tickLadders(
     let l = raw;
     const px = ctx.priceOf(l.tokenId);
     if (px == null || !ctx.alive(l.tokenId)) {
-      notes.push({ tokenId: l.tokenId, en: "Ladder stopped — name gone", ar: "توقف السلّم — الاسم اختفى", kind: "risk" });
+      notes.push({
+        tokenId: l.tokenId,
+        en: "Ladder stopped — name gone",
+        ar: "توقف السلّم — الاسم اختفى",
+        kind: "risk",
+      });
       return { ...l, status: "stopped" as const, pendingSol: 0, pendingSrc: null, pendingSince: 0 };
     }
     const hold = waiting(l, ctx.now);
@@ -220,23 +233,43 @@ export function tickLadders(
 
     if (l.phase === "confirm") {
       if (px < l.markPx * (1 - DUMP)) {
-        notes.push({ tokenId: l.tokenId, en: "Signal died — dump before confirm", ar: "ماتت الإشارة — هبوط قبل التأكيد", kind: "risk" });
+        notes.push({
+          tokenId: l.tokenId,
+          en: "Signal died — dump before confirm",
+          ar: "ماتت الإشارة — هبوط قبل التأكيد",
+          kind: "risk",
+        });
         return { ...l, status: "stopped" as const };
       }
       if (l.confirms >= l.confirmNeed) l = toDip(l, ctx.now);
       else if (ctx.now >= l.confirmUntil) {
         if (px >= l.markPx * HOLD && ctx.edgeOk(l.tokenId)) {
-          notes.push({ tokenId: l.tokenId, en: "Signal held — DCA down", ar: "الإشارة ثبتت — تجميع على الهبوط", kind: "flow" });
+          notes.push({
+            tokenId: l.tokenId,
+            en: "Signal held — DCA down",
+            ar: "الإشارة ثبتت — تجميع على الهبوط",
+            kind: "flow",
+          });
           l = toDip(l, ctx.now);
         } else {
-          notes.push({ tokenId: l.tokenId, en: "Signal faded — no entry", ar: "خفتت الإشارة — بلا دخول", kind: "risk" });
+          notes.push({
+            tokenId: l.tokenId,
+            en: "Signal faded — no entry",
+            ar: "خفتت الإشارة — بلا دخول",
+            kind: "risk",
+          });
           return { ...l, status: "stopped" as const };
         }
       } else return l;
     }
     if (l.phase === "dip") {
       if (ctx.now >= l.dipUntil) {
-        notes.push({ tokenId: l.tokenId, en: "Dip window done — TWAP in", ar: "انتهى الهبوط — دخول TWAP", kind: "flow" });
+        notes.push({
+          tokenId: l.tokenId,
+          en: "Dip window done — TWAP in",
+          ar: "انتهى الهبوط — دخول TWAP",
+          kind: "flow",
+        });
         l = toTwap(l, ctx.now);
       } else if (ctx.now >= l.nextAt && px <= dipTarget(l)) {
         const sol = sliceSol(l);

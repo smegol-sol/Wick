@@ -159,7 +159,10 @@ export function parseSecret(raw: string): Uint8Array | null {
   return secret;
 }
 
-export async function importHot(raw: string, pass: string): Promise<{ vault: HotVault; pub: string }> {
+export async function importHot(
+  raw: string,
+  pass: string,
+): Promise<{ vault: HotVault; pub: string }> {
   if (!passOk(pass)) throw new Error("bad");
   const secret = parseSecret(raw);
   if (!secret) throw new Error("bad");
@@ -229,9 +232,13 @@ function mintSecret(): { secret: Uint8Array; pub: Uint8Array } {
 }
 
 async function derive(pass: string, salt: Uint8Array, iter: number): Promise<CryptoKey> {
-  const raw = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, [
-    "deriveKey",
-  ]);
+  const raw = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(pass),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
   return crypto.subtle.deriveKey(
     { name: "PBKDF2", salt: salt.buffer as ArrayBuffer, iterations: iter, hash: "SHA-256" },
     raw,
@@ -252,7 +259,11 @@ export async function sealSecret(secret: Uint8Array, pass: string, pub: string):
   const key = await derive(pass, salt, ITER);
   const packed = new Uint8Array(secret);
   const buf = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: iv.buffer as ArrayBuffer, additionalData: aadOf(pub).buffer as ArrayBuffer },
+    {
+      name: "AES-GCM",
+      iv: iv.buffer as ArrayBuffer,
+      additionalData: aadOf(pub).buffer as ArrayBuffer,
+    },
     key,
     packed.buffer as ArrayBuffer,
   );
@@ -292,12 +303,15 @@ export function slimVault(raw: unknown): HotVault | null {
   if (!raw || typeof raw !== "object") return null;
   const v = raw as Record<string, unknown>;
   if (typeof v.pub !== "string" || !isB58(v.pub)) return null;
-  if (typeof v.salt !== "string" || typeof v.iv !== "string" || typeof v.data !== "string") return null;
+  if (typeof v.salt !== "string" || typeof v.iv !== "string" || typeof v.data !== "string")
+    return null;
   if (v.salt.length > 64 || v.iv.length > 48 || v.data.length > 400) return null;
   if (!/^[A-Za-z0-9+/=]+$/.test(v.salt + v.iv + v.data)) return null;
   const ver = v.v === 2 ? 2 : 1;
   const iter =
-    typeof v.iter === "number" && v.iter >= 100_000 && v.iter <= 2_000_000 ? Math.floor(v.iter) : undefined;
+    typeof v.iter === "number" && v.iter >= 100_000 && v.iter <= 2_000_000
+      ? Math.floor(v.iter)
+      : undefined;
   return {
     pub: v.pub,
     salt: v.salt,

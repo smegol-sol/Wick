@@ -83,7 +83,8 @@ export function nextStreak(streak: number, pnl: number): number {
 export function shouldHalt(limits: RiskLimits, book: RiskBook): "loss" | "streak" | null {
   if (!limits.riskOn) return null;
   const equity = book.sol + book.marks;
-  if (limits.maxDayLoss > 0 && book.dayStart > 0 && book.dayStart - equity >= limits.maxDayLoss) return "loss";
+  if (limits.maxDayLoss > 0 && book.dayStart > 0 && book.dayStart - equity >= limits.maxDayLoss)
+    return "loss";
   if (limits.streakHalt > 0 && book.lossStreak >= limits.streakHalt) return "streak";
   return null;
 }
@@ -155,7 +156,8 @@ export function riskGrade(score: number): RiskGrade {
 
 /** Equal-weight heat × 1.5, so a name can over-index slightly before the clip. */
 export function nameCapSol(limits: RiskLimits, book: RiskBook): number {
-  if (!limits.riskOn || limits.maxBookPct <= 0 || !(book.dayStart > 0)) return Number.POSITIVE_INFINITY;
+  if (!limits.riskOn || limits.maxBookPct <= 0 || !(book.dayStart > 0))
+    return Number.POSITIVE_INFINITY;
   const heatCap = book.dayStart * (limits.maxBookPct / 100);
   if (limits.maxPositions > 0) return (heatCap / limits.maxPositions) * 1.5;
   return heatCap * 0.5;

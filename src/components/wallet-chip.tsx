@@ -2,7 +2,17 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { formatQty, formatSol, formatUsd, shortMint } from "@/lib/format";
-import { canSignHot, createHot, importHot, lockHotMem, passOk, peekSecret, toB58, unlockHot, unlockWait } from "@/lib/hot-wallet";
+import {
+  canSignHot,
+  createHot,
+  importHot,
+  lockHotMem,
+  passOk,
+  peekSecret,
+  toB58,
+  unlockHot,
+  unlockWait,
+} from "@/lib/hot-wallet";
 import { isPubkey } from "@/lib/solana-wallet";
 import { useDesk } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -228,7 +238,13 @@ function HotPanel({ onDone }: { onDone?: () => void }) {
           <Button size="sm" className="flex-1" disabled={busy} onClick={() => void create()}>
             {msg("hotCreate")}
           </Button>
-          <Button size="sm" variant="quiet" className="flex-1" disabled={busy || !seed.trim()} onClick={() => void importExisting()}>
+          <Button
+            size="sm"
+            variant="quiet"
+            className="flex-1"
+            disabled={busy || !seed.trim()}
+            onClick={() => void importExisting()}
+          >
             {msg("hotLoad")}
           </Button>
         </div>
@@ -254,11 +270,21 @@ function HotPanel({ onDone }: { onDone?: () => void }) {
           {copiedAddr ? msg("copied") : msg("hotAddr")}
         </Button>
         <p className="mb-2 break-all font-mono text-2xs leading-relaxed text-fg">{shown}</p>
-        <Button size="sm" variant="quiet" className="mb-2 w-full" onClick={() => void copyShown(shown)}>
+        <Button
+          size="sm"
+          variant="quiet"
+          className="mb-2 w-full"
+          onClick={() => void copyShown(shown)}
+        >
           {msg("hotCopy")}
         </Button>
         <label className="flex items-center gap-1.5 text-2xs text-muted">
-          <input type="checkbox" checked={copied} onChange={(e) => setCopied(e.target.checked)} className="accent-accent" />
+          <input
+            type="checkbox"
+            checked={copied}
+            onChange={(e) => setCopied(e.target.checked)}
+            className="accent-accent"
+          />
           {msg("hotCopied")}
         </label>
         <Button
@@ -308,7 +334,9 @@ function HotPanel({ onDone }: { onDone?: () => void }) {
     <div className="mt-2 border-t border-border pt-2">
       <p className="mb-1 text-2xs text-muted">{msg("hotOn")}</p>
       <p className="mb-2 break-all font-mono text-2xs leading-relaxed">{vault.pub}</p>
-      {secret ? <p className="mb-2 break-all font-mono text-2xs leading-relaxed">{secret}</p> : null}
+      {secret ? (
+        <p className="mb-2 break-all font-mono text-2xs leading-relaxed">{secret}</p>
+      ) : null}
       <Input
         type="password"
         value={pass}
@@ -390,7 +418,10 @@ export function WalletChip() {
                   const tk = tokens.find((t) => t.mint === h.mint || t.id === h.mint);
                   const label = tk?.symbol || h.symbol || shortMint(h.mint);
                   return (
-                    <li key={h.mint} className="flex items-center justify-between gap-2 py-1 text-2xs">
+                    <li
+                      key={h.mint}
+                      className="flex items-center justify-between gap-2 py-1 text-2xs"
+                    >
                       {tk ? (
                         <Link to="/token/$id" params={{ id: tk.id }} className="truncate text-fg">
                           {label}
@@ -410,16 +441,29 @@ export function WalletChip() {
                   </li>
                 ) : null}
                 {tape.slice(0, 3).map((p) => {
-                  const tk = p.mint ? tokens.find((t) => t.mint === p.mint || t.id === p.mint) : undefined;
+                  const tk = p.mint
+                    ? tokens.find((t) => t.mint === p.mint || t.id === p.mint)
+                    : undefined;
                   const label = tk?.symbol || p.symbol || (p.mint ? shortMint(p.mint) : "SOL");
                   const buyish = p.side === "buy" || p.side === "in";
                   return (
-                    <li key={p.sig} className="flex items-center justify-between gap-2 py-1 text-2xs">
+                    <li
+                      key={p.sig}
+                      className="flex items-center justify-between gap-2 py-1 text-2xs"
+                    >
                       <span className={buyish ? "text-up" : "text-down"}>
-                        {p.side === "buy" ? msg("buy") : p.side === "sell" ? msg("sell") : buyish ? msg("bought") : msg("sold")}{" "}
+                        {p.side === "buy"
+                          ? msg("buy")
+                          : p.side === "sell"
+                            ? msg("sell")
+                            : buyish
+                              ? msg("bought")
+                              : msg("sold")}{" "}
                         {label}
                       </span>
-                      <span className="shrink-0 font-mono num">{p.sol > 0 ? formatSol(p.sol) : "—"}</span>
+                      <span className="shrink-0 font-mono num">
+                        {p.sol > 0 ? formatSol(p.sol) : "—"}
+                      </span>
                     </li>
                   );
                 })}

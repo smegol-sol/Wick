@@ -337,7 +337,9 @@ function slimLiveFills(raw: unknown): LiveFill[] {
 
 function slimIds(raw: unknown, fallback: string[]): string[] {
   if (!Array.isArray(raw)) return fallback;
-  return raw.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length < 80).slice(0, 40);
+  return raw
+    .filter((x): x is string => typeof x === "string" && x.length > 0 && x.length < 80)
+    .slice(0, 40);
 }
 
 function normalizeCopy(r: Partial<CopyRule> & { walletId: string }): CopyRule {
@@ -362,11 +364,13 @@ function sanitizeDesk(patch: Partial<DeskSettings>): Partial<DeskSettings> {
   if (patch.minLiq != null) out.minLiq = clampNum(patch.minLiq, 0, 1_000_000, 0);
   if (patch.minMc != null) out.minMc = clampNum(patch.minMc, 0, 50_000_000, 0);
   if (patch.maxMc != null) out.maxMc = clampNum(patch.maxMc, 0, 50_000_000, 0);
-  if (patch.minHolders != null) out.minHolders = Math.round(clampNum(patch.minHolders, 0, 50_000, 0));
+  if (patch.minHolders != null)
+    out.minHolders = Math.round(clampNum(patch.minHolders, 0, 50_000, 0));
   if (patch.maxAgeMin != null) out.maxAgeMin = Math.round(clampNum(patch.maxAgeMin, 0, 10_080, 0));
   if (patch.maxTradeSol != null) out.maxTradeSol = clampNum(patch.maxTradeSol, 0, 50, 2);
   if (patch.maxBookPct != null) out.maxBookPct = clampNum(patch.maxBookPct, 0, 100, 40);
-  if (patch.maxPositions != null) out.maxPositions = Math.round(clampNum(patch.maxPositions, 0, 24, 6));
+  if (patch.maxPositions != null)
+    out.maxPositions = Math.round(clampNum(patch.maxPositions, 0, 24, 6));
   if (patch.maxDayLoss != null) out.maxDayLoss = clampNum(patch.maxDayLoss, 0, 500, 15);
   if (patch.streakHalt != null) out.streakHalt = Math.round(clampNum(patch.streakHalt, 0, 20, 3));
   if (patch.maxCluster != null) out.maxCluster = Math.round(clampNum(patch.maxCluster, 0, 8, 2));
@@ -471,7 +475,11 @@ function pushAlert(alerts: Alert[], item: Omit<Alert, "read" | "id">, on: boolea
 }
 
 /** Trailing stop price for a chain exit book, given the mark and the average entry. */
-export function trailStopPrice(book: Pick<ExitBook, "trailOn" | "slPct" | "peakPrice">, price: number, avg: number): number | null {
+export function trailStopPrice(
+  book: Pick<ExitBook, "trailOn" | "slPct" | "peakPrice">,
+  price: number,
+  avg: number,
+): number | null {
   if (!book.trailOn || book.slPct == null || book.slPct <= 0) return null;
   const peak = Math.max(book.peakPrice || 0, price, avg);
   return Math.max(0, peak * (1 - book.slPct / 100));
@@ -484,22 +492,34 @@ function holdingSol(h: ChainHolding, tokens: Token[], solUsd: number | null): nu
   return usd / solUsd;
 }
 
-export type BookSlice = Pick<DeskState, "chainSol" | "chainHoldings" | "chainExits" | "tokens" | "solUsd">;
+export type BookSlice = Pick<
+  DeskState,
+  "chainSol" | "chainHoldings" | "chainExits" | "tokens" | "solUsd"
+>;
 
 /** Wallet equity in SOL: cash plus holdings at last known prices. Pure; safe in selectors via useMemo. */
 export function equityOf(s: BookSlice): number {
   const cash = s.chainSol ?? 0;
-  return Math.max(0, cash + s.chainHoldings.reduce((a, h) => a + holdingSol(h, s.tokens, s.solUsd), 0));
+  return Math.max(
+    0,
+    cash + s.chainHoldings.reduce((a, h) => a + holdingSol(h, s.tokens, s.solUsd), 0),
+  );
 }
 
 /** Holdings as risk-book positions, cost in SOL. Pure; returns a new array each call. */
-export function bookPositionsOf(s: BookSlice): Array<{ tokenId: string; costSol: number; amount: number }> {
+export function bookPositionsOf(
+  s: BookSlice,
+): Array<{ tokenId: string; costSol: number; amount: number }> {
   return s.chainHoldings
     .filter((h) => h.amount > 0)
     .map((h) => {
       const ex = s.chainExits.find((e) => e.mint === h.mint);
       const tk = s.tokens.find((t) => t.mint === h.mint);
-      return { tokenId: tk?.id ?? h.mint, costSol: ex?.basisSol || holdingSol(h, s.tokens, s.solUsd), amount: h.amount };
+      return {
+        tokenId: tk?.id ?? h.mint,
+        costSol: ex?.basisSol || holdingSol(h, s.tokens, s.solUsd),
+        amount: h.amount,
+      };
     });
 }
 
@@ -509,7 +529,8 @@ function snipeJob(
   reason: "launch" | "migrate",
   now: number,
 ): { jobs: SnipeJob[]; feed: FeedItem[]; fired: boolean } {
-  const already = s.snipeJobs.some((j) => j.tokenId === tk.id) || s.chainHoldings.some((h) => h.mint === tk.mint);
+  const already =
+    s.snipeJobs.some((j) => j.tokenId === tk.id) || s.chainHoldings.some((h) => h.mint === tk.mint);
   if (already || !liveSnipeOk(s.settings, tk) || !tokenPasses(tk, s.settings, undefined, now)) {
     return { jobs: s.snipeJobs, feed: s.feed, fired: false };
   }
@@ -527,14 +548,27 @@ function snipeJob(
       fired: false,
     };
   }
-  if ((s.settings.guardMint && tk.security.onchain && tk.security.freeze) || (s.settings.hideRugs && isRug(tk.security))) {
+  if (
+    (s.settings.guardMint && tk.security.onchain && tk.security.freeze) ||
+    (s.settings.hideRugs && isRug(tk.security))
+  ) {
     return { jobs: s.snipeJobs, feed: s.feed, fired: false };
   }
   const spend = Math.min(Math.max(0.05, s.settings.quickBuy), s.settings.maxTradeSol || 2);
   const where = reason === "launch" ? "on launch" : "on migrate";
   const whereAr = reason === "launch" ? "عند الإطلاق" : "عند الهجرة";
   return {
-    jobs: [{ id: uid("sq"), tokenId: tk.id, mint: tk.mint, sol: spend, reason, pendingSince: 0 } satisfies SnipeJob, ...s.snipeJobs].slice(0, 8),
+    jobs: [
+      {
+        id: uid("sq"),
+        tokenId: tk.id,
+        mint: tk.mint,
+        sol: spend,
+        reason,
+        pendingSince: 0,
+      } satisfies SnipeJob,
+      ...s.snipeJobs,
+    ].slice(0, 8),
     feed: pushFeed(s.feed, {
       ts: now,
       kind: "snipe",
@@ -607,16 +641,24 @@ export const useDesk = create<DeskState>()(
           };
         }),
       toggleWatch: (id) =>
-        set((s) => (s.watch.includes(id) ? { watch: s.watch.filter((x) => x !== id) } : { watch: [...s.watch, id].slice(-32) })),
+        set((s) =>
+          s.watch.includes(id)
+            ? { watch: s.watch.filter((x) => x !== id) }
+            : { watch: [...s.watch, id].slice(-32) },
+        ),
       toggleArmSnipe: (id) =>
         set((s) => ({
-          armedSnipes: s.armedSnipes.includes(id) ? s.armedSnipes.filter((x) => x !== id) : [...s.armedSnipes, id],
+          armedSnipes: s.armedSnipes.includes(id)
+            ? s.armedSnipes.filter((x) => x !== id)
+            : [...s.armedSnipes, id],
         })),
       setCopy: (walletId, patch) =>
         set((s) => {
           const existing = s.copyRules.find((r) => r.walletId === walletId);
           const copyRules = existing
-            ? s.copyRules.map((r) => (r.walletId === walletId ? normalizeCopy({ ...r, ...patch }) : r))
+            ? s.copyRules.map((r) =>
+                r.walletId === walletId ? normalizeCopy({ ...r, ...patch }) : r,
+              )
             : [...s.copyRules, normalizeCopy({ walletId, ...patch })];
           return { copyRules };
         }),
@@ -696,7 +738,11 @@ export const useDesk = create<DeskState>()(
           for (const raw of news) {
             const p = swapPrint(raw);
             if (!p) continue;
-            if (p.sig && (copyPending.some((x) => x.sig === p.sig) || s.liveFills.some((x) => x.sig === p.sig))) continue;
+            if (
+              p.sig &&
+              (copyPending.some((x) => x.sig === p.sig) || s.liveFills.some((x) => x.sig === p.sig))
+            )
+              continue;
             const tk = s.tokens.find((t) => t.mint === p.mint);
             if (!tk) continue;
             if (p.side === "sell" && !rule.copySells) continue;
@@ -712,10 +758,20 @@ export const useDesk = create<DeskState>()(
               });
               continue;
             }
-            if (p.side === "buy" && rule.noStack && s.chainHoldings.some((h) => h.mint === tk.mint && h.amount > 0)) continue;
+            if (
+              p.side === "buy" &&
+              rule.noStack &&
+              s.chainHoldings.some((h) => h.mint === tk.mint && h.amount > 0)
+            )
+              continue;
             const confirms = priorConfirms(copyHits, pk, p.mint, now);
             if (p.side === "buy") copyHits = bumpConfirm(copyHits, pk, p.mint, now);
-            const skip = styleSkip(style, { side: p.side, change5m: tk.change5m, srcSol: p.sol, confirms });
+            const skip = styleSkip(style, {
+              side: p.side,
+              change5m: tk.change5m,
+              srcSol: p.sol,
+              confirms,
+            });
             if (skip) {
               feed = pushFeed(feed, {
                 ts: now,
@@ -755,26 +811,44 @@ export const useDesk = create<DeskState>()(
           return { followCursor, followTape, copyPending, feed, alerts, copyHits };
         }),
       armCopyJob: (id) =>
-        set((s) => ({ copyPending: s.copyPending.map((p) => (p.id === id ? { ...p, pendingSince: Date.now() } : p)) })),
+        set((s) => ({
+          copyPending: s.copyPending.map((p) =>
+            p.id === id ? { ...p, pendingSince: Date.now() } : p,
+          ),
+        })),
       finishCopyJob: (id, ok) =>
-        set((s) => ({ copyPending: s.copyPending.filter((p) => p.id !== id), bagNonce: ok ? s.bagNonce + 1 : s.bagNonce })),
+        set((s) => ({
+          copyPending: s.copyPending.filter((p) => p.id !== id),
+          bagNonce: ok ? s.bagNonce + 1 : s.bagNonce,
+        })),
       armSnipeJob: (id) =>
-        set((s) => ({ snipeJobs: s.snipeJobs.map((j) => (j.id === id ? { ...j, pendingSince: Date.now() } : j)) })),
+        set((s) => ({
+          snipeJobs: s.snipeJobs.map((j) => (j.id === id ? { ...j, pendingSince: Date.now() } : j)),
+        })),
       finishSnipeJob: (id, ok) =>
         set((s) => {
           const job = s.snipeJobs.find((j) => j.id === id);
           return {
             snipeJobs: s.snipeJobs.filter((j) => j.id !== id),
-            recentSniped: ok && job ? [{ id: job.tokenId, ts: Date.now() }, ...s.recentSniped].slice(0, 12) : s.recentSniped,
+            recentSniped:
+              ok && job
+                ? [{ id: job.tokenId, ts: Date.now() }, ...s.recentSniped].slice(0, 12)
+                : s.recentSniped,
             bagNonce: ok ? s.bagNonce + 1 : s.bagNonce,
           };
         }),
       armLimitJob: (id) =>
-        set((s) => ({ limits: s.limits.map((o) => (o.id === id ? { ...o, pendingSince: Date.now() } : o)) })),
+        set((s) => ({
+          limits: s.limits.map((o) => (o.id === id ? { ...o, pendingSince: Date.now() } : o)),
+        })),
       finishLimitJob: (id, ok) =>
         set((s) => ({
           limits: s.limits.map((o) =>
-            o.id !== id ? o : ok ? { ...o, status: "filled", pendingSince: 0 } : { ...o, status: "open", pendingSince: 0 },
+            o.id !== id
+              ? o
+              : ok
+                ? { ...o, status: "filled", pendingSince: 0 }
+                : { ...o, status: "open", pendingSince: 0 },
           ),
           bagNonce: ok ? s.bagNonce + 1 : s.bagNonce,
         })),
@@ -785,10 +859,21 @@ export const useDesk = create<DeskState>()(
         if (s.snipeJobs.some((j) => j.tokenId === tokenId)) return;
         const spend = Math.min(Math.max(0.05, s.settings.quickBuy), s.settings.maxTradeSol || 2);
         set({
-          snipeJobs: [{ id: uid("sq"), tokenId, mint: tk.mint, sol: spend, reason: "migrate" as const, pendingSince: 0 }, ...s.snipeJobs].slice(0, 8),
+          snipeJobs: [
+            {
+              id: uid("sq"),
+              tokenId,
+              mint: tk.mint,
+              sol: spend,
+              reason: "migrate" as const,
+              pendingSince: 0,
+            },
+            ...s.snipeJobs,
+          ].slice(0, 8),
         });
       },
-      markRadarRead: () => set((s) => ({ alerts: s.alerts.map((a) => (a.read ? a : { ...a, read: true })) })),
+      markRadarRead: () =>
+        set((s) => ({ alerts: s.alerts.map((a) => (a.read ? a : { ...a, read: true })) })),
       setExits: (tokenId, exits) =>
         set((s) => {
           const tk = s.tokens.find((t) => t.id === tokenId);
@@ -815,13 +900,24 @@ export const useDesk = create<DeskState>()(
           if (!tk || !(triggerMc > 0) || !(solAmt >= 0.05)) return {};
           return {
             limits: [
-              { id: uid("lim"), tokenId, mint: tk.mint, side, triggerMc, sol: solAmt, status: "open" as const, pendingSince: 0 },
+              {
+                id: uid("lim"),
+                tokenId,
+                mint: tk.mint,
+                side,
+                triggerMc,
+                sol: solAmt,
+                status: "open" as const,
+                pendingSince: 0,
+              },
               ...s.limits,
             ].slice(0, 40),
           };
         }),
       cancelLimit: (id) =>
-        set((s) => ({ limits: s.limits.map((o) => (o.id === id ? { ...o, status: "cancelled" } : o)) })),
+        set((s) => ({
+          limits: s.limits.map((o) => (o.id === id ? { ...o, status: "cancelled" } : o)),
+        })),
       armDca: (tokenId, solAmt, intervalMs, slices) =>
         set((s) => {
           const tk = s.tokens.find((t) => t.id === tokenId);
@@ -841,32 +937,52 @@ export const useDesk = create<DeskState>()(
             pendingSol: 0,
             pendingSince: 0,
           };
-          return { dcaPlans: [plan, ...s.dcaPlans.filter((p) => p.tokenId !== tokenId || p.status !== "live")].slice(0, 12) };
+          return {
+            dcaPlans: [
+              plan,
+              ...s.dcaPlans.filter((p) => p.tokenId !== tokenId || p.status !== "live"),
+            ].slice(0, 12),
+          };
         }),
       cancelDca: (tokenId) =>
         set((s) => ({
-          dcaPlans: s.dcaPlans.map((p) => (p.tokenId === tokenId && p.status === "live" ? { ...p, status: "stopped" } : p)),
+          dcaPlans: s.dcaPlans.map((p) =>
+            p.tokenId === tokenId && p.status === "live" ? { ...p, status: "stopped" } : p,
+          ),
         })),
       armLadder: (tokenId, solAmt) =>
         set((s) => {
           const tk = s.tokens.find((t) => t.id === tokenId);
           if (!tk) return {};
           const spend = Math.max(0.15, solAmt || s.settings.quickBuy);
-          const next = startLadder(s.ladders, { tokenId, now: s.now, price: tk.price, budget: spend, source: "manual", chain: true });
+          const next = startLadder(s.ladders, {
+            tokenId,
+            now: s.now,
+            price: tk.price,
+            budget: spend,
+            source: "manual",
+            chain: true,
+          });
           return {
             ladders: next.ladders,
             feed: pushFeed(s.feed, {
               ts: s.now,
               kind: "flow",
               tokenId,
-              text: next.born ? `Ladder $${tk.symbol} · ${spend.toFixed(2)} SOL` : `Confirm +1 $${tk.symbol}`,
-              textAr: next.born ? `سلّم $${tk.symbol} · ${spend.toFixed(2)} SOL` : `تأكيد +1 $${tk.symbol}`,
+              text: next.born
+                ? `Ladder $${tk.symbol} · ${spend.toFixed(2)} SOL`
+                : `Confirm +1 $${tk.symbol}`,
+              textAr: next.born
+                ? `سلّم $${tk.symbol} · ${spend.toFixed(2)} SOL`
+                : `تأكيد +1 $${tk.symbol}`,
             }),
           };
         }),
       cancelLadder: (tokenId) =>
         set((s) => ({
-          ladders: s.ladders.map((l) => (l.tokenId === tokenId && l.status === "live" ? { ...l, status: "stopped" } : l)),
+          ladders: s.ladders.map((l) =>
+            l.tokenId === tokenId && l.status === "live" ? { ...l, status: "stopped" } : l,
+          ),
         })),
       ingestLive: (rows, solUsd) =>
         set((s) => {
@@ -879,7 +995,9 @@ export const useDesk = create<DeskState>()(
             ...s.chainHoldings.map((h) => h.mint),
             ...s.ladders.filter((l) => l.status === "live").map((l) => l.tokenId),
             ...s.dcaPlans.filter((p) => p.status === "live").map((p) => p.tokenId),
-            ...s.limits.filter((o) => o.status === "open" || o.status === "triggered").map((o) => o.tokenId),
+            ...s.limits
+              .filter((o) => o.status === "open" || o.status === "triggered")
+              .map((o) => o.tokenId),
             ...s.chainExits.map((e) => e.tokenId),
           ]);
           const seen = new Set<string>();
@@ -890,7 +1008,8 @@ export const useDesk = create<DeskState>()(
             const prev = prevById.get(row.id);
             const next = mergeLiveToken(prev, row, now);
             const hi = s.holderInfo[row.mint];
-            if (hi && next.security.top10 == null) next.security = { ...next.security, top10: hi.top10 };
+            if (hi && next.security.top10 == null)
+              next.security = { ...next.security, top10: hi.top10 };
             if (hi && next.holders == null) next.holders = hi.holders;
             merged.push(next);
           }
@@ -924,7 +1043,17 @@ export const useDesk = create<DeskState>()(
                 text: `Launch $${tk.symbol} on SOL`,
                 textAr: `إطلاق $${tk.symbol} على SOL`,
               });
-              alerts = pushAlert(alerts, { ts: now, kind: "launch", tokenId: tk.id, text: `Launch $${tk.symbol}`, textAr: `إطلاق $${tk.symbol}` }, s.settings.radarLaunch);
+              alerts = pushAlert(
+                alerts,
+                {
+                  ts: now,
+                  kind: "launch",
+                  tokenId: tk.id,
+                  text: `Launch $${tk.symbol}`,
+                  textAr: `إطلاق $${tk.symbol}`,
+                },
+                s.settings.radarLaunch,
+              );
             }
             if (prev && prev.stage !== "migrated" && tk.stage === "migrated") {
               recentMigrated = [{ id: tk.id, ts: now }, ...recentMigrated].slice(0, 12);
@@ -935,7 +1064,17 @@ export const useDesk = create<DeskState>()(
                 text: `$${tk.symbol} migrated — curve complete`,
                 textAr: `$${tk.symbol} هاجر — اكتمل المنحنى`,
               });
-              alerts = pushAlert(alerts, { ts: now, kind: "migrate", tokenId: tk.id, text: `Migrated $${tk.symbol}`, textAr: `هاجر $${tk.symbol}` }, s.settings.radarMigrate);
+              alerts = pushAlert(
+                alerts,
+                {
+                  ts: now,
+                  kind: "migrate",
+                  tokenId: tk.id,
+                  text: `Migrated $${tk.symbol}`,
+                  textAr: `هاجر $${tk.symbol}`,
+                },
+                s.settings.radarMigrate,
+              );
               if (s.settings.snipeMigrate || s.armedSnipes.includes(tk.id)) {
                 const fired = snipeJob({ ...draft, feed, snipeJobs }, tk, "migrate", now);
                 snipeJobs = fired.jobs;
@@ -972,13 +1111,25 @@ export const useDesk = create<DeskState>()(
           holderInfo: { ...s.holderInfo, [info.mint]: info },
           tokens: s.tokens.map((t) =>
             t.mint === info.mint
-              ? { ...t, holders: info.holders ?? t.holders, security: { ...t.security, top10: info.top10 ?? t.security.top10 } }
+              ? {
+                  ...t,
+                  holders: info.holders ?? t.holders,
+                  security: { ...t.security, top10: info.top10 ?? t.security.top10 },
+                }
               : t,
           ),
         })),
       setWallet: (pk) =>
-        set({ walletPk: pk, chainSol: null, chainHoldings: [], chainBagAt: 0, chainTokensOk: true, chainTape: [] }),
-      setWatchPk: (pk) => set({ watchPk: pk, watchSol: null, watchHoldings: [], watchTape: [], watchBagAt: 0 }),
+        set({
+          walletPk: pk,
+          chainSol: null,
+          chainHoldings: [],
+          chainBagAt: 0,
+          chainTokensOk: true,
+          chainTape: [],
+        }),
+      setWatchPk: (pk) =>
+        set({ watchPk: pk, watchSol: null, watchHoldings: [], watchTape: [], watchBagAt: 0 }),
       setHotVault: (vault) => set({ hotVault: vault, hotUnlocked: false }),
       markHotExported: () =>
         set((s) => {
@@ -1025,13 +1176,19 @@ export const useDesk = create<DeskState>()(
       },
       setChainBag: (sol, holdings, tokensOk = true) =>
         set((s) => {
-          const next = { chainSol: sol, chainHoldings: holdings.slice(0, 40), chainBagAt: Date.now(), chainTokensOk: tokensOk };
+          const next = {
+            chainSol: sol,
+            chainHoldings: holdings.slice(0, 40),
+            chainBagAt: Date.now(),
+            chainTokensOk: tokensOk,
+          };
           if (s.dayStart > 0 || sol == null) return next;
           const eq = sol + holdings.reduce((a, h) => a + holdingSol(h, s.tokens, s.solUsd), 0);
           return { ...next, dayStart: eq };
         }),
       setChainTape: (prints) => set({ chainTape: prints.slice(0, 16) }),
-      setWatchBag: (sol, holdings) => set({ watchSol: sol, watchHoldings: holdings.slice(0, 40), watchBagAt: Date.now() }),
+      setWatchBag: (sol, holdings) =>
+        set({ watchSol: sol, watchHoldings: holdings.slice(0, 40), watchBagAt: Date.now() }),
       setWatchTape: (prints) => set({ watchTape: prints.slice(0, 16) }),
       recordLiveFill: (fill) =>
         set((s) => {
@@ -1039,7 +1196,9 @@ export const useDesk = create<DeskState>()(
           const token = s.tokens.find((t) => t.id === fill.tokenId);
           const label = token?.symbol ?? fill.mint.slice(0, 6);
           const text =
-            fill.status === "fail" ? `Chain ${fill.side} failed $${label}` : `Chain ${fill.side} $${label} · ${fill.sol.toFixed(2)} SOL`;
+            fill.status === "fail"
+              ? `Chain ${fill.side} failed $${label}`
+              : `Chain ${fill.side} $${label} · ${fill.sol.toFixed(2)} SOL`;
           const textAr =
             fill.status === "fail"
               ? `فشل ${fill.side === "buy" ? "شراء" : "بيع"} السلسلة $${label}`
@@ -1059,7 +1218,14 @@ export const useDesk = create<DeskState>()(
           return {
             liveFills: [next, ...s.liveFills.filter((x) => x.sig !== fill.sig)].slice(0, 40),
             chainExits,
-            feed: pushFeed(s.feed, { ts: s.now, kind: "flow", tokenId: fill.tokenId, side: fill.side, text, textAr }),
+            feed: pushFeed(s.feed, {
+              ts: s.now,
+              kind: "flow",
+              tokenId: fill.tokenId,
+              side: fill.side,
+              text,
+              textAr,
+            }),
             bagNonce: fill.status === "ok" || fill.status === "sent" ? s.bagNonce + 1 : s.bagNonce,
           };
         }),
@@ -1081,16 +1247,25 @@ export const useDesk = create<DeskState>()(
               });
           if (kind === "ladder") {
             return {
-              ladders: ok ? commitLadderSlice(s.ladders, tokenId, px ?? 0, now) : failLadderSlice(s.ladders, tokenId, now),
+              ladders: ok
+                ? commitLadderSlice(s.ladders, tokenId, px ?? 0, now)
+                : failLadderSlice(s.ladders, tokenId, now),
               feed,
             };
           }
           return {
             dcaPlans: s.dcaPlans.map((p) => {
               if (p.tokenId !== tokenId || p.status !== "live" || p.pendingSol < 0.05) return p;
-              if (!ok) return { ...p, pendingSol: 0, pendingSince: 0, nextAt: now + Math.max(p.intervalMs, 12_000) };
+              if (!ok)
+                return {
+                  ...p,
+                  pendingSol: 0,
+                  pendingSince: 0,
+                  nextAt: now + Math.max(p.intervalMs, 12_000),
+                };
               const done = p.done + 1;
-              if (done >= p.slices) return { ...p, done, pendingSol: 0, pendingSince: 0, status: "done" as const };
+              if (done >= p.slices)
+                return { ...p, done, pendingSol: 0, pendingSince: 0, status: "done" as const };
               return { ...p, done, pendingSol: 0, pendingSince: 0, nextAt: now + p.intervalMs };
             }),
             feed,
@@ -1100,7 +1275,9 @@ export const useDesk = create<DeskState>()(
         set((s) => {
           const now = Date.now();
           const before = s.chainExits.find((e) => e.tokenId === tokenId);
-          const chainExits = ok ? commitChainExit(s.chainExits, tokenId, now) : failChainExit(s.chainExits, tokenId, now);
+          const chainExits = ok
+            ? commitChainExit(s.chainExits, tokenId, now)
+            : failChainExit(s.chainExits, tokenId, now);
           const gone = ok && before && !chainExits.some((e) => e.tokenId === tokenId);
           const kind = before?.pendingKind;
           const tk = s.tokens.find((t) => t.id === tokenId);
@@ -1110,20 +1287,55 @@ export const useDesk = create<DeskState>()(
           if (ok && kind) {
             lossStreak = kind === "tp" ? 0 : lossStreak + 1;
             const en =
-              kind === "tp" ? `Take-profit ${label}` : kind === "trail" ? `Trail stopped ${label}` : kind === "dev" ? `Dump exit ${label}` : `Stop broken ${label}`;
+              kind === "tp"
+                ? `Take-profit ${label}`
+                : kind === "trail"
+                  ? `Trail stopped ${label}`
+                  : kind === "dev"
+                    ? `Dump exit ${label}`
+                    : `Stop broken ${label}`;
             const ar =
-              kind === "tp" ? `جني ربح ${label}` : kind === "trail" ? `أُوقف المتحرّك ${label}` : kind === "dev" ? `خروج هبوط ${label}` : `كُسر الوقف ${label}`;
-            alerts = pushAlert(alerts, { ts: now, kind: kind === "tp" ? "tp" : kind === "dev" ? "dev" : "stop", tokenId, side: "sell", text: en, textAr: ar }, kind === "tp" ? s.settings.radarStop : kind === "dev" ? s.settings.radarDev : s.settings.radarStop);
+              kind === "tp"
+                ? `جني ربح ${label}`
+                : kind === "trail"
+                  ? `أُوقف المتحرّك ${label}`
+                  : kind === "dev"
+                    ? `خروج هبوط ${label}`
+                    : `كُسر الوقف ${label}`;
+            alerts = pushAlert(
+              alerts,
+              {
+                ts: now,
+                kind: kind === "tp" ? "tp" : kind === "dev" ? "dev" : "stop",
+                tokenId,
+                side: "sell",
+                text: en,
+                textAr: ar,
+              },
+              kind === "tp"
+                ? s.settings.radarStop
+                : kind === "dev"
+                  ? s.settings.radarDev
+                  : s.settings.radarStop,
+            );
           }
           return {
             chainExits,
             alerts,
             lossStreak,
             ladders: gone
-              ? s.ladders.map((l) => (l.tokenId === tokenId && l.status === "live" ? { ...l, status: "stopped" as const } : l))
+              ? s.ladders.map((l) =>
+                  l.tokenId === tokenId && l.status === "live"
+                    ? { ...l, status: "stopped" as const }
+                    : l,
+                )
               : s.ladders,
             dcaPlans: gone
-              ? s.dcaPlans.map((p) => (p.tokenId === tokenId && p.status === "live" ? { ...p, status: "stopped" as const } : p))
+              ? s.dcaPlans.map((p) =>
+                  p.tokenId === tokenId && p.status === "live"
+                    ? { ...p, status: "stopped" as const }
+                    : p,
+                )
               : s.dcaPlans,
             bagNonce: ok ? s.bagNonce + 1 : s.bagNonce,
           };
@@ -1160,11 +1372,17 @@ export const useDesk = create<DeskState>()(
           chainExits,
           dcaPlans: s.dcaPlans.map((p) => (p.status === "live" ? { ...p, status: "stopped" } : p)),
           ladders: s.ladders.map((l) => (l.status === "live" ? { ...l, status: "stopped" } : l)),
-          limits: s.limits.map((o) => (o.status === "open" || o.status === "triggered" ? { ...o, status: "cancelled" } : o)),
+          limits: s.limits.map((o) =>
+            o.status === "open" || o.status === "triggered" ? { ...o, status: "cancelled" } : o,
+          ),
           copyPending: [],
           snipeJobs: [],
           feed: pushFeed(s.feed, { ts: now, kind: "risk", text, textAr }),
-          alerts: pushAlert(s.alerts, { ts: now, kind: "risk", text, textAr }, s.settings.radarRisk),
+          alerts: pushAlert(
+            s.alerts,
+            { ts: now, kind: "risk", text, textAr },
+            s.settings.radarRisk,
+          ),
         });
       },
       clearHalt: () => set({ riskHalt: false, lossStreak: 0 }),
@@ -1199,9 +1417,25 @@ export const useDesk = create<DeskState>()(
         for (const note of stepped.notes) {
           const tk = tokens.find((t) => t.id === note.tokenId);
           const mark = tk ? `$${tk.symbol}` : "";
-          feed = pushFeed(feed, { ts: now, kind: note.kind, tokenId: note.tokenId, text: `${mark} ${note.en}`.trim(), textAr: `${mark} ${note.ar}`.trim() });
+          feed = pushFeed(feed, {
+            ts: now,
+            kind: note.kind,
+            tokenId: note.tokenId,
+            text: `${mark} ${note.en}`.trim(),
+            textAr: `${mark} ${note.ar}`.trim(),
+          });
           if (note.kind === "risk") {
-            alerts = pushAlert(alerts, { ts: now, kind: "risk", tokenId: note.tokenId, text: `${mark} ${note.en}`.trim(), textAr: `${mark} ${note.ar}`.trim() }, state.settings.radarRisk);
+            alerts = pushAlert(
+              alerts,
+              {
+                ts: now,
+                kind: "risk",
+                tokenId: note.tokenId,
+                text: `${mark} ${note.en}`.trim(),
+                textAr: `${mark} ${note.ar}`.trim(),
+              },
+              state.settings.radarRisk,
+            );
           }
         }
 
@@ -1213,10 +1447,16 @@ export const useDesk = create<DeskState>()(
             return { ...plan, status: "stopped" as const, pendingSol: 0, pendingSince: 0 };
           }
           if (plan.pendingSol >= 0.05) {
-            if (now - plan.pendingSince > 28_000) return { ...plan, pendingSol: 0, pendingSince: 0 };
+            if (now - plan.pendingSince > 28_000)
+              return { ...plan, pendingSol: 0, pendingSince: 0 };
             return plan;
           }
-          return { ...plan, pendingSol: plan.sol, pendingSince: now, nextAt: now + plan.intervalMs };
+          return {
+            ...plan,
+            pendingSol: plan.sol,
+            pendingSince: now,
+            nextAt: now + plan.intervalMs,
+          };
         });
 
         limits = limits.map((o) => {
@@ -1260,10 +1500,20 @@ export const useDesk = create<DeskState>()(
           });
           if (why) {
             riskHalt = true;
-            const text = why === "loss" ? "Day loss halt — auto buys frozen" : "Loss streak halt — auto buys frozen";
-            const textAr = why === "loss" ? "وقف خسارة اليوم — الشراء التلقائي مجمّد" : "وقف سلسلة الخسائر — الشراء التلقائي مجمّد";
+            const text =
+              why === "loss"
+                ? "Day loss halt — auto buys frozen"
+                : "Loss streak halt — auto buys frozen";
+            const textAr =
+              why === "loss"
+                ? "وقف خسارة اليوم — الشراء التلقائي مجمّد"
+                : "وقف سلسلة الخسائر — الشراء التلقائي مجمّد";
             feed = pushFeed(feed, { ts: now, kind: "risk", text, textAr });
-            alerts = pushAlert(alerts, { ts: now, kind: "risk", text, textAr }, state.settings.radarRisk);
+            alerts = pushAlert(
+              alerts,
+              { ts: now, kind: "risk", text, textAr },
+              state.settings.radarRisk,
+            );
           }
         }
 
@@ -1294,8 +1544,12 @@ export const useDesk = create<DeskState>()(
       partialize: (s) => ({
         introSeen: s.introSeen,
         liveFills: s.liveFills.slice(0, 40),
-        chainExits: s.chainExits.slice(0, 24).map((e) => ({ ...e, pendingFrac: 0, pendingKind: null, pendingSince: 0 })),
-        limits: s.limits.filter((o) => o.status === "open" || o.status === "triggered").slice(0, 24),
+        chainExits: s.chainExits
+          .slice(0, 24)
+          .map((e) => ({ ...e, pendingFrac: 0, pendingKind: null, pendingSince: 0 })),
+        limits: s.limits
+          .filter((o) => o.status === "open" || o.status === "triggered")
+          .slice(0, 24),
         copyRules: s.copyRules.filter((r) => isFollowId(r.walletId)),
         follows: s.follows.slice(0, MAX_FOLLOWS),
         followCursor: s.followCursor,
@@ -1328,7 +1582,10 @@ export const useDesk = create<DeskState>()(
           introSeen: p.introSeen === true,
           liveFills: slimLiveFills(p.liveFills),
           chainExits: Array.isArray(p.chainExits)
-            ? p.chainExits.map(slimChainExit).filter((e): e is ChainExit => !!e).slice(0, 24)
+            ? p.chainExits
+                .map(slimChainExit)
+                .filter((e): e is ChainExit => !!e)
+                .slice(0, 24)
             : [],
           limits: Array.isArray(p.limits)
             ? p.limits
@@ -1346,20 +1603,36 @@ export const useDesk = create<DeskState>()(
                 .slice(0, 40)
             : [],
           copyRules: Array.isArray(p.copyRules)
-            ? p.copyRules.filter((r) => r && typeof r.walletId === "string" && isFollowId(r.walletId)).map((r) => normalizeCopy(r))
+            ? p.copyRules
+                .filter((r) => r && typeof r.walletId === "string" && isFollowId(r.walletId))
+                .map((r) => normalizeCopy(r))
             : [],
-          follows: Array.isArray(p.follows) ? p.follows.map(slimFollow).filter((f): f is Follow => !!f).slice(0, MAX_FOLLOWS) : [],
+          follows: Array.isArray(p.follows)
+            ? p.follows
+                .map(slimFollow)
+                .filter((f): f is Follow => !!f)
+                .slice(0, MAX_FOLLOWS)
+            : [],
           followCursor:
             p.followCursor && typeof p.followCursor === "object"
               ? Object.fromEntries(
                   Object.entries(p.followCursor as Record<string, unknown>)
-                    .filter((e): e is [string, string] => isB58(e[0]) && typeof e[1] === "string" && isSig(e[1]))
+                    .filter(
+                      (e): e is [string, string] =>
+                        isB58(e[0]) && typeof e[1] === "string" && isSig(e[1]),
+                    )
                     .slice(0, MAX_FOLLOWS),
                 )
               : {},
           dcaPlans: Array.isArray(p.dcaPlans)
             ? p.dcaPlans
-                .filter((d) => d && typeof d.tokenId === "string" && typeof d.mint === "string" && d.status === "live")
+                .filter(
+                  (d) =>
+                    d &&
+                    typeof d.tokenId === "string" &&
+                    typeof d.mint === "string" &&
+                    d.status === "live",
+                )
                 .slice(0, 12)
                 .map((d) => ({ ...d, pendingSol: 0, pendingSince: 0 }))
             : [],
@@ -1367,7 +1640,13 @@ export const useDesk = create<DeskState>()(
             ? p.ladders
                 .filter((l) => l && typeof l.tokenId === "string" && l.status === "live")
                 .slice(0, 12)
-                .map((l) => ({ ...l, chain: true, pendingSol: 0, pendingSrc: null, pendingSince: 0 }))
+                .map((l) => ({
+                  ...l,
+                  chain: true,
+                  pendingSol: 0,
+                  pendingSrc: null,
+                  pendingSince: 0,
+                }))
             : [],
           watch: slimIds(p.watch, []),
           armedSnipes: slimIds(p.armedSnipes, []),
@@ -1376,7 +1655,8 @@ export const useDesk = create<DeskState>()(
             const byId = new Map<string, Token>();
             if (Array.isArray(p.tokens)) {
               for (const t of p.tokens) {
-                if (!t?.id || typeof t.id !== "string" || t.id.length > 48 || !isB58(t.mint ?? "")) continue;
+                if (!t?.id || typeof t.id !== "string" || t.id.length > 48 || !isB58(t.mint ?? ""))
+                  continue;
                 if (byId.has(t.id)) continue;
                 byId.set(t.id, {
                   ...t,
@@ -1408,7 +1688,12 @@ export const useDesk = create<DeskState>()(
           feed: [],
           now: Date.now(),
           walletPk: hot ?? null,
-          watchPk: watch && watch !== hot ? watch : savedWallet && savedWallet !== hot ? savedWallet : null,
+          watchPk:
+            watch && watch !== hot
+              ? watch
+              : savedWallet && savedWallet !== hot
+                ? savedWallet
+                : null,
           hotVault: vault,
           hotUnlocked: false,
           chainSol: null,

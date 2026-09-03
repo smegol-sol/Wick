@@ -7,7 +7,8 @@
 export type Chain = "sol";
 export type Stage = "new" | "bonding" | "migrated";
 export type Side = "buy" | "sell";
-export type FillSource = "manual" | "copy" | "limit" | "snipe" | "tp" | "sl" | "trail" | "dev" | "dca" | "twap";
+export type FillSource =
+  "manual" | "copy" | "limit" | "snipe" | "tp" | "sl" | "trail" | "dev" | "dca" | "twap";
 export type FeedKind = "smart" | "snipe" | "risk" | "flow";
 
 export interface Security {
@@ -141,20 +142,33 @@ export function mergeLiveToken(prev: Token | undefined, next: Token, now: number
   if (!last || now - last.t > 60_000) {
     candles = [
       ...prev.candles.slice(-119),
-      { t: now, o: last?.c ?? px, h: Math.max(last?.c ?? px, px), l: Math.min(last?.c ?? px, px), c: px, v: 0 },
+      {
+        t: now,
+        o: last?.c ?? px,
+        h: Math.max(last?.c ?? px, px),
+        l: Math.min(last?.c ?? px, px),
+        c: px,
+        v: 0,
+      },
     ];
   } else {
     candles = prev.candles.map((c, i) =>
-      i === prev.candles.length - 1 ? { ...c, h: Math.max(c.h, px), l: Math.min(c.l, px), c: px } : c,
+      i === prev.candles.length - 1
+        ? { ...c, h: Math.max(c.h, px), l: Math.min(c.l, px), c: px }
+        : c,
     );
   }
   const prevPx = prev.price || px;
   const chg = prevPx > 0 ? ((px - prevPx) / prevPx) * 100 : 0;
-  const change5m = next.statsAt != null ? next.change5m : clamp(prev.change5m * 0.7 + chg * 0.3, -95, 500);
+  const change5m =
+    next.statsAt != null ? next.change5m : clamp(prev.change5m * 0.7 + chg * 0.3, -95, 500);
   return {
     ...next,
     candles,
-    security: next.security.onchain || !prev.security.onchain ? { ...next.security, top10: next.security.top10 ?? prev.security.top10 } : prev.security,
+    security:
+      next.security.onchain || !prev.security.onchain
+        ? { ...next.security, top10: next.security.top10 ?? prev.security.top10 }
+        : prev.security,
     holders: next.holders ?? prev.holders,
     change1m: chg,
     change5m,

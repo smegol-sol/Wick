@@ -19,7 +19,12 @@ function Row({
 }) {
   return (
     <label className="flex min-h-12 items-center gap-3 border-b border-border px-2 last:border-0">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className={cn("size-4", warn ? "accent-warn" : "accent-accent")} />
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className={cn("size-4", warn ? "accent-warn" : "accent-accent")}
+      />
       <span className={cn("text-sm", warn && checked ? "text-warn" : "text-fg")}>{children}</span>
     </label>
   );

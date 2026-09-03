@@ -21,7 +21,12 @@ const FLAG: Record<FraudFlag, Msg> = {
 
 export function FraudStrip({ card }: { card: FraudCard }) {
   const msg = useDesk((s) => s.msg);
-  const tone = card.tag === "clean" ? "text-up" : card.tag === "trap" || card.tag === "wash" ? "text-down" : "text-warn";
+  const tone =
+    card.tag === "clean"
+      ? "text-up"
+      : card.tag === "trap" || card.tag === "wash"
+        ? "text-down"
+        : "text-warn";
   return (
     <div className="rounded-lg bg-surface p-3 shadow-[var(--shadow-border)]">
       <div className="mb-2 flex items-baseline justify-between gap-2">
@@ -35,7 +40,9 @@ export function FraudStrip({ card }: { card: FraudCard }) {
       </div>
       <p className="mb-2 text-2xs text-subtle">{msg("fraudHint")}</p>
       {card.flags.length === 0 ? (
-        <p className="text-xs text-muted">{card.checked === 0 ? msg("fraudNoData") : msg("fraudClean")}</p>
+        <p className="text-xs text-muted">
+          {card.checked === 0 ? msg("fraudNoData") : msg("fraudClean")}
+        </p>
       ) : (
         <div className="flex flex-wrap gap-1">
           {card.flags.map((f) => (

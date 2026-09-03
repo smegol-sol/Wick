@@ -9,12 +9,25 @@ function Row({ ok, label, value }: { ok: boolean | null; label: string; value: s
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-0">
       <span className="text-xs text-muted">{label}</span>
-      <span className={cn("font-mono text-xs num", ok == null ? "text-subtle" : ok ? "text-up" : "text-down")}>{value}</span>
+      <span
+        className={cn(
+          "font-mono text-xs num",
+          ok == null ? "text-subtle" : ok ? "text-up" : "text-down",
+        )}
+      >
+        {value}
+      </span>
     </div>
   );
 }
 
-export function SecurityAudit({ security, holders }: { security: Security; holders: HolderInfo | null }) {
+export function SecurityAudit({
+  security,
+  holders,
+}: {
+  security: Security;
+  holders: HolderInfo | null;
+}) {
   const msg = useDesk((s) => s.msg);
   const score = riskScore(security);
   const unknown = !security.onchain;
@@ -24,11 +37,27 @@ export function SecurityAudit({ security, holders }: { security: Security; holde
         { ok: null, label: "freeze", value: "n/a" },
       ]
     : [
-        { ok: !security.mintable, label: "mintable", value: security.mintable ? msg("open") : msg("passed") },
-        { ok: !security.freeze, label: "freeze", value: security.freeze ? msg("open") : msg("passed") },
-        { ok: security.renounced, label: "renounced", value: security.renounced ? msg("passed") : msg("open") },
+        {
+          ok: !security.mintable,
+          label: "mintable",
+          value: security.mintable ? msg("open") : msg("passed"),
+        },
+        {
+          ok: !security.freeze,
+          label: "freeze",
+          value: security.freeze ? msg("open") : msg("passed"),
+        },
+        {
+          ok: security.renounced,
+          label: "renounced",
+          value: security.renounced ? msg("passed") : msg("open"),
+        },
       ];
-  rows.push({ ok: security.lpBurned, label: "lp", value: security.lpBurned ? msg("burned") : msg("curveLp") });
+  rows.push({
+    ok: security.lpBurned,
+    label: "lp",
+    value: security.lpBurned ? msg("burned") : msg("curveLp"),
+  });
   const top10 = holders?.top10 ?? security.top10;
   rows.push({
     ok: top10 == null ? null : top10 < 40,
@@ -46,8 +75,12 @@ export function SecurityAudit({ security, holders }: { security: Security; holde
       <div className="mb-2 flex items-baseline justify-between">
         <h3 className="text-xs font-medium tracking-wide text-muted uppercase">{msg("audit")}</h3>
         <span className="flex items-center gap-2">
-          <span className="font-mono text-2xs text-subtle">{msg(unknown ? "guardPending" : "guardOnchain")}</span>
-          <span className={cn("font-mono text-sm num", score > 40 ? "text-down" : "text-up")}>{unknown ? "—" : score.toFixed(0)}</span>
+          <span className="font-mono text-2xs text-subtle">
+            {msg(unknown ? "guardPending" : "guardOnchain")}
+          </span>
+          <span className={cn("font-mono text-sm num", score > 40 ? "text-down" : "text-up")}>
+            {unknown ? "—" : score.toFixed(0)}
+          </span>
         </span>
       </div>
       {rows.map((r) => (

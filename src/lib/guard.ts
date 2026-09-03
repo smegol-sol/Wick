@@ -90,12 +90,14 @@ export function clampNum(n: unknown, lo: number, hi: number, fallback: number): 
 
 export function sanitizeLabel(raw: unknown, max: number): string {
   if (typeof raw !== "string") return "";
-  return raw
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, "")
-    .replace(/[^\w\s.+\-_$]/g, "")
-    .trim()
-    .slice(0, max);
+  return (
+    raw
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+      .replace(/[^\w\s.+\-_$]/g, "")
+      .trim()
+      .slice(0, max)
+  );
 }
 
 export function quoteLamportsOk(lamports: number): boolean {

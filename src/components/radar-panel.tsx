@@ -19,7 +19,15 @@ const KIND_MSG: Record<AlertKind, Msg> = {
   risk: "alertRisk",
 };
 
-const TOGGLES: Array<[keyof Pick<ReturnType<typeof useDesk.getState>["settings"], "radarLaunch" | "radarMigrate" | "radarSmart" | "radarStop" | "radarDev" | "radarRisk">, Msg]> = [
+const TOGGLES: Array<
+  [
+    keyof Pick<
+      ReturnType<typeof useDesk.getState>["settings"],
+      "radarLaunch" | "radarMigrate" | "radarSmart" | "radarStop" | "radarDev" | "radarRisk"
+    >,
+    Msg,
+  ]
+> = [
   ["radarLaunch", "alertLaunch"],
   ["radarMigrate", "alertMigrate"],
   ["radarSmart", "alertSmart"],
@@ -54,7 +62,10 @@ export function RadarPanel({ onClose }: { onClose: () => void }) {
         <button
           type="button"
           onClick={() => setKind("all")}
-          className={cn("h-8 rounded-sm px-2 text-2xs font-medium", kind === "all" ? "bg-elevated text-fg" : "text-muted")}
+          className={cn(
+            "h-8 rounded-sm px-2 text-2xs font-medium",
+            kind === "all" ? "bg-elevated text-fg" : "text-muted",
+          )}
         >
           {msg("all")}
         </button>
@@ -63,7 +74,10 @@ export function RadarPanel({ onClose }: { onClose: () => void }) {
             key={k}
             type="button"
             onClick={() => setKind(k)}
-            className={cn("h-8 rounded-sm px-2 text-2xs font-medium", kind === k ? "bg-elevated text-fg" : "text-muted")}
+            className={cn(
+              "h-8 rounded-sm px-2 text-2xs font-medium",
+              kind === k ? "bg-elevated text-fg" : "text-muted",
+            )}
           >
             {msg(KIND_MSG[k])}
           </button>
@@ -72,7 +86,12 @@ export function RadarPanel({ onClose }: { onClose: () => void }) {
       <div className="flex flex-wrap gap-3 border-b border-border px-3 py-2 text-2xs text-muted">
         {TOGGLES.map(([key, label]) => (
           <label key={key} className="flex items-center gap-1.5">
-            <input type="checkbox" checked={settings[key]} onChange={(e) => patch({ [key]: e.target.checked })} className="accent-accent" />
+            <input
+              type="checkbox"
+              checked={settings[key]}
+              onChange={(e) => patch({ [key]: e.target.checked })}
+              className="accent-accent"
+            />
             {msg(label)}
           </label>
         ))}
@@ -93,7 +112,9 @@ export function RadarPanel({ onClose }: { onClose: () => void }) {
                 onBuy={() => {
                   if (a.tokenId) queueSnipe(a.tokenId);
                 }}
-                canBuy={Boolean(a.tokenId) && (a.kind === "launch" || a.kind === "migrate") && !held}
+                canBuy={
+                  Boolean(a.tokenId) && (a.kind === "launch" || a.kind === "migrate") && !held
+                }
               />
             );
           })
@@ -125,15 +146,27 @@ function AlertRow({
   return (
     <div className={cn("border-b border-border px-3 py-2.5", !a.read && "bg-elevated/40")}>
       <div className="flex items-center justify-between gap-2">
-        <span className={cn("font-mono text-2xs uppercase tracking-wide", tone)}>{msg(KIND_MSG[a.kind])}</span>
+        <span className={cn("font-mono text-2xs uppercase tracking-wide", tone)}>
+          {msg(KIND_MSG[a.kind])}
+        </span>
         <span className="font-mono text-2xs text-subtle num">{formatTime(a.ts)}</span>
       </div>
-      {a.kind === "risk" || (a.tokenId && (a.kind === "stop" || a.kind === "tp" || a.kind === "dev")) ? (
-        <Link to="/book" className="mt-1 block text-sm leading-snug hover:text-accent" onClick={onClose}>
+      {a.kind === "risk" ||
+      (a.tokenId && (a.kind === "stop" || a.kind === "tp" || a.kind === "dev")) ? (
+        <Link
+          to="/book"
+          className="mt-1 block text-sm leading-snug hover:text-accent"
+          onClick={onClose}
+        >
           {a.text}
         </Link>
       ) : a.tokenId ? (
-        <Link to="/token/$id" params={{ id: a.tokenId }} className="mt-1 block text-sm leading-snug hover:text-accent" onClick={onClose}>
+        <Link
+          to="/token/$id"
+          params={{ id: a.tokenId }}
+          className="mt-1 block text-sm leading-snug hover:text-accent"
+          onClick={onClose}
+        >
           {a.text}
         </Link>
       ) : (
@@ -151,8 +184,14 @@ function AlertRow({
 export function RadarToast({ alert, onOpen }: { alert: Alert; onOpen: () => void }) {
   const msg = useDesk((s) => s.msg);
   return (
-    <button type="button" onClick={onOpen} className="flex h-9 w-full items-center gap-2 border-b border-border bg-elevated px-3 text-start">
-      <div className="shrink-0 font-mono text-2xs uppercase tracking-wide text-accent">{msg(KIND_MSG[alert.kind])}</div>
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex h-9 w-full items-center gap-2 border-b border-border bg-elevated px-3 text-start"
+    >
+      <div className="shrink-0 font-mono text-2xs uppercase tracking-wide text-accent">
+        {msg(KIND_MSG[alert.kind])}
+      </div>
       <div className="min-w-0 truncate text-xs">{alert.text}</div>
     </button>
   );

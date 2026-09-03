@@ -39,7 +39,11 @@ export function volToMc(vol: number | null, mc: number): number | null {
 }
 
 /** Buy pressure from the 5m buy/sell split, else from the 5m change. */
-export function pressureOf(tk: { buys5m: number | null; sells5m: number | null; change5m: number }): number {
+export function pressureOf(tk: {
+  buys5m: number | null;
+  sells5m: number | null;
+  change5m: number;
+}): number {
   if (tk.buys5m != null && tk.sells5m != null && tk.buys5m + tk.sells5m >= 4) {
     return Math.max(-1, Math.min(1, (tk.buys5m - tk.sells5m) / (tk.buys5m + tk.sells5m)));
   }
@@ -96,7 +100,9 @@ export function labBoard(tokens: Token[], now: number): LabRow[] {
   return tokens.map((t) => labRow(t, now)).sort((a, b) => b.edge - a.edge);
 }
 
-export function clusterHeat(rows: LabRow[]): Array<{ cluster: Cluster; n: number; avg5m: number; hot: boolean }> {
+export function clusterHeat(
+  rows: LabRow[],
+): Array<{ cluster: Cluster; n: number; avg5m: number; hot: boolean }> {
   const map = new Map<Cluster, { n: number; sum: number }>();
   for (const r of rows) {
     const cur = map.get(r.cluster) ?? { n: 0, sum: 0 };

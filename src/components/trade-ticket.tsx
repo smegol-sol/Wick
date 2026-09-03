@@ -123,8 +123,20 @@ export function TradeTicket({ token }: { token: Token }) {
   const holdSol = hold && solUsd ? (hold.amount * token.price) / solUsd : 0;
   const avg = cx && hold && cx.basisSol > 0 && solUsd ? (cx.basisSol * solUsd) / hold.amount : 0;
   const pnlPct = avg > 0 ? ((token.price - avg) / avg) * 100 : 0;
-  const exits = { tpPct: parsePct(tp), slPct: parsePct(sl), tpScale: scale, trailOn: trail, devExit };
-  const stopPx = cx ? trailStopPrice({ trailOn: trail, slPct: parsePct(sl) ?? cx.slPct, peakPrice: cx.peakPrice }, token.price, avg || token.price) : null;
+  const exits = {
+    tpPct: parsePct(tp),
+    slPct: parsePct(sl),
+    tpScale: scale,
+    trailOn: trail,
+    devExit,
+  };
+  const stopPx = cx
+    ? trailStopPrice(
+        { trailOn: trail, slPct: parsePct(sl) ?? cx.slPct, peakPrice: cx.peakPrice },
+        token.price,
+        avg || token.price,
+      )
+    : null;
 
   function saveExits(next: typeof exits) {
     setExits(token.id, next);
@@ -134,20 +146,41 @@ export function TradeTicket({ token }: { token: Token }) {
   const liveCash = chainSol ?? 0;
   const sized = sizeAutoBuy(
     settings,
-    { riskHalt, lossStreak, dayStart, sol: liveCash, positions: bookPositions, marks: Math.max(0, equity - liveCash) },
+    {
+      riskHalt,
+      lossStreak,
+      dayStart,
+      sol: liveCash,
+      positions: bookPositions,
+      marks: Math.max(0, equity - liveCash),
+    },
     token.id,
     solAmt,
     { auto: false, token: { security: token.security, liq: token.liq } },
   );
-  const liveBuy = side === "buy" ? liveSpendCap(Math.min(solAmt, sized.spend || solAmt), chainSol, settings.maxTradeSol) : 0;
+  const liveBuy =
+    side === "buy"
+      ? liveSpendCap(Math.min(solAmt, sized.spend || solAmt), chainSol, settings.maxTradeSol)
+      : 0;
   const clip = side === "buy" && solAmt >= 0.05 && liveBuy + 1e-9 < solAmt;
-  const openLimits = limits.filter((o) => o.tokenId === token.id && (o.status === "open" || o.status === "triggered"));
+  const openLimits = limits.filter(
+    (o) => o.tokenId === token.id && (o.status === "open" || o.status === "triggered"),
+  );
   const dca = dcaPlans.find((p) => p.tokenId === token.id && p.status === "live");
   const ladder = ladders.find((p) => p.tokenId === token.id && p.status === "live");
   const preset =
-    exits.tpPct === 20 && exits.slPct === 12 ? 20 : exits.tpPct === 35 && exits.slPct === 18 ? 35 : exits.tpPct === 60 && exits.slPct === 25 ? 60 : 0;
+    exits.tpPct === 20 && exits.slPct === 12
+      ? 20
+      : exits.tpPct === 35 && exits.slPct === 18
+        ? 35
+        : exits.tpPct === 60 && exits.slPct === 25
+          ? 60
+          : 0;
 
-  const sellRaw = side === "sell" && hold ? liveSellRaw(hold.amount, hold.decimals, solAmt || holdSol, holdSol) : null;
+  const sellRaw =
+    side === "sell" && hold
+      ? liveSellRaw(hold.amount, hold.decimals, solAmt || holdSol, holdSol)
+      : null;
 
   useEffect(() => {
     const needBuy = side === "buy" && solAmt >= 0.05;
@@ -165,7 +198,8 @@ export function TradeTicket({ token }: { token: Token }) {
       void fetch(url, { signal: ctrl.signal })
         .then((r) => r.json())
         .then((d: { ok?: boolean; outAmount?: string; priceImpactPct?: string }) => {
-          if (d.ok && d.outAmount) setQuote({ ok: true, outAmount: d.outAmount, priceImpactPct: d.priceImpactPct ?? "0" });
+          if (d.ok && d.outAmount)
+            setQuote({ ok: true, outAmount: d.outAmount, priceImpactPct: d.priceImpactPct ?? "0" });
           else setQuote({ ok: false });
         })
         .catch(() => setQuote({ ok: false }));
@@ -208,7 +242,15 @@ export function TradeTicket({ token }: { token: Token }) {
   function prepare() {
     setErr(null);
     if (!canSign || !walletPk) {
-      setErr(msg(hotVault && !hotUnlocked ? "hotNeed" : hotVault && !hotVault.exported ? "hotNeedExport" : "execNeed"));
+      setErr(
+        msg(
+          hotVault && !hotUnlocked
+            ? "hotNeed"
+            : hotVault && !hotVault.exported
+              ? "hotNeedExport"
+              : "execNeed",
+        ),
+      );
       return;
     }
     if (freezeBlock) {
@@ -265,7 +307,14 @@ export function TradeTicket({ token }: { token: Token }) {
       setErr(msg(FAIL[res.error] ?? "signFail"));
       return;
     }
-    recordLiveFill({ sig: res.sig, mint: token.mint, tokenId: token.id, side: p.side, sol: p.sol, status: res.status });
+    recordLiveFill({
+      sig: res.sig,
+      mint: token.mint,
+      tokenId: token.id,
+      side: p.side,
+      sol: p.sol,
+      status: res.status,
+    });
     if (res.status === "ok") patchLiveFill(res.sig, "ok");
   }
 
@@ -276,10 +325,19 @@ export function TradeTicket({ token }: { token: Token }) {
         <Button size="sm" variant={side === "buy" ? "buy" : "quiet"} onClick={() => setSide("buy")}>
           {msg("buy")}
         </Button>
-        <Button size="sm" variant={side === "sell" ? "sell" : "quiet"} onClick={() => setSide("sell")}>
+        <Button
+          size="sm"
+          variant={side === "sell" ? "sell" : "quiet"}
+          onClick={() => setSide("sell")}
+        >
           {msg("sell")}
         </Button>
-        <span className={cn("ms-auto font-mono text-2xs uppercase", grade === "F" || grade === "D" ? "text-down" : grade === "A" ? "text-up" : "text-muted")}>
+        <span
+          className={cn(
+            "ms-auto font-mono text-2xs uppercase",
+            grade === "F" || grade === "D" ? "text-down" : grade === "A" ? "text-up" : "text-muted",
+          )}
+        >
           {grade}
         </span>
         {clip || settings.riskOn ? (
@@ -291,7 +349,12 @@ export function TradeTicket({ token }: { token: Token }) {
 
       <label className="flex flex-col gap-1 text-2xs text-muted">
         {msg("sol")}
-        <Input inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value)} className="h-10 font-mono" />
+        <Input
+          inputMode="decimal"
+          value={amt}
+          onChange={(e) => setAmt(e.target.value)}
+          className="h-10 font-mono"
+        />
       </label>
       <div className="mt-2 flex gap-1">
         {pctChips.map((c) => (
@@ -309,15 +372,30 @@ export function TradeTicket({ token }: { token: Token }) {
       <div className="mt-3 grid grid-cols-3 gap-2">
         <label className="flex flex-col gap-1 text-2xs text-muted">
           {msg("slippage")}
-          <Input inputMode="decimal" value={settings.slippage} onChange={(e) => patch({ slippage: Number(e.target.value) || 0 })} className="h-9 font-mono" />
+          <Input
+            inputMode="decimal"
+            value={settings.slippage}
+            onChange={(e) => patch({ slippage: Number(e.target.value) || 0 })}
+            className="h-9 font-mono"
+          />
         </label>
         <label className="flex items-end gap-1.5 pb-2 text-2xs text-muted">
-          <input type="checkbox" checked={settings.mev} onChange={(e) => patch({ mev: e.target.checked })} className="accent-accent" />
+          <input
+            type="checkbox"
+            checked={settings.mev}
+            onChange={(e) => patch({ mev: e.target.checked })}
+            className="accent-accent"
+          />
           {msg("mev")}
         </label>
         <label className="flex flex-col gap-1 text-2xs text-muted">
           {msg("priority")}
-          <Input inputMode="decimal" value={settings.priority} onChange={(e) => patch({ priority: Number(e.target.value) || 0 })} className="h-9 font-mono" />
+          <Input
+            inputMode="decimal"
+            value={settings.priority}
+            onChange={(e) => patch({ priority: Number(e.target.value) || 0 })}
+            className="h-9 font-mono"
+          />
         </label>
       </div>
 
@@ -327,7 +405,9 @@ export function TradeTicket({ token }: { token: Token }) {
           <>
             {solAmt.toFixed(2)} → {Number(quote.outAmount).toExponential(2)}{" "}
             <span className={impact >= 8 ? "text-down" : "text-subtle"}>{impact.toFixed(2)}%</span>
-            {settings.mev && settings.slippage > 18 ? <span className="ms-2 text-subtle">{msg("mevCapped")}</span> : null}
+            {settings.mev && settings.slippage > 18 ? (
+              <span className="ms-2 text-subtle">{msg("mevCapped")}</span>
+            ) : null}
           </>
         ) : (
           <span className="text-subtle">{quote == null ? "…" : msg("noRoute")}</span>
@@ -337,7 +417,13 @@ export function TradeTicket({ token }: { token: Token }) {
       <div className="mt-3 grid grid-cols-2 gap-2">
         <label className="flex flex-col gap-1 text-2xs text-muted">
           {msg("takeProfit")} %
-          <Input inputMode="decimal" value={tp} onChange={(e) => setTp(e.target.value)} onBlur={() => saveExits(exits)} className="h-9 font-mono" />
+          <Input
+            inputMode="decimal"
+            value={tp}
+            onChange={(e) => setTp(e.target.value)}
+            onBlur={() => saveExits(exits)}
+            className="h-9 font-mono"
+          />
         </label>
         <div className="flex flex-col gap-1 text-2xs text-muted">
           {msg("tpScale")}
@@ -350,7 +436,10 @@ export function TradeTicket({ token }: { token: Token }) {
                   setScale(n);
                   saveExits({ ...exits, tpScale: n });
                 }}
-                className={cn("h-9 flex-1 rounded-sm font-mono text-2xs", scale === n ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
+                className={cn(
+                  "h-9 flex-1 rounded-sm font-mono text-2xs",
+                  scale === n ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                )}
               >
                 {n}
               </button>
@@ -359,7 +448,13 @@ export function TradeTicket({ token }: { token: Token }) {
         </div>
         <label className="flex flex-col gap-1 text-2xs text-muted">
           {msg("stopLoss")} %
-          <Input inputMode="decimal" value={sl} onChange={(e) => setSl(e.target.value)} onBlur={() => saveExits(exits)} className="h-9 font-mono" />
+          <Input
+            inputMode="decimal"
+            value={sl}
+            onChange={(e) => setSl(e.target.value)}
+            onBlur={() => saveExits(exits)}
+            className="h-9 font-mono"
+          />
         </label>
         <label className="flex items-end gap-1.5 pb-2 text-2xs text-muted">
           <input
@@ -375,7 +470,9 @@ export function TradeTicket({ token }: { token: Token }) {
           {msg("trail")}
         </label>
       </div>
-      {scale > 1 ? <p className="mt-1 font-mono text-2xs text-subtle">{`TWAP ${scale} slices · ~2–4s apart`}</p> : null}
+      {scale > 1 ? (
+        <p className="mt-1 font-mono text-2xs text-subtle">{`TWAP ${scale} slices · ~2–4s apart`}</p>
+      ) : null}
       {trail && stopPx != null ? (
         <p className="mt-1 font-mono text-2xs text-down num">
           {msg("trail")} {formatUsd(stopPx, 6)}
@@ -404,7 +501,10 @@ export function TradeTicket({ token }: { token: Token }) {
               key={n}
               type="button"
               onClick={() => applyPreset(n)}
-              className={cn("h-9 flex-1 rounded-sm font-mono text-2xs", preset === n ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
+              className={cn(
+                "h-9 flex-1 rounded-sm font-mono text-2xs",
+                preset === n ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+              )}
             >
               {n === 0 ? msg("clearExit") : `${n}%`}
             </button>
@@ -415,18 +515,31 @@ export function TradeTicket({ token }: { token: Token }) {
       <Button
         variant={side === "buy" ? "buy" : "sell"}
         className="mt-3 w-full"
-        disabled={busy || freezeBlock || impactBlock || quote?.ok === false || quote == null || (side === "buy" ? liveBuy < 0.05 : !hold)}
+        disabled={
+          busy ||
+          freezeBlock ||
+          impactBlock ||
+          quote?.ok === false ||
+          quote == null ||
+          (side === "buy" ? liveBuy < 0.05 : !hold)
+        }
         onClick={prepare}
       >
-        {busy ? msg("signing") : `${side === "buy" ? msg("signBuy") : msg("signSell")} ${formatSol(side === "buy" ? (clip ? liveBuy : solAmt) : solAmt)}`}
+        {busy
+          ? msg("signing")
+          : `${side === "buy" ? msg("signBuy") : msg("signSell")} ${formatSol(side === "buy" ? (clip ? liveBuy : solAmt) : solAmt)}`}
       </Button>
       {err ? <p className="mt-2 text-2xs text-down">{err}</p> : null}
-      {!canSign ? <p className="mt-2 text-2xs text-warn">{msg(hotVault ? "hotNeed" : "execNeed")}</p> : null}
+      {!canSign ? (
+        <p className="mt-2 text-2xs text-warn">{msg(hotVault ? "hotNeed" : "execNeed")}</p>
+      ) : null}
 
       {pending ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-bg/80 p-4 backdrop-blur-sm sm:items-center">
           <div className="w-full max-w-sm rounded-lg bg-surface p-4 shadow-[var(--shadow-border)]">
-            <h3 className="text-sm font-medium tracking-wide text-warn uppercase">{msg("confirmTitle")}</h3>
+            <h3 className="text-sm font-medium tracking-wide text-warn uppercase">
+              {msg("confirmTitle")}
+            </h3>
             <p className="mt-1 text-2xs text-muted">{msg("confirmBody")}</p>
             <dl className="mt-3 grid grid-cols-2 gap-y-1 font-mono text-xs num">
               <dt className="text-muted">{pending.side === "buy" ? msg("buy") : msg("sell")}</dt>
@@ -434,9 +547,13 @@ export function TradeTicket({ token }: { token: Token }) {
               <dt className="text-muted">{msg("sol")}</dt>
               <dd className="text-end">{formatSol(pending.sol, 3)}</dd>
               <dt className="text-muted">{msg("slippage")}</dt>
-              <dd className="text-end">{(slipBps(settings.slippage, settings.mev) / 100).toFixed(1)}%</dd>
+              <dd className="text-end">
+                {(slipBps(settings.slippage, settings.mev) / 100).toFixed(1)}%
+              </dd>
               <dt className="text-muted">{msg("impact")}</dt>
-              <dd className={cn("text-end", impact >= 8 ? "text-down" : "")}>{impact.toFixed(2)}%</dd>
+              <dd className={cn("text-end", impact >= 8 ? "text-down" : "")}>
+                {impact.toFixed(2)}%
+              </dd>
               <dt className="text-muted">{msg("priority")}</dt>
               <dd className="text-end">{settings.priority} SOL</dd>
             </dl>
@@ -444,7 +561,11 @@ export function TradeTicket({ token }: { token: Token }) {
               <Button variant="quiet" className="flex-1" onClick={() => setPending(null)}>
                 {msg("cancel")}
               </Button>
-              <Button variant={pending.side === "buy" ? "buy" : "sell"} className="flex-1" onClick={() => void submit(pending)}>
+              <Button
+                variant={pending.side === "buy" ? "buy" : "sell"}
+                className="flex-1"
+                onClick={() => void submit(pending)}
+              >
                 {msg("confirmGo")}
               </Button>
             </div>
@@ -458,7 +579,11 @@ export function TradeTicket({ token }: { token: Token }) {
             <span className="text-2xs text-muted">{msg("holdings")}</span>
             <span className="font-mono text-2xs num">
               {formatSol(holdSol)}
-              {avg > 0 ? <span className={cn("ms-2", pnlPct >= 0 ? "text-up" : "text-down")}>{formatPct(pnlPct)}</span> : null}
+              {avg > 0 ? (
+                <span className={cn("ms-2", pnlPct >= 0 ? "text-up" : "text-down")}>
+                  {formatPct(pnlPct)}
+                </span>
+              ) : null}
             </span>
           </div>
           <div className="flex gap-1">
@@ -505,7 +630,12 @@ export function TradeTicket({ token }: { token: Token }) {
         </p>
         <label className="flex flex-col gap-1 text-2xs text-muted">
           {msg("triggerMc")} · {msg("mcap")} {formatMc(token.mc)}
-          <Input inputMode="decimal" value={trigger} onChange={(e) => setTrigger(e.target.value)} className="h-9 font-mono" />
+          <Input
+            inputMode="decimal"
+            value={trigger}
+            onChange={(e) => setTrigger(e.target.value)}
+            className="h-9 font-mono"
+          />
         </label>
         <Button
           variant="quiet"
@@ -522,8 +652,11 @@ export function TradeTicket({ token }: { token: Token }) {
         {openLimits.map((o) => (
           <div key={o.id} className="mt-2 flex items-center justify-between text-2xs text-muted">
             <span className="font-mono num">
-              {o.side === "buy" ? msg("buy") : msg("sell")} {formatSol(o.sol)} · {msg("mcap")} {formatMc(o.triggerMc)}
-              {o.status === "triggered" ? <span className="ms-2 text-warn">{msg("signing")}</span> : null}
+              {o.side === "buy" ? msg("buy") : msg("sell")} {formatSol(o.sol)} · {msg("mcap")}{" "}
+              {formatMc(o.triggerMc)}
+              {o.status === "triggered" ? (
+                <span className="ms-2 text-warn">{msg("signing")}</span>
+              ) : null}
             </span>
             <button type="button" className="text-fg" onClick={() => cancelLimit(o.id)}>
               {msg("cancel")}
@@ -540,20 +673,31 @@ export function TradeTicket({ token }: { token: Token }) {
               {msg("cancel")}
             </Button>
           ) : (
-            <Button size="sm" variant="primary" onClick={() => armLadder(token.id, Math.max(0.15, solAmt || settings.quickBuy))}>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => armLadder(token.id, Math.max(0.15, solAmt || settings.quickBuy))}
+            >
               {msg("ladderOn")}
             </Button>
           )}
         </div>
         {ladder ? (
           <p className="mt-2 font-mono text-2xs text-muted num">
-            {msg(ladder.phase === "confirm" ? "phaseConfirm" : ladder.phase === "dip" ? "phaseDip" : "phaseTwap")}{" "}
+            {msg(
+              ladder.phase === "confirm"
+                ? "phaseConfirm"
+                : ladder.phase === "dip"
+                  ? "phaseDip"
+                  : "phaseTwap",
+            )}{" "}
             {ladder.phase === "confirm"
               ? `${ladder.confirms}/${ladder.confirmNeed}`
               : ladder.phase === "dip"
                 ? `${ladder.dipDone}/${ladder.dipNeed}`
                 : `${ladder.twapDone}/${ladder.twapNeed}`}{" "}
-            · {msg("dcaNext")} {Math.max(0, Math.ceil((ladder.nextAt - now) / 1000))}s{ladder.pendingSol >= 0.05 ? ` · ${msg("signing")}` : ""}
+            · {msg("dcaNext")} {Math.max(0, Math.ceil((ladder.nextAt - now) / 1000))}s
+            {ladder.pendingSol >= 0.05 ? ` · ${msg("signing")}` : ""}
           </p>
         ) : (
           <p className="mt-2 font-mono text-2xs text-subtle">{msg("ladderHint")}</p>
@@ -568,7 +712,10 @@ export function TradeTicket({ token }: { token: Token }) {
               key={n}
               type="button"
               onClick={() => setSlices(n)}
-              className={cn("h-9 min-w-9 rounded-sm px-2 font-mono text-2xs", slices === n ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
+              className={cn(
+                "h-9 min-w-9 rounded-sm px-2 font-mono text-2xs",
+                slices === n ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+              )}
             >
               {n}
             </button>
@@ -578,24 +725,40 @@ export function TradeTicket({ token }: { token: Token }) {
               key={ms}
               type="button"
               onClick={() => setGap(ms)}
-              className={cn("h-9 min-w-9 rounded-sm px-2 font-mono text-2xs", gap === ms ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
+              className={cn(
+                "h-9 min-w-9 rounded-sm px-2 font-mono text-2xs",
+                gap === ms ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+              )}
             >
               {ms / 1000}s
             </button>
           ))}
           {dca ? (
-            <Button size="sm" variant="quiet" className="ms-auto" onClick={() => cancelDca(token.id)}>
+            <Button
+              size="sm"
+              variant="quiet"
+              className="ms-auto"
+              onClick={() => cancelDca(token.id)}
+            >
               {msg("cancel")}
             </Button>
           ) : (
-            <Button size="sm" variant="quiet" className="ms-auto" onClick={() => armDca(token.id, Math.max(0.05, solAmt || settings.quickBuy), gap, slices)}>
+            <Button
+              size="sm"
+              variant="quiet"
+              className="ms-auto"
+              onClick={() =>
+                armDca(token.id, Math.max(0.05, solAmt || settings.quickBuy), gap, slices)
+              }
+            >
               {msg("dca")}
             </Button>
           )}
         </div>
         {dca ? (
           <p className="mt-2 font-mono text-2xs text-muted num">
-            {msg("dca")} {dca.done}/{dca.slices} · {msg("dcaNext")} {Math.max(0, Math.ceil((dca.nextAt - now) / 1000))}s
+            {msg("dca")} {dca.done}/{dca.slices} · {msg("dcaNext")}{" "}
+            {Math.max(0, Math.ceil((dca.nextAt - now) / 1000))}s
             {dca.pendingSol >= 0.05 ? ` · ${msg("signing")}` : ""}
           </p>
         ) : null}

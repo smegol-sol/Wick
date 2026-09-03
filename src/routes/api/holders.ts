@@ -64,10 +64,15 @@ async function loadHolders(mint: string): Promise<HolderInfo | null> {
     for (const r of rows) {
       const amount = r.uiAmount ?? 0;
       if (!r.address || !(amount > 0)) continue;
-      top.push({ address: r.address, amount, pct: total && total > 0 ? (amount / total) * 100 : 0 });
+      top.push({
+        address: r.address,
+        amount,
+        pct: total && total > 0 ? (amount / total) * 100 : 0,
+      });
     }
     top.sort((a, b) => b.amount - a.amount);
-    const top10 = total && total > 0 && top.length ? top.slice(0, 10).reduce((a, h) => a + h.pct, 0) : null;
+    const top10 =
+      total && total > 0 && top.length ? top.slice(0, 10).reduce((a, h) => a + h.pct, 0) : null;
     return { mint, at: Date.now(), holders, top10, top: top.slice(0, 20) };
   } finally {
     done();

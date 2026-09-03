@@ -54,7 +54,10 @@ function DiscoverPage() {
           <button
             key={id}
             onClick={() => setSort(id)}
-            className={cn("h-8 rounded-sm px-2.5 text-2xs font-medium", sort === id ? "bg-elevated text-fg" : "text-muted")}
+            className={cn(
+              "h-8 rounded-sm px-2.5 text-2xs font-medium",
+              sort === id ? "bg-elevated text-fg" : "text-muted",
+            )}
           >
             {label}
           </button>
@@ -84,25 +87,45 @@ function DiscoverPage() {
                 className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border px-3 py-2 hover:bg-elevated/60 md:grid-cols-[minmax(0,1.6fr)_repeat(6,minmax(0,1fr))_auto]"
               >
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="hidden w-5 shrink-0 font-mono text-2xs text-subtle md:inline">{i + 1}</span>
+                  <span className="hidden w-5 shrink-0 font-mono text-2xs text-subtle md:inline">
+                    {i + 1}
+                  </span>
                   <TokenMark id={t.id} symbol={t.symbol} />
                   <div className="min-w-0 overflow-hidden">
                     <div className="truncate text-sm font-medium">{t.symbol}</div>
                     <div className="truncate text-2xs text-muted">{t.name}</div>
                   </div>
                 </div>
-                <div className="hidden text-end font-mono text-xs num md:block">{formatMc(t.mc)}</div>
-                <div className="hidden text-end font-mono text-xs num md:block">{stat(t.vol, (n) => formatUsd(n, 0))}</div>
-                <div className="hidden text-end font-mono text-xs num md:block">{formatUsd(t.liq, 0)}</div>
-                <div className="hidden text-end font-mono text-xs num md:block">{stat(t.tx, (n) => String(Math.round(n)))}</div>
-                <div className="hidden text-end font-mono text-xs num md:block">{stat(t.holders, (n) => String(Math.round(n)))}</div>
-                <div className={cn("hidden text-end font-mono text-xs num md:block", t.change5m >= 0 ? "text-up" : "text-down")}>
+                <div className="hidden text-end font-mono text-xs num md:block">
+                  {formatMc(t.mc)}
+                </div>
+                <div className="hidden text-end font-mono text-xs num md:block">
+                  {stat(t.vol, (n) => formatUsd(n, 0))}
+                </div>
+                <div className="hidden text-end font-mono text-xs num md:block">
+                  {formatUsd(t.liq, 0)}
+                </div>
+                <div className="hidden text-end font-mono text-xs num md:block">
+                  {stat(t.tx, (n) => String(Math.round(n)))}
+                </div>
+                <div className="hidden text-end font-mono text-xs num md:block">
+                  {stat(t.holders, (n) => String(Math.round(n)))}
+                </div>
+                <div
+                  className={cn(
+                    "hidden text-end font-mono text-xs num md:block",
+                    t.change5m >= 0 ? "text-up" : "text-down",
+                  )}
+                >
                   {formatPct(t.change5m)}
                 </div>
                 <div className="flex shrink-0 items-center justify-end gap-1">
                   <button
                     type="button"
-                    className={cn("flex size-8 items-center justify-center rounded-sm text-subtle hover:text-fg", watching && "text-accent")}
+                    className={cn(
+                      "flex size-8 items-center justify-center rounded-sm text-subtle hover:text-fg",
+                      watching && "text-accent",
+                    )}
                     aria-label={watching ? msg("watched") : msg("watch")}
                     onClick={(e) => {
                       e.preventDefault();

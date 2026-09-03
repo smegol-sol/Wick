@@ -44,7 +44,9 @@ function CopyPage() {
     <div className="mx-auto max-w-5xl p-2">
       <h1 className="mb-1 text-sm font-medium tracking-tight">{msg("copyDesk")}</h1>
       <p className="mb-3 max-w-2xl text-sm text-muted">{msg("followHint")}</p>
-      {!snipeLive ? <p className="mb-3 font-mono text-2xs text-warn">{msg("copyNeedsLive")}</p> : null}
+      {!snipeLive ? (
+        <p className="mb-3 font-mono text-2xs text-warn">{msg("copyNeedsLive")}</p>
+      ) : null}
       <PageTabs
         value={tab}
         onChange={setTab}
@@ -103,7 +105,10 @@ function CopyPage() {
                       </a>
                     </div>
                     <div className="flex gap-1">
-                      <Button variant={rule?.enabled ? "buy" : "quiet"} onClick={() => setCopy(f.pk, { enabled: !rule?.enabled })}>
+                      <Button
+                        variant={rule?.enabled ? "buy" : "quiet"}
+                        onClick={() => setCopy(f.pk, { enabled: !rule?.enabled })}
+                      >
                         {rule?.enabled ? msg("copyOn") : msg("copyOff")}
                       </Button>
                       <Button size="sm" variant="quiet" onClick={() => removeFollow(f.pk)}>
@@ -119,7 +124,10 @@ function CopyPage() {
                         const tk = p.mint ? tokens.find((t) => t.mint === p.mint) : undefined;
                         const name = tk?.symbol ?? p.symbol ?? shortMint(p.mint ?? "");
                         return (
-                          <li key={p.sig} className="flex items-center justify-between gap-2 py-0.5 font-mono text-2xs num">
+                          <li
+                            key={p.sig}
+                            className="flex items-center justify-between gap-2 py-0.5 font-mono text-2xs num"
+                          >
                             <span className={p.side === "buy" ? "text-up" : "text-down"}>
                               {p.side === "buy" ? msg("buy") : msg("sell")}{" "}
                               {tk ? (
@@ -150,18 +158,25 @@ function CopyPage() {
         <>
           {pending.length > 0 ? (
             <>
-              <h2 className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">{msg("queued")}</h2>
+              <h2 className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+                {msg("queued")}
+              </h2>
               <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
                 {pending.map((p) => {
                   const follow = follows.find((f) => f.pk === p.walletId);
                   const tk = tokens.find((t) => t.id === p.tokenId);
                   const wait = Math.max(0, (p.fireAt - now) / 1000);
                   return (
-                    <div key={p.id} className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm">
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm"
+                    >
                       <span className={p.side === "buy" ? "text-up" : "text-down"}>
                         {p.side === "buy" ? msg("buy") : msg("sell")} {tk?.symbol ?? "—"}
                       </span>
-                      <span className="truncate text-2xs text-muted">{follow?.label ?? shortMint(p.walletId)}</span>
+                      <span className="truncate text-2xs text-muted">
+                        {follow?.label ?? shortMint(p.walletId)}
+                      </span>
                       <span className="font-mono text-2xs text-subtle num">
                         {p.pendingSince ? msg("signing") : `${msg("inSec")} ${wait.toFixed(1)}s`}
                       </span>
@@ -175,7 +190,9 @@ function CopyPage() {
             </>
           ) : null}
 
-          <h2 className="mt-6 mb-2 text-xs font-medium tracking-wide text-muted uppercase">{msg("history")}</h2>
+          <h2 className="mt-6 mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+            {msg("history")}
+          </h2>
           <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
             {liveFills.length === 0 ? (
               <p className="p-4 text-sm text-muted">{msg("emptyLiveFills")}</p>
@@ -183,9 +200,14 @@ function CopyPage() {
               liveFills.slice(0, 24).map((f) => {
                 const tk = tokens.find((t) => t.id === f.tokenId || t.mint === f.mint);
                 return (
-                  <div key={f.id} className="flex items-center justify-between border-b border-border px-3 py-2 text-sm">
+                  <div
+                    key={f.id}
+                    className="flex items-center justify-between border-b border-border px-3 py-2 text-sm"
+                  >
                     <span>
-                      <span className={f.side === "buy" ? "text-up" : "text-down"}>{f.side === "buy" ? msg("buy") : msg("sell")}</span>{" "}
+                      <span className={f.side === "buy" ? "text-up" : "text-down"}>
+                        {f.side === "buy" ? msg("buy") : msg("sell")}
+                      </span>{" "}
                       {tk?.symbol ?? shortMint(f.mint)}
                     </span>
                     <a
@@ -224,9 +246,20 @@ function RuleFields({ walletId }: { walletId: string }) {
             key={st}
             type="button"
             onClick={() => setCopy(walletId, { style: st })}
-            className={cn("h-9 rounded-sm px-3 text-2xs font-medium", style === st ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
+            className={cn(
+              "h-9 rounded-sm px-3 text-2xs font-medium",
+              style === st ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+            )}
           >
-            {msg(st === "mirror" ? "copyMirror" : st === "shadow" ? "copyShadow" : st === "confirm" ? "copyConfirm" : "copyScale")}
+            {msg(
+              st === "mirror"
+                ? "copyMirror"
+                : st === "shadow"
+                  ? "copyShadow"
+                  : st === "confirm"
+                    ? "copyConfirm"
+                    : "copyScale",
+            )}
           </button>
         ))}
       </div>
@@ -261,7 +294,10 @@ function RuleFields({ walletId }: { walletId: string }) {
                 key={s}
                 type="button"
                 onClick={() => setCopy(walletId, { delaySec: s })}
-                className={cn("h-9 min-w-9 rounded-sm px-2 font-mono text-2xs", delay === s ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
+                className={cn(
+                  "h-9 min-w-9 rounded-sm px-2 font-mono text-2xs",
+                  delay === s ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                )}
               >
                 {s}s
               </button>
@@ -271,11 +307,21 @@ function RuleFields({ walletId }: { walletId: string }) {
       </div>
       <div className="mt-2 flex flex-wrap gap-3 text-2xs text-muted">
         <label className="flex items-center gap-1.5">
-          <input type="checkbox" checked={rule?.copySells ?? false} onChange={(e) => setCopy(walletId, { copySells: e.target.checked })} className="accent-accent" />
+          <input
+            type="checkbox"
+            checked={rule?.copySells ?? false}
+            onChange={(e) => setCopy(walletId, { copySells: e.target.checked })}
+            className="accent-accent"
+          />
           {msg("copySells")}
         </label>
         <label className="flex items-center gap-1.5">
-          <input type="checkbox" checked={rule?.noStack ?? true} onChange={(e) => setCopy(walletId, { noStack: e.target.checked })} className="accent-accent" />
+          <input
+            type="checkbox"
+            checked={rule?.noStack ?? true}
+            onChange={(e) => setCopy(walletId, { noStack: e.target.checked })}
+            className="accent-accent"
+          />
           {msg("noStack")}
         </label>
       </div>

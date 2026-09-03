@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { WSOL } from "@/lib/solana-wallet";
-import { amountRawOk, clientKey, isB58, jsonErr, jsonOk, quoteLamportsOk, rateLimit } from "@/lib/guard";
+import {
+  amountRawOk,
+  clientKey,
+  isB58,
+  jsonErr,
+  jsonOk,
+  quoteLamportsOk,
+  rateLimit,
+} from "@/lib/guard";
 import { fetchJupQuote, impactPct, jupPair } from "@/lib/jup";
 
 export const Route = createFileRoute("/api/quote")({

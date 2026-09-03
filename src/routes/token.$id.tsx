@@ -68,13 +68,21 @@ function TokenPage() {
   const [smart, setSmart] = useState(true);
   const [focus, setFocus] = useState<string | null>(null);
 
-  const allPrints = useMemo(() => followPrints(follows, followTape, solUsd), [follows, followTape, solUsd]);
+  const allPrints = useMemo(
+    () => followPrints(follows, followTape, solUsd),
+    [follows, followTape, solUsd],
+  );
   const flow = useMemo(() => (token ? printsFor(token.mint, allPrints) : []), [token, allPrints]);
   const legend = useMemo(() => {
     const map = new Map<string, { id: string; name: string; buys: number; sells: number }>();
     for (const p of flow) {
       if (!p.walletId) continue;
-      const cur = map.get(p.walletId) ?? { id: p.walletId, name: p.wallet ?? p.walletId, buys: 0, sells: 0 };
+      const cur = map.get(p.walletId) ?? {
+        id: p.walletId,
+        name: p.wallet ?? p.walletId,
+        buys: 0,
+        sells: 0,
+      };
       if (p.side === "buy") cur.buys += 1;
       else cur.sells += 1;
       map.set(p.walletId, cur);
@@ -103,13 +111,25 @@ function TokenPage() {
       ? [
           ...(avg > 0 ? [{ price: avg, label: msg("avg"), tone: "muted" as const }] : []),
           ...(cx.tpPct != null && avg > 0
-            ? [{ price: avg * (1 + cx.tpPct / 100), label: cx.tpScale > 1 ? `${msg("sourceTp")} ${cx.tpRung}/${cx.tpScale}` : msg("sourceTp"), tone: "up" as const }]
+            ? [
+                {
+                  price: avg * (1 + cx.tpPct / 100),
+                  label:
+                    cx.tpScale > 1
+                      ? `${msg("sourceTp")} ${cx.tpRung}/${cx.tpScale}`
+                      : msg("sourceTp"),
+                  tone: "up" as const,
+                },
+              ]
             : []),
           ...(cx.slPct != null
             ? [
                 {
                   price: cx.trailOn
-                    ? Math.max(0, Math.max(cx.peakPrice || avg, token.price, avg) * (1 - cx.slPct / 100))
+                    ? Math.max(
+                        0,
+                        Math.max(cx.peakPrice || avg, token.price, avg) * (1 - cx.slPct / 100),
+                      )
                     : Math.max(0, (avg || token.price) * (1 - cx.slPct / 100)),
                   label: cx.trailOn ? msg("sourceTrail") : msg("sourceSl"),
                   tone: "down" as const,
@@ -136,15 +156,32 @@ function TokenPage() {
               <span className="font-mono text-2xs uppercase text-subtle">{token.stage}</span>
             </div>
             <div className="mt-1 flex flex-wrap gap-3 font-mono text-2xs text-subtle num">
-              <button onClick={() => navigator.clipboard?.writeText(token.mint)}>{shortMint(token.mint)}</button>
-              <a href={`https://solscan.io/token/${token.mint}`} target="_blank" rel="noreferrer" className="hover:text-fg">
+              <button onClick={() => navigator.clipboard?.writeText(token.mint)}>
+                {shortMint(token.mint)}
+              </button>
+              <a
+                href={`https://solscan.io/token/${token.mint}`}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-fg"
+              >
                 solscan
               </a>
-              <a href={`https://pump.fun/coin/${token.mint}`} target="_blank" rel="noreferrer" className="hover:text-fg">
+              <a
+                href={`https://pump.fun/coin/${token.mint}`}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-fg"
+              >
                 pump.fun
               </a>
               {token.pair ? (
-                <a href={`https://dexscreener.com/solana/${token.pair}`} target="_blank" rel="noreferrer" className="hover:text-fg">
+                <a
+                  href={`https://dexscreener.com/solana/${token.pair}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:text-fg"
+                >
                   dexscreener
                 </a>
               ) : null}
@@ -166,51 +203,89 @@ function TokenPage() {
                 {msg("tx")} {stat(token.tx, (n) => String(Math.round(n)))}
               </span>
               <span>
-                {msg("holders")} {stat(holders?.holders ?? token.holders, (n) => String(Math.round(n)))}
+                {msg("holders")}{" "}
+                {stat(holders?.holders ?? token.holders, (n) => String(Math.round(n)))}
               </span>
               <span>
                 {msg("age")} {formatAge(token.createdAt, now)}
               </span>
               {token.twitter ? (
-                <a href={`https://x.com/${token.twitter.replace(/^@/, "")}`} target="_blank" rel="noreferrer" className="text-accent">
+                <a
+                  href={`https://x.com/${token.twitter.replace(/^@/, "")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-accent"
+                >
                   {token.twitter}
                 </a>
               ) : null}
             </div>
-            <p className="mt-1 font-mono text-2xs text-subtle">{token.statsAt ? msg("statsDex") : msg("statsNone")}</p>
+            <p className="mt-1 font-mono text-2xs text-subtle">
+              {token.statsAt ? msg("statsDex") : msg("statsNone")}
+            </p>
           </div>
           <div className="text-end">
             <div className="font-mono text-lg num">{formatUsd(token.price, 6)}</div>
-            <div className={cn("font-mono text-xs num", token.change5m >= 0 ? "text-up" : "text-down")}>
+            <div
+              className={cn("font-mono text-xs num", token.change5m >= 0 ? "text-up" : "text-down")}
+            >
               {formatPct(token.change5m)} <span className="text-subtle">5m</span>
             </div>
             {token.change1h != null ? (
-              <div className={cn("font-mono text-2xs num", token.change1h >= 0 ? "text-up" : "text-down")}>
+              <div
+                className={cn(
+                  "font-mono text-2xs num",
+                  token.change1h >= 0 ? "text-up" : "text-down",
+                )}
+              >
                 {formatPct(token.change1h)} <span className="text-subtle">1h</span>
               </div>
             ) : null}
-            <Button size="icon" variant={watched ? "primary" : "quiet"} className="mt-2" onClick={() => toggle(token.id)} aria-label={msg("watch")}>
+            <Button
+              size="icon"
+              variant={watched ? "primary" : "quiet"}
+              className="mt-2"
+              onClick={() => toggle(token.id)}
+              aria-label={msg("watch")}
+            >
               <Star className={cn("size-4", watched && "fill-current")} />
             </Button>
           </div>
         </header>
-        <MoodStrip mood={mood.mood} score={mood.score} tape={mood.tape} social={mood.social} smart={mood.smart} tone={mood.tone} />
+        <MoodStrip
+          mood={mood.mood}
+          score={mood.score}
+          tape={mood.tape}
+          social={mood.social}
+          smart={mood.smart}
+          tone={mood.tone}
+        />
         <Scorecard row={card} />
         <FraudStrip card={fraudOf(token)} />
         <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
           <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
             <label className="flex items-center gap-1.5 text-2xs text-muted">
-              <input type="checkbox" checked={smart} onChange={(e) => setSmart(e.target.checked)} className="accent-accent" />
+              <input
+                type="checkbox"
+                checked={smart}
+                onChange={(e) => setSmart(e.target.checked)}
+                className="accent-accent"
+              />
               {msg("smartOnChart")}
             </label>
-            {smart && legend.length === 0 ? <span className="text-2xs text-subtle">{msg("smartEmpty")}</span> : null}
+            {smart && legend.length === 0 ? (
+              <span className="text-2xs text-subtle">{msg("smartEmpty")}</span>
+            ) : null}
             {smart
               ? legend.map((w) => (
                   <button
                     key={w.id}
                     type="button"
                     onClick={() => setFocus((cur) => (cur === w.id ? null : w.id))}
-                    className={cn("h-7 rounded-sm px-2 font-mono text-2xs", focus === w.id ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
+                    className={cn(
+                      "h-7 rounded-sm px-2 font-mono text-2xs",
+                      focus === w.id ? "bg-elevated text-fg" : "text-muted hover:text-fg",
+                    )}
                   >
                     <span className="text-up">{w.buys}</span>
                     <span className="mx-1 text-subtle">/</span>
@@ -229,15 +304,22 @@ function TokenPage() {
               <button
                 key={k}
                 onClick={() => setTab(k)}
-                className={cn("h-9 rounded-sm px-3 text-xs font-medium", tab === k ? "bg-elevated text-fg" : "text-muted")}
+                className={cn(
+                  "h-9 rounded-sm px-3 text-xs font-medium",
+                  tab === k ? "bg-elevated text-fg" : "text-muted",
+                )}
               >
                 {msg(k as Msg)}
               </button>
             ))}
           </div>
           <div className="p-3">
-            {tab === "security" ? <SecurityAudit security={token.security} holders={holders} /> : null}
-            {tab === "smart" ? <TokenFlowList flow={nameFlowOf(token, allPrints)} prints={flow} /> : null}
+            {tab === "security" ? (
+              <SecurityAudit security={token.security} holders={holders} />
+            ) : null}
+            {tab === "smart" ? (
+              <TokenFlowList flow={nameFlowOf(token, allPrints)} prints={flow} />
+            ) : null}
             {tab === "holders" ? (
               holders && holders.top.length ? (
                 <ul>
@@ -253,14 +335,21 @@ function TokenPage() {
                         {shortMint(h.address)}
                       </a>
                       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-elevated">
-                        <div className="h-full bg-accent" style={{ width: `${Math.min(100, h.pct)}%` }} />
+                        <div
+                          className="h-full bg-accent"
+                          style={{ width: `${Math.min(100, h.pct)}%` }}
+                        />
                       </div>
-                      <span className="w-14 text-end font-mono text-2xs num">{h.pct.toFixed(2)}%</span>
+                      <span className="w-14 text-end font-mono text-2xs num">
+                        {h.pct.toFixed(2)}%
+                      </span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted">{holders ? msg("holdersNoRpc") : msg("loadingHoldings")}</p>
+                <p className="text-sm text-muted">
+                  {holders ? msg("holdersNoRpc") : msg("loadingHoldings")}
+                </p>
               )
             ) : null}
           </div>

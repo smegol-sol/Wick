@@ -23,12 +23,24 @@ const TONE_MSG: Record<Tone, Msg> = {
 function Bar({ label, value, signed }: { label: string; value: number; signed?: boolean }) {
   const pct = signed ? (value + 1) * 50 : value * 100;
   const fill = Math.max(2, Math.min(100, pct));
-  const tone = signed ? (value > 0.08 ? "bg-up" : value < -0.08 ? "bg-down" : "bg-muted") : "bg-accent";
+  const tone = signed
+    ? value > 0.08
+      ? "bg-up"
+      : value < -0.08
+        ? "bg-down"
+        : "bg-muted"
+    : "bg-accent";
   return (
     <div className="min-w-0">
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <span className="text-2xs text-muted">{label}</span>
-        <span className={cn("font-mono text-2xs num", signed && value > 0.08 && "text-up", signed && value < -0.08 && "text-down")}>
+        <span
+          className={cn(
+            "font-mono text-2xs num",
+            signed && value > 0.08 && "text-up",
+            signed && value < -0.08 && "text-down",
+          )}
+        >
           {signed ? formatPct(value * 100) : `${Math.round(value * 100)}`}
         </span>
       </div>
@@ -64,7 +76,13 @@ export function MoodStrip({
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <div className="text-2xs text-muted">{msg("sentiment")}</div>
-          <div className={cn("text-sm font-medium tracking-wide uppercase", hot && "text-up", cold && "text-down")}>
+          <div
+            className={cn(
+              "text-sm font-medium tracking-wide uppercase",
+              hot && "text-up",
+              cold && "text-down",
+            )}
+          >
             {msg(MOOD_MSG[mood])}
           </div>
         </div>
@@ -102,7 +120,9 @@ export function MoodList({
   const msg = useDesk((s) => s.msg);
   return (
     <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
-      <h2 className="border-b border-border px-3 py-2 text-xs font-medium tracking-wide text-muted uppercase">{title}</h2>
+      <h2 className="border-b border-border px-3 py-2 text-xs font-medium tracking-wide text-muted uppercase">
+        {title}
+      </h2>
       {rows.length === 0 ? (
         <p className="p-4 text-sm text-muted">{empty}</p>
       ) : (
@@ -115,7 +135,12 @@ export function MoodList({
           >
             <span className="min-w-0 flex-1 truncate text-sm font-medium">{r.symbol}</span>
             <span className="text-2xs text-subtle">{msg(TONE_MSG[r.tone])}</span>
-            <span className={cn("w-10 text-end font-mono text-xs num", r.score >= 0 ? "text-up" : "text-down")}>
+            <span
+              className={cn(
+                "w-10 text-end font-mono text-xs num",
+                r.score >= 0 ? "text-up" : "text-down",
+              )}
+            >
               {r.score.toFixed(0)}
             </span>
           </Link>

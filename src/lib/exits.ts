@@ -154,7 +154,8 @@ export function queueChainExits(
 export function commitChainExit(rows: ChainExit[], tokenId: string, now: number): ChainExit[] {
   return rows.flatMap((e) => {
     if (e.tokenId !== tokenId || e.pendingFrac < 0.05) return [e];
-    const last = e.pendingKind !== "tp" || e.pendingFrac >= 1 - 1e-9 || e.tpRung + 1 >= clampScale(e.tpScale);
+    const last =
+      e.pendingKind !== "tp" || e.pendingFrac >= 1 - 1e-9 || e.tpRung + 1 >= clampScale(e.tpScale);
     if (last) return [];
     return [
       {

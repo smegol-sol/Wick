@@ -6,16 +6,16 @@ Self-custodied Solana meme spot desk. Live pump.fun pulse, on-chain audit, Jupit
 
 ## Where every number comes from
 
-| Field | Source | When missing |
-|---|---|---|
-| Launches, bonding %, market cap, replies, X handle | pump.fun frontend API | token not listed |
-| Mint / freeze authority, supply | Solana RPC `getMultipleAccounts` on the mint | audit "not read yet" |
-| 24h volume, 5m volume, tx counts, 5m/1h change, pool liquidity (migrated) | DexScreener | `n/a` |
-| Top holders, top-10 share | RPC `getTokenLargestAccounts` + `getTokenSupply` | `n/a`; public RPCs refuse this call |
-| Holder count | RPC `getProgramAccounts` (dedicated RPC only) | `n/a` |
-| Followed-wallet swaps ("smart money") | RPC `getSignaturesForAddress` + `getTransaction` | empty list |
-| Quotes and swap transactions | Jupiter lite-api | "No Jupiter route" |
-| SOL/USD | Jupiter price API | equity shows cash only |
+| Field                                                                     | Source                                           | When missing                        |
+| ------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------- |
+| Launches, bonding %, market cap, replies, X handle                        | pump.fun frontend API                            | token not listed                    |
+| Mint / freeze authority, supply                                           | Solana RPC `getMultipleAccounts` on the mint     | audit "not read yet"                |
+| 24h volume, 5m volume, tx counts, 5m/1h change, pool liquidity (migrated) | DexScreener                                      | `n/a`                               |
+| Top holders, top-10 share                                                 | RPC `getTokenLargestAccounts` + `getTokenSupply` | `n/a`; public RPCs refuse this call |
+| Holder count                                                              | RPC `getProgramAccounts` (dedicated RPC only)    | `n/a`                               |
+| Followed-wallet swaps ("smart money")                                     | RPC `getSignaturesForAddress` + `getTransaction` | empty list                          |
+| Quotes and swap transactions                                              | Jupiter lite-api                                 | "No Jupiter route"                  |
+| SOL/USD                                                                   | Jupiter price API                                | equity shows cash only              |
 
 A field nobody reported is `null` in the model and `n/a` in the UI. A filter or sieve rule on an unreported field fails rather than passing. Sentiment, setups and fraud cards are heuristics over reported fields only; each card says how many checks had data.
 

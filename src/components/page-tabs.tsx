@@ -22,7 +22,9 @@ export function PageTabs<T extends string>({
           )}
         >
           {it.label}
-          {it.count != null ? <span className="ms-1.5 font-mono num opacity-70"> {it.count}</span> : null}
+          {it.count != null ? (
+            <span className="ms-1.5 font-mono num opacity-70"> {it.count}</span>
+          ) : null}
         </button>
       ))}
     </div>

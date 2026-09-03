@@ -66,7 +66,10 @@ async function fetchBatch(mints: string[], signal: AbortSignal): Promise<DexPair
   return Array.isArray(data) ? (data as DexPair[]) : [];
 }
 
-export async function fetchDexStats(mints: string[], signal: AbortSignal): Promise<Map<string, DexStats>> {
+export async function fetchDexStats(
+  mints: string[],
+  signal: AbortSignal,
+): Promise<Map<string, DexStats>> {
   const out = new Map<string, DexStats>();
   const now = Date.now();
   const need: string[] = [];

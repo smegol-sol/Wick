@@ -33,15 +33,28 @@ export function RiskStrip() {
   const hot = halt || (settings.riskOn && dd > 0);
   const scale = sizingScale(
     settings,
-    { riskHalt: halt, lossStreak: streak, dayStart, sol, positions, marks: Math.max(0, equity - sol) },
+    {
+      riskHalt: halt,
+      lossStreak: streak,
+      dayStart,
+      sol,
+      positions,
+      marks: Math.max(0, equity - sol),
+    },
     1,
   );
 
   return (
     <div className="mt-3 rounded-lg bg-surface p-3 shadow-[var(--shadow-border)]">
       <div className="flex flex-wrap items-center gap-2">
-        <span className={cn("font-mono text-2xs uppercase tracking-wide", halt ? "text-down" : "text-muted")}>
-          {msg("risk")} {halt ? msg("riskHalt") : settings.riskOn ? msg("riskOk") : msg("clearExit")}
+        <span
+          className={cn(
+            "font-mono text-2xs uppercase tracking-wide",
+            halt ? "text-down" : "text-muted",
+          )}
+        >
+          {msg("risk")}{" "}
+          {halt ? msg("riskHalt") : settings.riskOn ? msg("riskOk") : msg("clearExit")}
         </span>
         <span className="font-mono text-2xs text-muted num">
           {msg("heat")} {formatSol(heat)}
@@ -80,11 +93,15 @@ export function RiskStrip() {
       </div>
       {cap > 0 ? (
         <div className="mt-2 h-0.5 overflow-hidden rounded-full bg-elevated">
-          <div className={cn("h-full", halt ? "bg-down" : "bg-accent")} style={{ width: `${Math.min(100, (heat / cap) * 100)}%` }} />
+          <div
+            className={cn("h-full", halt ? "bg-down" : "bg-accent")}
+            style={{ width: `${Math.min(100, (heat / cap) * 100)}%` }}
+          />
         </div>
       ) : null}
       <p className="mt-2 font-mono text-2xs text-subtle num">
-        {msg("cash")} {formatSol(sol)} · {msg("maxTrade")} {settings.maxTradeSol || "—"} · {msg("maxDayLoss")} {settings.maxDayLoss || "—"}
+        {msg("cash")} {formatSol(sol)} · {msg("maxTrade")} {settings.maxTradeSol || "—"} ·{" "}
+        {msg("maxDayLoss")} {settings.maxDayLoss || "—"}
       </p>
     </div>
   );
@@ -96,7 +113,13 @@ export function RiskChip() {
   const on = useDesk((s) => s.settings.riskOn);
   if (!on && !halt) return null;
   return (
-    <Link to="/book" className={cn("hidden h-9 items-center rounded-sm px-2 font-mono text-2xs uppercase sm:flex", halt ? "text-down" : "text-muted")}>
+    <Link
+      to="/book"
+      className={cn(
+        "hidden h-9 items-center rounded-sm px-2 font-mono text-2xs uppercase sm:flex",
+        halt ? "text-down" : "text-muted",
+      )}
+    >
       {halt ? msg("riskHalt") : msg("risk")}
     </Link>
   );

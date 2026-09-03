@@ -31,7 +31,12 @@ function Spark({ token }: { token: Token }) {
   const up = pts[pts.length - 1].c >= pts[0].o;
   return (
     <svg viewBox="0 0 56 16" className="h-4 w-14" aria-hidden>
-      <path d={d} fill="none" stroke={up ? "var(--color-up)" : "var(--color-down)"} strokeWidth="1.4" />
+      <path
+        d={d}
+        fill="none"
+        stroke={up ? "var(--color-up)" : "var(--color-down)"}
+        strokeWidth="1.4"
+      />
     </svg>
   );
 }
@@ -101,7 +106,9 @@ export function TokenRow({ token, dense }: { token: Token; dense?: boolean }) {
         <div className="flex items-center gap-2 text-2xs text-muted">
           <span className="num">{formatAge(token.createdAt, now)}</span>
           <span className="num">{formatMc(token.mc)}</span>
-          {token.stage !== "migrated" ? <span className="num">{token.bonding.toFixed(0)}%</span> : null}
+          {token.stage !== "migrated" ? (
+            <span className="num">{token.bonding.toFixed(0)}%</span>
+          ) : null}
           {token.twitter ? <span className="text-accent">{token.twitter}</span> : null}
         </div>
         {token.stage !== "migrated" ? (
@@ -130,7 +137,12 @@ export function TokenRow({ token, dense }: { token: Token; dense?: boolean }) {
         </>
       )}
       <div className="text-end">
-        <div className={cn("font-mono text-sm font-medium num", token.change5m >= 0 ? "text-up" : "text-down")}>
+        <div
+          className={cn(
+            "font-mono text-sm font-medium num",
+            token.change5m >= 0 ? "text-up" : "text-down",
+          )}
+        >
           {token.statsAt == null && token.change5m === 0 ? "n/a" : formatPct(token.change5m)}
         </div>
         <div className="font-mono text-2xs text-muted num">{formatUsd(token.price, 6)}</div>
@@ -138,7 +150,10 @@ export function TokenRow({ token, dense }: { token: Token; dense?: boolean }) {
       <div className="flex items-center justify-end gap-1">
         <button
           type="button"
-          className={cn("flex size-11 items-center justify-center rounded-sm text-subtle hover:text-fg", watching && "text-accent")}
+          className={cn(
+            "flex size-11 items-center justify-center rounded-sm text-subtle hover:text-fg",
+            watching && "text-accent",
+          )}
           aria-label={watching ? msg("watched") : msg("watch")}
           onClick={(e) => {
             e.preventDefault();
@@ -188,7 +203,9 @@ export function PulseColumn({
 }) {
   const msg = useDesk((s) => s.msg);
   return (
-    <section className={cn("panel flex min-w-0 flex-col", fill ? "min-h-0 flex-1 overflow-hidden" : "")}>
+    <section
+      className={cn("panel flex min-w-0 flex-col", fill ? "min-h-0 flex-1 overflow-hidden" : "")}
+    >
       <header className="flex items-center justify-between border-b border-border px-3 py-2.5">
         <h2 className="kicker">{title}</h2>
         <span className="font-mono text-2xs text-subtle num">{tokens.length}</span>

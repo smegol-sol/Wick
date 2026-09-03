@@ -104,7 +104,11 @@ function parseBool(raw: string): number {
   return NaN;
 }
 
-export function parseSieve(raw: string): { rules: SieveRule[]; include: string[]; exclude: string[] } {
+export function parseSieve(raw: string): {
+  rules: SieveRule[];
+  include: string[];
+  exclude: string[];
+} {
   const rules: SieveRule[] = [];
   const include: string[] = [];
   const exclude: string[] = [];
@@ -235,7 +239,12 @@ export function hitSieve(tk: Token, spec: SieveSpec, now = Date.now()): boolean 
   return true;
 }
 
-export function tokenPasses(tk: Token, settings: FilterSlice, query?: string, now = Date.now()): boolean {
+export function tokenPasses(
+  tk: Token,
+  settings: FilterSlice,
+  query?: string,
+  now = Date.now(),
+): boolean {
   return hitSieve(tk, compileSieve(settings, query), now);
 }
 

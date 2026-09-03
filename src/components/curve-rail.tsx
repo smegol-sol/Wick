@@ -33,11 +33,18 @@ export function CurveRail() {
   return (
     <div className="panel flex flex-col gap-2 p-2 sm:flex-row sm:items-center">
       <label className="flex h-10 shrink-0 items-center gap-2 rounded-sm px-2 text-xs font-medium md:hidden">
-        <input type="checkbox" checked={auto} onChange={(e) => patch({ snipeMigrate: e.target.checked })} className="size-4 accent-accent" />
+        <input
+          type="checkbox"
+          checked={auto}
+          onChange={(e) => patch({ snipeMigrate: e.target.checked })}
+          className="size-4 accent-accent"
+        />
         <Crosshair className="size-3.5 text-accent" />
         {msg("snipeMigrate")}
         <span className="font-mono text-2xs text-muted num">{quick} SOL</span>
-        {settings.snipeLive ? <span className="font-mono text-2xs text-warn">{msg("snipeLive")}</span> : null}
+        {settings.snipeLive ? (
+          <span className="font-mono text-2xs text-warn">{msg("snipeLive")}</span>
+        ) : null}
       </label>
       <div className="min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x sm:flex-1">
         <div className="flex w-max flex-nowrap gap-2">
@@ -49,7 +56,10 @@ export function CurveRail() {
             return (
               <div
                 key={t.id}
-                className={cn("flex h-10 shrink-0 items-center gap-2 rounded-sm bg-elevated px-2", isArmed && "outline outline-1 outline-accent/50")}
+                className={cn(
+                  "flex h-10 shrink-0 items-center gap-2 rounded-sm bg-elevated px-2",
+                  isArmed && "outline outline-1 outline-accent/50",
+                )}
               >
                 <Link to="/token/$id" params={{ id: t.id }} className="flex items-center gap-2">
                   <TokenMark id={t.id} symbol={t.symbol} className="size-6" />
@@ -62,7 +72,11 @@ export function CurveRail() {
                 {auto ? (
                   <span className="text-2xs text-accent">{msg("snipeArmed")}</span>
                 ) : (
-                  <Button size="sm" variant={isArmed ? "primary" : "quiet"} onClick={() => toggle(t.id)}>
+                  <Button
+                    size="sm"
+                    variant={isArmed ? "primary" : "quiet"}
+                    onClick={() => toggle(t.id)}
+                  >
                     {isArmed ? msg("snipeArmed") : msg("armSnipe")}
                   </Button>
                 )}
@@ -70,9 +84,14 @@ export function CurveRail() {
             );
           })}
           {just.map((t) => {
-            const filled = liveFills.some((f) => f.mint === t.mint && f.side === "buy" && now - f.ts < 15_000);
+            const filled = liveFills.some(
+              (f) => f.mint === t.mint && f.side === "buy" && now - f.ts < 15_000,
+            );
             return (
-              <div key={`m-${t.id}`} className="flex h-10 shrink-0 items-center gap-2 rounded-sm bg-elevated px-2">
+              <div
+                key={`m-${t.id}`}
+                className="flex h-10 shrink-0 items-center gap-2 rounded-sm bg-elevated px-2"
+              >
                 <Link to="/token/$id" params={{ id: t.id }} className="flex items-center gap-2">
                   <TokenMark id={t.id} symbol={t.symbol} className="size-6" />
                   <span className="text-xs font-medium">{t.symbol}</span>

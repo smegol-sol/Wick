@@ -5,6 +5,7 @@
 - `main` is protected: no direct pushes, one review, green CI, squash merge.
 - Work on a branch named `feat/...`, `fix/...`, `chore/...` or `docs/...`.
 - Open a PR early. The PR template asks whether the change touches the money path; answer it honestly.
+- Every PR that moves the project forward updates `docs/STATE.md` (phase table, open items, session log).
 
 Branch protection is a repository setting, not code. Settings → Branches → Add rule for `main`: require a pull request with 1 approval, require status checks `checks` and `build-and-smoke`, require linear history, block force pushes.
 

@@ -21,6 +21,10 @@ A field nobody reported is `null` in the model and `n/a` in the UI. A filter or 
 
 There are no simulated wallets, tweets, prints or holders anywhere in the app.
 
+## Project state
+
+Progress, decisions and open items live in [`docs/STATE.md`](docs/STATE.md). Read it first; the roadmap is [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
 ## Run it
 
 ```sh

@@ -16,3 +16,4 @@
 
 - [ ] `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm test` pass locally
 - [ ] Architecture decision? An ADR is added under `docs/adr/`
+- [ ] `docs/STATE.md` updated (phase table, open items, session log)

@@ -8,6 +8,7 @@ import {
   priorityLamportsOk,
   quoteLamportsOk,
   rateLimit,
+  sameOrigin,
 } from "@/lib/guard";
 import { fetchJupQuote, fetchJupSwap, jupPair } from "@/lib/jup";
 import { WSOL } from "@/lib/solana-wallet";
@@ -16,6 +17,7 @@ export const Route = createFileRoute("/api/swap")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        if (!sameOrigin(request)) return jsonErr("origin", 403);
         if (!rateLimit(`swap:${clientKey(request)}`, 8)) {
           return jsonErr("rate", 429);
         }

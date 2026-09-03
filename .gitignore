@@ -13,11 +13,6 @@ dist/
 screenshots/*
 !screenshots/.gitkeep
 
-# Grok sandbox runtime state
-.grok/preview.log
-.grok/status
-.grok/og-pending
-.project_id
 
 # local env and logs
 .env

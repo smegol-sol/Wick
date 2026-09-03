@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { clientKey, isB58, jsonErr, jsonOk, lruSet, rateLimit, sanitizeLabel } from "@/lib/guard";
 import type { ChainHolding, ChainPrint } from "@/lib/solana-wallet";
+import { rpcCall, rpcUrls } from "@/lib/rpc";
 
-const RPCS = ["https://api.mainnet-beta.solana.com", "https://solana-rpc.publicnode.com"];
 const TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN22 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const TTL = 12_000;
@@ -61,19 +61,6 @@ function isSpam(h: ChainHolding): boolean {
   if (h.decimals === 0 && h.amount < 10) return true;
   if (h.decimals <= 2 && h.amount >= 1e9) return true;
   return false;
-}
-
-async function rpc<T>(url: string, method: string, params: unknown[], signal: AbortSignal): Promise<T | null> {
-  const res = await fetch(url, {
-    method: "POST",
-    signal,
-    headers: { "content-type": "application/json", "user-agent": "WICK/1" },
-    redirect: "error",
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-  });
-  if (!res.ok) return null;
-  const data = (await res.json()) as { result?: T };
-  return data.result ?? null;
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<"timeout"> {
@@ -187,19 +174,19 @@ async function enrich(holdings: ChainHolding[], signal: AbortSignal): Promise<Ch
 
 async function loadBag(pk: string, signal: AbortSignal): Promise<Bag> {
   let last: Error | null = null;
-  for (const url of RPCS) {
+  for (const url of rpcUrls()) {
     const tokenCtrl = new AbortController();
     const onAbort = () => tokenCtrl.abort();
     signal.addEventListener("abort", onAbort, { once: true });
     try {
-      const balP = rpc<{ value?: number }>(url, "getBalance", [pk], signal);
-      const splP = rpc<{ value?: RpcAccount[] }>(
+      const balP = rpcCall<{ value?: number }>(url, "getBalance", [pk], signal);
+      const splP = rpcCall<{ value?: RpcAccount[] }>(
         url,
         "getTokenAccountsByOwner",
         [pk, { programId: TOKEN }, { encoding: "jsonParsed" }],
         tokenCtrl.signal,
       );
-      const t22P = rpc<{ value?: RpcAccount[] }>(
+      const t22P = rpcCall<{ value?: RpcAccount[] }>(
         url,
         "getTokenAccountsByOwner",
         [pk, { programId: TOKEN22 }, { encoding: "jsonParsed" }],
@@ -320,15 +307,15 @@ function parsePrint(pk: string, sig: string, tx: ParsedTx | null): ChainPrint | 
 async function loadTape(pk: string, signal: AbortSignal): Promise<ChainPrint[]> {
   const hit = tapeCache.get(pk);
   if (hit && Date.now() - hit.at < TTL) return hit.prints;
-  for (const url of RPCS) {
+  for (const url of rpcUrls()) {
     if (signal.aborted) break;
-    const sigs = await rpc<Array<{ signature?: string }>>(url, "getSignaturesForAddress", [pk, { limit: 8 }], signal);
+    const sigs = await rpcCall<Array<{ signature?: string }>>(url, "getSignaturesForAddress", [pk, { limit: 8 }], signal);
     if (!sigs?.length) continue;
     const rows = await Promise.all(
       sigs.slice(0, 6).map(async (s) => {
         const sig = s.signature;
         if (!sig) return null;
-        const tx = await rpc<ParsedTx>(
+        const tx = await rpcCall<ParsedTx>(
           url,
           "getTransaction",
           [sig, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }],

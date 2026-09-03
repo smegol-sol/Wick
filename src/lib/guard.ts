@@ -44,6 +44,27 @@ export function rateLimit(key: string, max: number, windowMs = WINDOW): boolean 
   return true;
 }
 
+/**
+ * Browser-originated mutation calls must come from this deployment's own
+ * origin. This stops other sites from using the swap/send routes as a proxy
+ * for our RPC quota. It is not authentication: a curl user can still call it,
+ * and the routes only ever relay signed/unsigned transactions the caller
+ * already controls.
+ */
+export function sameOrigin(request: Request): boolean {
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  if (!host) return false;
+  const origin = request.headers.get("origin");
+  const referer = request.headers.get("referer");
+  const source = origin ?? referer;
+  if (!source) return request.headers.get("sec-fetch-site") == null;
+  try {
+    return new URL(source).host === host;
+  } catch {
+    return false;
+  }
+}
+
 export function jsonHeaders(): HeadersInit {
   return {
     "content-type": "application/json; charset=utf-8",
@@ -70,6 +91,7 @@ export function clampNum(n: unknown, lo: number, hi: number, fallback: number): 
 export function sanitizeLabel(raw: unknown, max: number): string {
   if (typeof raw !== "string") return "";
   return raw
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, "")
     .replace(/[^\w\s.+\-_$]/g, "")
     .trim()

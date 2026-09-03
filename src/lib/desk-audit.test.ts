@@ -42,6 +42,7 @@ import { liveSnipeOk } from "./snipe-live.ts";
 import { filterTape, tapeRank } from "./tape.ts";
 import { FILTER_PRESETS, hitSieve, parseNum, parseSieve, tokenPasses, type FilterSlice } from "./sieve.ts";
 import { riskScore, isRug } from "./market.ts";
+import { impactPct } from "./jup.ts";
 import type { Token } from "./market.ts";
 
 test("guard rejects junk keys and scripts", () => {
@@ -372,6 +373,19 @@ test("fraud only scores checks that have data", () => {
   assert.equal(isRug({ ...sec, freeze: true }), true);
   assert.ok(riskScore({ ...sec, freeze: true }) > riskScore(sec));
   assert.equal(riskScore({ ...sec, onchain: false, freeze: true, mintable: true, top10: null }), 0);
+});
+
+test("jupiter price impact is a fraction and is converted to percent once", () => {
+  assert.equal(impactPct("0.025091569871611154"), 2.5091569871611154);
+  assert.equal(impactPct("0.000633988901675635"), 0.0633988901675635);
+  assert.equal(impactPct(0.5), 50);
+  assert.equal(impactPct("2"), 100);
+  assert.equal(impactPct("abc"), null);
+  assert.equal(impactPct(undefined), null);
+  assert.equal(impactPct(-0.1), null);
+  // The swap gate compares percent against 18: a 25% impact must trip it, 2.5% must not.
+  assert.ok((impactPct("0.25") ?? 0) >= 18);
+  assert.ok((impactPct("0.025") ?? 0) < 18);
 });
 
 test("live snipe is opt-in", () => {

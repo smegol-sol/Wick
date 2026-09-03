@@ -65,6 +65,17 @@ export async function fetchJupSwap(
   };
 }
 
+/**
+ * Jupiter reports `priceImpactPct` as a FRACTION of one ("0.025" = 2.5%),
+ * despite the name. Every gate and label downstream works in percent, so the
+ * conversion happens once, here. Returns null when the field is unusable.
+ */
+export function impactPct(raw: unknown): number | null {
+  const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.min(100, n * 100);
+}
+
 export function jupPair(side: "buy" | "sell", mint: string): { input: string; output: string } {
   return side === "sell" ? { input: mint, output: WSOL } : { input: WSOL, output: mint };
 }

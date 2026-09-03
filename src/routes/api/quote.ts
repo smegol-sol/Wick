@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { WSOL } from "@/lib/solana-wallet";
 import { amountRawOk, clientKey, isB58, jsonErr, jsonOk, quoteLamportsOk, rateLimit } from "@/lib/guard";
-import { fetchJupQuote, jupPair } from "@/lib/jup";
+import { fetchJupQuote, impactPct, jupPair } from "@/lib/jup";
 
 export const Route = createFileRoute("/api/quote")({
   server: {
@@ -32,12 +32,13 @@ export const Route = createFileRoute("/api/quote")({
         try {
           const data = await fetchJupQuote(pair.input, pair.output, amount, bps, ctrl.signal);
           if (!data) return jsonOk({ ok: false }, 502);
-          const impact = Number(data.priceImpactPct);
+          const impact = impactPct(data.priceImpactPct);
           return jsonOk({
             ok: true,
             outAmount: data.outAmount.slice(0, 24),
             inAmount: data.inAmount.slice(0, 24),
-            priceImpactPct: Number.isFinite(impact) ? String(Math.max(0, Math.min(100, impact))) : "0",
+            // Percent, not Jupiter's raw fraction.
+            priceImpactPct: impact == null ? "0" : impact.toFixed(4),
           });
         } catch {
           return jsonOk({ ok: false }, 502);

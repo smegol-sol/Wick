@@ -10,8 +10,11 @@ import {
   rateLimit,
   sameOrigin,
 } from "@/lib/guard";
-import { fetchJupQuote, fetchJupSwap, jupPair } from "@/lib/jup";
+import { fetchJupQuote, fetchJupSwap, impactPct, jupPair } from "@/lib/jup";
 import { WSOL } from "@/lib/solana-wallet";
+
+/** Percent. The desk refuses to sign a swap that moves the pool more than this. */
+const MAX_IMPACT_PCT = 18;
 
 export const Route = createFileRoute("/api/swap")({
   server: {
@@ -62,8 +65,9 @@ export const Route = createFileRoute("/api/swap")({
         try {
           const quote = await fetchJupQuote(pair.input, pair.output, amount, bps, ctrl.signal);
           if (!quote) return jsonErr("route", 502);
-          const impact = Number(quote.priceImpactPct);
-          if (Number.isFinite(impact) && impact >= 18) return jsonErr("impact", 400);
+          const impact = impactPct(quote.priceImpactPct);
+          // Unknown impact is not "zero impact": refuse rather than guess.
+          if (impact == null || impact >= MAX_IMPACT_PCT) return jsonErr("impact", 400);
           const built = await fetchJupSwap(quote, user, tip, ctrl.signal);
           if (!built) return jsonErr("fail", 502);
           return jsonOk({
@@ -72,7 +76,7 @@ export const Route = createFileRoute("/api/swap")({
             lastValidBlockHeight: built.lastValidBlockHeight ?? 0,
             inAmount: quote.inAmount.slice(0, 24),
             outAmount: quote.outAmount.slice(0, 24),
-            priceImpactPct: Number.isFinite(impact) ? String(Math.max(0, Math.min(100, impact))) : "0",
+            priceImpactPct: impact.toFixed(4),
           });
         } catch {
           return jsonErr("fail", 502);

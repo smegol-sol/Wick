@@ -1,0 +1,22 @@
+name: Bug
+description: Something behaves wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Steps, what you expected, what you saw. Include the mint if a token is involved.
+    validations:
+      required: true
+  - type: dropdown
+    id: money
+    attributes:
+      label: Did it involve real money?
+      options: ["No", "Yes, a signed transaction was involved"]
+    validations:
+      required: true
+  - type: textarea
+    id: sig
+    attributes:
+      label: Transaction signature(s), if any

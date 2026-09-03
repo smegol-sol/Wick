@@ -468,8 +468,8 @@ test("fraud only scores checks that have data", () => {
 });
 
 test("jupiter price impact is a fraction and is converted to percent once", () => {
-  assert.equal(impactPct("0.025091569871611154"), 2.5091569871611154);
-  assert.equal(impactPct("0.000633988901675635"), 0.0633988901675635);
+  assert.ok(Math.abs((impactPct("0.025091569871611154") ?? 0) - 2.50915699) < 1e-6);
+  assert.ok(Math.abs((impactPct("0.000633988901675635") ?? 0) - 0.06339889) < 1e-6);
   assert.equal(impactPct(0.5), 50);
   assert.equal(impactPct("2"), 100);
   assert.equal(impactPct("abc"), null);

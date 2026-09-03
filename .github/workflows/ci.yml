@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: typecheck · lint · format · test · audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run audit
+      - name: commitlint (PR title, which squash-merge lands on main)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | npx commitlint --verbose
+
+  build-and-smoke:
+    name: build · render smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+        env:
+          NITRO_PRESET: node-server
+      - run: npx playwright install --with-deps chromium
+      - name: serve the built output and smoke it
+        run: |
+          node .output/server/index.mjs > server.log 2>&1 &
+          for i in $(seq 1 40); do
+            curl -sf -o /dev/null http://127.0.0.1:3000/ && break
+            sleep 1
+          done
+          npm run smoke -- http://127.0.0.1:3000/ screenshots
+        env:
+          PORT: 3000
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-screenshots
+          path: screenshots/*.png
+          if-no-files-found: ignore

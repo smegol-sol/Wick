@@ -1,0 +1,21 @@
+name: Feature
+description: A change to the desk or the engine
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is hard or missing today.
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Data source
+      description: If this shows a new number, where does it come from and what happens when the source is silent?
+  - type: textarea
+    id: risk
+    attributes:
+      label: Money path
+      description: Does it change what gets signed, how much, or when? Which gate covers it?

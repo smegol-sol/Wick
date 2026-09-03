@@ -77,3 +77,8 @@ export function mulberry32(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/** "n/a" for a stat no source reported. */
+export function stat(n: number | null | undefined, fmt: (n: number) => string): string {
+  return n == null ? "n/a" : fmt(n);
+}

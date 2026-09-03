@@ -6,14 +6,9 @@ import { CLUSTER_MSG, clusterOf } from "@/lib/cluster";
 import type { Token } from "@/lib/market";
 import { isRug, riskScore } from "@/lib/market";
 import { riskGrade, tokenQuality } from "@/lib/risk";
-import { formatAge, formatMc, formatPct, formatUsd } from "@/lib/format";
+import { formatAge, formatMc, formatPct, formatUsd, stat } from "@/lib/format";
 import { useDesk } from "@/lib/store";
 import { cn } from "@/lib/utils";
-
-/** "n/a" for a stat no source reported. */
-export function stat(n: number | null | undefined, fmt: (n: number) => string): string {
-  return n == null ? "n/a" : fmt(n);
-}
 
 function Spark({ token }: { token: Token }) {
   const pts = token.candles.slice(-16);

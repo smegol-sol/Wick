@@ -59,7 +59,7 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
     setToast(latest);
     const t = window.setTimeout(() => setToast(null), 4200);
     return () => window.clearTimeout(t);
-  }, [latest?.id, latest?.read, radar, profile]);
+  }, [latest, radar, profile]);
 
   const hits = useMemo(() => {
     const query = q.trim().toLowerCase();

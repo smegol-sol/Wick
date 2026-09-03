@@ -9,14 +9,14 @@ export interface LabRow {
   symbol: string;
   name: string;
   mint: string;
-  live: boolean;
   cluster: Cluster;
   grade: RiskGrade;
   quality: number;
   edge: number;
   ath: number;
   dd: number;
-  volMc: number;
+  /** 24h volume over market cap, null when volume is unknown. */
+  volMc: number | null;
   pressure: number;
   change5m: number;
   kind: SetupKind;
@@ -33,12 +33,17 @@ export function drawdown(price: number, ath: number): number {
   return Math.max(0, Math.min(1, (ath - price) / ath));
 }
 
-export function volToMc(vol: number, mc: number): number {
+export function volToMc(vol: number | null, mc: number): number | null {
+  if (vol == null) return null;
   return mc > 0 ? vol / mc : 0;
 }
 
-export function pressureOf(change1m: number): number {
-  return Math.max(-1, Math.min(1, change1m / 40));
+/** Buy pressure from the 5m buy/sell split, else from the 5m change. */
+export function pressureOf(tk: { buys5m: number | null; sells5m: number | null; change5m: number }): number {
+  if (tk.buys5m != null && tk.sells5m != null && tk.buys5m + tk.sells5m >= 4) {
+    return Math.max(-1, Math.min(1, (tk.buys5m - tk.sells5m) / (tk.buys5m + tk.sells5m)));
+  }
+  return Math.max(-1, Math.min(1, tk.change5m / 40));
 }
 
 export function setupKind(row: {
@@ -47,11 +52,10 @@ export function setupKind(row: {
   dd: number;
   change5m: number;
   freeze: boolean;
-  bundled: number;
-  live: boolean;
+  top10: number | null;
 }): SetupKind {
   if (row.freeze || row.quality < 0.28) return "toxic";
-  if (!row.live && row.bundled >= 32) return "toxic";
+  if (row.top10 != null && row.top10 >= 60) return "toxic";
   if (row.dd < 0.08 && row.change5m >= 28) return "heat";
   if (row.edge >= 0.7 && row.quality >= 0.42 && row.dd >= 0.1) return "setup";
   return "watch";
@@ -60,7 +64,7 @@ export function setupKind(row: {
 export function labRow(tk: Token, now: number): LabRow {
   const ath = athOf(tk.candles, tk.price);
   const dd = drawdown(tk.price, ath);
-  const quality = tokenQuality(tk.security, tk.liq, !!tk.live);
+  const quality = tokenQuality(tk.security, tk.liq);
   const edge = snipeEdge(tk, now);
   const kind = setupKind({
     quality,
@@ -68,15 +72,13 @@ export function labRow(tk: Token, now: number): LabRow {
     dd,
     change5m: tk.change5m,
     freeze: !!(tk.security.onchain && tk.security.freeze),
-    bundled: tk.security.bundled,
-    live: !!tk.live,
+    top10: tk.security.top10,
   });
   return {
     tokenId: tk.id,
     symbol: tk.symbol,
     name: tk.name,
     mint: tk.mint,
-    live: !!tk.live,
     cluster: clusterOf(tk.symbol, tk.name),
     grade: riskGrade(quality),
     quality,
@@ -84,7 +86,7 @@ export function labRow(tk: Token, now: number): LabRow {
     ath,
     dd,
     volMc: volToMc(tk.vol, tk.mc),
-    pressure: pressureOf(tk.change1m),
+    pressure: pressureOf(tk),
     change5m: tk.change5m,
     kind,
   };
@@ -94,9 +96,7 @@ export function labBoard(tokens: Token[], now: number): LabRow[] {
   return tokens.map((t) => labRow(t, now)).sort((a, b) => b.edge - a.edge);
 }
 
-export function clusterHeat(
-  rows: LabRow[],
-): Array<{ cluster: Cluster; n: number; avg5m: number; hot: boolean }> {
+export function clusterHeat(rows: LabRow[]): Array<{ cluster: Cluster; n: number; avg5m: number; hot: boolean }> {
   const map = new Map<Cluster, { n: number; sum: number }>();
   for (const r of rows) {
     const cur = map.get(r.cluster) ?? { n: 0, sum: 0 };

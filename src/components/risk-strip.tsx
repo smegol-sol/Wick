@@ -1,37 +1,39 @@
 import { Link } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { Button } from "./ui/button";
 import { formatPct, formatSol } from "@/lib/format";
 import { sizingScale } from "@/lib/risk";
-import { useDesk } from "@/lib/store";
+import { bookPositionsOf, useDesk } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export function RiskStrip() {
   const msg = useDesk((s) => s.msg);
   const settings = useDesk((s) => s.settings);
-  const holdings = useDesk((s) => s.chainHoldings);
   const sol = useDesk((s) => s.chainSol ?? 0);
   const equity = useDesk((s) => s.equity());
+  const chainHoldings = useDesk((s) => s.chainHoldings);
+  const chainExits = useDesk((s) => s.chainExits);
+  const tokens = useDesk((s) => s.tokens);
+  const solUsd = useDesk((s) => s.solUsd);
+  const chainSol = useDesk((s) => s.chainSol);
+  const positions = useMemo(
+    () => bookPositionsOf({ chainSol, chainHoldings, chainExits, tokens, solUsd }),
+    [chainSol, chainHoldings, chainExits, tokens, solUsd],
+  );
   const halt = useDesk((s) => s.riskHalt);
   const streak = useDesk((s) => s.lossStreak);
   const dayStart = useDesk((s) => s.dayStart);
   const flatten = useDesk((s) => s.flattenAll);
   const resume = useDesk((s) => s.clearHalt);
   const reset = useDesk((s) => s.resetDay);
-  const heat = holdings.reduce((acc, h) => acc + (h.usd ?? 0), 0);
-  const names = holdings.length;
+  const heat = positions.reduce((acc, p) => acc + p.costSol, 0);
+  const names = positions.length;
   const cap = settings.maxBookPct > 0 ? dayStart * (settings.maxBookPct / 100) : 0;
   const dd = dayStart - equity;
   const hot = halt || (settings.riskOn && dd > 0);
   const scale = sizingScale(
     settings,
-    {
-      riskHalt: halt,
-      lossStreak: streak,
-      dayStart,
-      sol,
-      positions: holdings.map((h) => ({ tokenId: h.mint, costSol: h.usd ?? 0, amount: h.amount })),
-      marks: Math.max(0, equity - sol),
-    },
+    { riskHalt: halt, lossStreak: streak, dayStart, sol, positions, marks: Math.max(0, equity - sol) },
     1,
   );
 
@@ -42,7 +44,7 @@ export function RiskStrip() {
           {msg("risk")} {halt ? msg("riskHalt") : settings.riskOn ? msg("riskOk") : msg("clearExit")}
         </span>
         <span className="font-mono text-2xs text-muted num">
-          {msg("heat")} {heat ? `$${heat.toFixed(0)}` : formatSol(0)}
+          {msg("heat")} {formatSol(heat)}
           {cap ? ` / ${formatSol(cap)}` : ""}
         </span>
         <span className="font-mono text-2xs text-muted num">
@@ -54,7 +56,7 @@ export function RiskStrip() {
           {settings.streakHalt ? ` / ${settings.streakHalt}` : ""}
         </span>
         <span className={cn("font-mono text-2xs num", hot ? "text-down" : "text-muted")}>
-          {msg("pnl")} {formatPct((dd / Math.max(dayStart, 1e-9)) * -100)}
+          {msg("pnl")} {dayStart > 0 ? formatPct((dd / dayStart) * -100) : "—"}
         </span>
         {settings.riskOn ? (
           <span className="font-mono text-2xs text-muted num">
@@ -78,15 +80,11 @@ export function RiskStrip() {
       </div>
       {cap > 0 ? (
         <div className="mt-2 h-0.5 overflow-hidden rounded-full bg-elevated">
-          <div
-            className={cn("h-full", halt ? "bg-down" : "bg-accent")}
-            style={{ width: `${Math.min(100, (heat / cap) * 100)}%` }}
-          />
+          <div className={cn("h-full", halt ? "bg-down" : "bg-accent")} style={{ width: `${Math.min(100, (heat / cap) * 100)}%` }} />
         </div>
       ) : null}
       <p className="mt-2 font-mono text-2xs text-subtle num">
-        {msg("cash")} {formatSol(sol)} · {msg("maxTrade")} {settings.maxTradeSol || "—"} · {msg("maxDayLoss")}{" "}
-        {settings.maxDayLoss || "—"}
+        {msg("cash")} {formatSol(sol)} · {msg("maxTrade")} {settings.maxTradeSol || "—"} · {msg("maxDayLoss")} {settings.maxDayLoss || "—"}
       </p>
     </div>
   );
@@ -98,13 +96,7 @@ export function RiskChip() {
   const on = useDesk((s) => s.settings.riskOn);
   if (!on && !halt) return null;
   return (
-    <Link
-      to="/book"
-      className={cn(
-        "hidden h-9 items-center rounded-sm px-2 font-mono text-2xs uppercase sm:flex",
-        halt ? "text-down" : "text-muted",
-      )}
-    >
+    <Link to="/book" className={cn("hidden h-9 items-center rounded-sm px-2 font-mono text-2xs uppercase sm:flex", halt ? "text-down" : "text-muted")}>
       {halt ? msg("riskHalt") : msg("risk")}
     </Link>
   );

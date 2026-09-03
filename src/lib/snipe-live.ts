@@ -1,8 +1,6 @@
 import { isB58 } from "./guard";
 
-export function liveSnipeOk(
-  settings: { execLive: boolean; snipeLive: boolean },
-  tk: { live?: boolean; mint: string },
-): boolean {
-  return !!(settings.execLive && settings.snipeLive && tk.live && isB58(tk.mint));
+/** Auto snipes only fire when the user armed live sniping explicitly. */
+export function liveSnipeOk(settings: { snipeLive: boolean }, tk: { mint: string }): boolean {
+  return !!(settings.snipeLive && isB58(tk.mint));
 }

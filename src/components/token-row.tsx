@@ -10,6 +10,11 @@ import { formatAge, formatMc, formatPct, formatUsd } from "@/lib/format";
 import { useDesk } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
+/** "n/a" for a stat no source reported. */
+export function stat(n: number | null | undefined, fmt: (n: number) => string): string {
+  return n == null ? "n/a" : fmt(n);
+}
+
 function Spark({ token }: { token: Token }) {
   const pts = token.candles.slice(-16);
   if (pts.length < 2) return null;
@@ -36,20 +41,21 @@ export function TokenRow({ token, dense }: { token: Token; dense?: boolean }) {
   const quick = useDesk((s) => s.settings.quickBuy);
   const autoSnipe = useDesk((s) => s.settings.snipeMigrate);
   const autoLaunch = useDesk((s) => s.settings.snipeLaunch);
+  const snipeLive = useDesk((s) => s.settings.snipeLive);
   const queueSnipe = useDesk((s) => s.queueSnipe);
   const armed = useDesk((s) => s.armedSnipes.includes(token.id));
   const recent = useDesk((s) => s.recentMigrated.some((r) => r.id === token.id));
-  const sniped = useDesk((s) => (s.recentSniped ?? []).some((r) => r.id === token.id));
+  const sniped = useDesk((s) => s.recentSniped.some((r) => r.id === token.id));
   const toggleArm = useDesk((s) => s.toggleArmSnipe);
   const toggleWatch = useDesk((s) => s.toggleWatch);
   const watching = useDesk((s) => s.watch.includes(token.id));
   const msg = useDesk((s) => s.msg);
   const risk = riskScore(token.security);
-  const grade = riskGrade(tokenQuality(token.security, token.liq, !!token.live));
+  const grade = riskGrade(tokenQuality(token.security, token.liq));
   const topic = clusterOf(token.symbol, token.name);
-  const rug = !token.live && isRug(token.security);
+  const rug = isRug(token.security);
   const imminent = token.stage === "bonding" && token.bonding >= 80;
-  const sniping = autoSnipe || armed || (autoLaunch && token.stage === "new");
+  const sniping = snipeLive && (autoSnipe || armed || (autoLaunch && token.stage === "new"));
 
   return (
     <Link
@@ -70,10 +76,8 @@ export function TokenRow({ token, dense }: { token: Token; dense?: boolean }) {
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-medium tracking-tight">{token.symbol}</span>
           <span className="font-mono text-2xs text-subtle">{msg(CLUSTER_MSG[topic])}</span>
-          {token.stage === "new" && autoLaunch ? (
-            <Crosshair className="size-3.5 text-accent" aria-hidden />
-          ) : imminent ? (
-            autoSnipe ? (
+          {imminent ? (
+            autoSnipe && snipeLive ? (
               <Crosshair className="size-3.5 text-accent" aria-hidden />
             ) : (
               <button
@@ -97,9 +101,7 @@ export function TokenRow({ token, dense }: { token: Token; dense?: boolean }) {
         <div className="flex items-center gap-2 text-2xs text-muted">
           <span className="num">{formatAge(token.createdAt, now)}</span>
           <span className="num">{formatMc(token.mc)}</span>
-          {token.stage !== "migrated" ? (
-            <span className="num">{token.bonding.toFixed(0)}%</span>
-          ) : null}
+          {token.stage !== "migrated" ? <span className="num">{token.bonding.toFixed(0)}%</span> : null}
           {token.twitter ? <span className="text-accent">{token.twitter}</span> : null}
         </div>
         {token.stage !== "migrated" ? (
@@ -116,7 +118,7 @@ export function TokenRow({ token, dense }: { token: Token; dense?: boolean }) {
           </div>
           <div className="hidden text-end md:block">
             <div className="font-mono text-2xs text-muted">{msg("volume")}</div>
-            <div className="font-mono text-xs num">{formatUsd(token.vol, 0)}</div>
+            <div className="font-mono text-xs num">{stat(token.vol, (n) => formatUsd(n, 0))}</div>
           </div>
           <div className="hidden text-end sm:block">
             <div className="font-mono text-2xs text-muted">{msg("liquidity")}</div>
@@ -128,18 +130,15 @@ export function TokenRow({ token, dense }: { token: Token; dense?: boolean }) {
         </>
       )}
       <div className="text-end">
-        <div className={cn("font-mono text-sm font-medium num", token.change1m >= 0 ? "text-up" : "text-down")}>
-          {formatPct(token.change1m)}
+        <div className={cn("font-mono text-sm font-medium num", token.change5m >= 0 ? "text-up" : "text-down")}>
+          {token.statsAt == null && token.change5m === 0 ? "n/a" : formatPct(token.change5m)}
         </div>
         <div className="font-mono text-2xs text-muted num">{formatUsd(token.price, 6)}</div>
       </div>
       <div className="flex items-center justify-end gap-1">
         <button
           type="button"
-          className={cn(
-            "flex size-11 items-center justify-center rounded-sm text-subtle hover:text-fg",
-            watching && "text-accent",
-          )}
+          className={cn("flex size-11 items-center justify-center rounded-sm text-subtle hover:text-fg", watching && "text-accent")}
           aria-label={watching ? msg("watched") : msg("watch")}
           onClick={(e) => {
             e.preventDefault();
@@ -162,6 +161,7 @@ export function TokenRow({ token, dense }: { token: Token; dense?: boolean }) {
           size="sm"
           variant="quiet"
           className="min-w-11 font-mono text-up"
+          title={snipeLive ? msg("quickHint") : msg("snipeLiveOff")}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();

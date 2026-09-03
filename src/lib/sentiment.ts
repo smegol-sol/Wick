@@ -1,5 +1,5 @@
-import type { Token, Wallet } from "./market";
-import { tokenSmartFlow } from "./market";
+import type { Print, Token } from "./market";
+import { printsFor } from "./smart-flow";
 
 export type Mood = "euphoria" | "greed" | "neutral" | "fear" | "capitulation";
 export type Tone = "stealth" | "aligned" | "fade" | "dead";
@@ -40,13 +40,17 @@ export function moodOf(score: number): Mood {
   return "capitulation";
 }
 
+/** pump.fun reply count plus a linked X account. */
 export function socialScore(mentions: number, twitter: boolean): number {
   const m = Math.min(1, Math.log1p(Math.max(0, mentions)) / Math.log1p(80));
   return Math.min(1, m * 0.82 + (twitter ? 0.18 : 0));
 }
 
-export function tapeScore(change1m: number, change5m: number): number {
-  return clamp(0.55 * clamp(change1m / 40, -1, 1) + 0.45 * clamp(change5m / 50, -1, 1), -1, 1);
+/** 5m change and, when known, 1h change. */
+export function tapeScore(change5m: number, change1h: number | null): number {
+  const short = clamp(change5m / 40, -1, 1);
+  if (change1h == null) return short;
+  return clamp(0.6 * short + 0.4 * clamp(change1h / 80, -1, 1), -1, 1);
 }
 
 export function smartScore(prints: Array<{ side: "buy" | "sell"; sol: number }>): number {
@@ -76,11 +80,10 @@ export function toneOf(tape: number, social: number): Tone {
   return "dead";
 }
 
-export function tokenMood(tk: Token, wallets: Wallet[]): TokenMood {
-  const tracked = wallets.filter((w) => w.tracked);
-  const tape = tapeScore(tk.change1m, tk.change5m);
+export function tokenMood(tk: Token, prints: Print[]): TokenMood {
+  const tape = tapeScore(tk.change5m, tk.change1h);
   const social = socialScore(tk.mentions, !!tk.twitter);
-  const smart = smartScore(tokenSmartFlow(tk, tracked.length ? tracked : wallets));
+  const smart = smartScore(printsFor(tk.mint, prints));
   const score = blendScore(tape, social, smart);
   return {
     tokenId: tk.id,
@@ -96,8 +99,8 @@ export function tokenMood(tk: Token, wallets: Wallet[]): TokenMood {
   };
 }
 
-export function marketMood(tokens: Token[], wallets: Wallet[]): MarketMood {
-  const rows = tokens.map((t) => tokenMood(t, wallets));
+export function marketMood(tokens: Token[], prints: Print[]): MarketMood {
+  const rows = tokens.map((t) => tokenMood(t, prints));
   const n = rows.length || 1;
   const tape = rows.reduce((a, r) => a + r.tape, 0) / n;
   const social = rows.reduce((a, r) => a + r.social, 0) / n;

@@ -8,21 +8,17 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tape")({ component: TapePage });
 
-const KINDS = ["all", "smart", "social", "snipe", "risk", "flow"] as const;
+const KINDS = ["all", "smart", "snipe", "risk", "flow"] as const;
 const GRADES: TapeGrade[] = ["signal", "desk", "raw"];
 
 function TapePage() {
   const msg = useDesk((s) => s.msg);
-  const locale = useDesk((s) => s.locale);
   const feed = useDesk((s) => s.feed);
   const tokens = useDesk((s) => s.tokens);
   const hideRugs = useDesk((s) => s.settings.hideRugs);
   const [kind, setKind] = useState<FeedKind | "all">("all");
-  const [grade, setGrade] = useState<TapeGrade>("signal");
-  const shown = useMemo(
-    () => filterTape(feed, { grade, kind, tokens, hideRugs }),
-    [feed, grade, kind, tokens, hideRugs],
-  );
+  const [grade, setGrade] = useState<TapeGrade>("desk");
+  const shown = useMemo(() => filterTape(feed, { grade, kind, tokens, hideRugs }), [feed, grade, kind, tokens, hideRugs]);
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col p-2">
@@ -37,10 +33,7 @@ function TapePage() {
                 key={g}
                 type="button"
                 onClick={() => setGrade(g)}
-                className={cn(
-                  "h-8 rounded-sm px-2 text-2xs font-medium tracking-wide",
-                  grade === g ? "bg-fg text-bg" : "text-muted",
-                )}
+                className={cn("h-8 rounded-sm px-2 text-2xs font-medium tracking-wide", grade === g ? "bg-fg text-bg" : "text-muted")}
               >
                 {g === "signal" ? msg("tapeSignal") : g === "desk" ? msg("tapeDesk") : msg("tapeRaw")}
               </button>
@@ -52,22 +45,9 @@ function TapePage() {
                 key={k}
                 type="button"
                 onClick={() => setKind(k)}
-                className={cn(
-                  "h-8 rounded-sm px-2 text-2xs font-medium",
-                  kind === k ? "bg-elevated text-fg" : "text-muted",
-                )}
+                className={cn("h-8 rounded-sm px-2 text-2xs font-medium", kind === k ? "bg-elevated text-fg" : "text-muted")}
               >
-                {k === "all"
-                  ? msg("all")
-                  : k === "smart"
-                    ? msg("smart")
-                    : k === "social"
-                      ? msg("social")
-                      : k === "snipe"
-                        ? msg("sourceSnipe")
-                        : k === "risk"
-                          ? msg("risk")
-                          : msg("flow")}
+                {k === "all" ? msg("all") : k === "smart" ? msg("smart") : k === "snipe" ? msg("sourceSnipe") : k === "risk" ? msg("risk") : msg("flow")}
               </button>
             ))}
           </div>
@@ -78,7 +58,6 @@ function TapePage() {
           ) : (
             shown.map((f) => {
               const rank = tapeRank(f);
-              const body = locale === "ar" ? f.textAr : f.text;
               return (
                 <article key={f.id} className="border-b border-border px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2 text-2xs text-subtle">
@@ -90,10 +69,10 @@ function TapePage() {
                   </div>
                   {f.tokenId ? (
                     <Link to="/token/$id" params={{ id: f.tokenId }} className="mt-1 block text-sm leading-snug hover:text-accent">
-                      {body}
+                      {f.text}
                     </Link>
                   ) : (
-                    <p className="mt-1 text-sm leading-snug">{body}</p>
+                    <p className="mt-1 text-sm leading-snug">{f.text}</p>
                   )}
                 </article>
               );

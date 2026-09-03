@@ -5,14 +5,16 @@
  *
  *   npm run smoke -- http://127.0.0.1:8080/
  */
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "playwright";
+
+const CHROME = process.env.CHROME_PATH || ["/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/opt/pw-browsers/chromium"].find((p) => existsSync(p));
 
 const url = process.argv[2] || "http://127.0.0.1:8080/";
 const outDir = process.argv[3] || "screenshots";
 mkdirSync(outDir, { recursive: true });
 
-const browser = await chromium.launch();
+const browser = await chromium.launch(CHROME ? { executablePath: CHROME } : {});
 let failed = false;
 try {
   for (const [name, viewport] of [

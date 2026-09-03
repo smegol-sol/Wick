@@ -32,10 +32,9 @@ export function exitPeak(peakPrice: number, price: number, avg: number): number 
   return Math.max(peakPrice || 0, price || 0, avg || 0);
 }
 
-export function isLiveDump(token: { live?: boolean; change1m: number; lastDevSell?: number }, now: number): boolean {
-  if (!token.live) return false;
-  if (token.change1m <= DEV_DUMP) return true;
-  return !!(token.lastDevSell && now - token.lastDevSell < 8_000);
+/** A single-poll drop past the threshold reads as a dump. */
+export function isLiveDump(token: { change1m: number }): boolean {
+  return token.change1m <= DEV_DUMP;
 }
 
 export function hitExit(

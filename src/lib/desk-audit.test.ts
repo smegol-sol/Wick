@@ -33,14 +33,15 @@ import {
 } from "./hot-wallet.ts";
 import { commitLadderSlice, failLadderSlice, makeLadder, tickLadders } from "./entry.ts";
 import { hitExit, isLiveDump, queueChainExits, upsertChainExit } from "./exits.ts";
-import { clusterHeat, setupKind } from "./lab.ts";
+import { clusterHeat, pressureOf, setupKind } from "./lab.ts";
 import { blendScore, moodOf, tapeScore, toneOf } from "./sentiment.ts";
-import { flowBias } from "./smart-flow.ts";
+import { flowBias, followPrints, nameFlowOf } from "./smart-flow.ts";
 import { copySize, pickNews, styleDelay, styleSize, styleSkip, swapPrint } from "./live-copy.ts";
 import { fraudOf, fraudSkip } from "./fraud.ts";
 import { liveSnipeOk } from "./snipe-live.ts";
 import { filterTape, tapeRank } from "./tape.ts";
 import { FILTER_PRESETS, hitSieve, parseNum, parseSieve, tokenPasses, type FilterSlice } from "./sieve.ts";
+import { riskScore, isRug } from "./market.ts";
 import type { Token } from "./market.ts";
 
 test("guard rejects junk keys and scripts", () => {
@@ -172,38 +173,15 @@ test("importHot accepts seed, json and rejects junk", async () => {
 });
 
 test("chain ladder queues a slice without spending until commit", () => {
-  const born = makeLadder({
-    tokenId: "tok",
-    now: 0,
-    price: 1,
-    budget: 1,
-    source: "manual",
-    chain: true,
-  });
-  const primed = {
-    ...born,
-    phase: "dip" as const,
-    nextAt: 0,
-    dipUntil: 80_000,
-    markPx: 1,
-  };
-  const stepped = tickLadders([primed], {
-    now: 1_000,
-    priceOf: () => 0.97,
-    edgeOk: () => true,
-    alive: () => true,
-  });
+  const born = makeLadder({ tokenId: "tok", now: 0, price: 1, budget: 1, source: "manual", chain: true });
+  const primed = { ...born, phase: "dip" as const, nextAt: 0, dipUntil: 80_000, markPx: 1 };
+  const stepped = tickLadders([primed], { now: 1_000, priceOf: () => 0.97, edgeOk: () => true, alive: () => true });
   assert.equal(stepped.slices.length, 1);
   assert.ok(stepped.slices[0].sol >= 0.05);
   assert.equal(stepped.ladders[0].spent, 0);
   assert.ok(stepped.ladders[0].pendingSol >= 0.05);
   assert.equal(stepped.ladders[0].dipDone, 0);
-  const held = tickLadders(stepped.ladders, {
-    now: 2_000,
-    priceOf: () => 0.97,
-    edgeOk: () => true,
-    alive: () => true,
-  });
+  const held = tickLadders(stepped.ladders, { now: 2_000, priceOf: () => 0.97, edgeOk: () => true, alive: () => true });
   assert.equal(held.slices.length, 0);
   assert.equal(held.ladders[0].pendingSol, stepped.ladders[0].pendingSol);
   const filled = commitLadderSlice(stepped.ladders, "tok", 0.97, 2_000);
@@ -215,38 +193,8 @@ test("chain ladder queues a slice without spending until commit", () => {
   assert.equal(missed[0].spent, 0);
 });
 
-test("paper ladder still fills on the tick", () => {
-  const born = makeLadder({
-    tokenId: "tok",
-    now: 0,
-    price: 1,
-    budget: 1,
-    source: "manual",
-  });
-  const primed = { ...born, phase: "dip" as const, nextAt: 0, dipUntil: 80_000, markPx: 1, chain: false };
-  const stepped = tickLadders([primed], {
-    now: 1_000,
-    priceOf: () => 0.97,
-    edgeOk: () => true,
-    alive: () => true,
-  });
-  assert.equal(stepped.slices.length, 1);
-  assert.ok(stepped.ladders[0].spent >= 0.05);
-  assert.equal(stepped.ladders[0].pendingSol, 0);
-  assert.equal(stepped.ladders[0].dipDone, 1);
-});
-
 test("hitExit covers stop, trail, tp slices and live dump", () => {
-  const base = {
-    tpPct: 20,
-    slPct: 12,
-    tpScale: 2,
-    tpRung: 0,
-    tpNextAt: 0,
-    trailOn: false,
-    peakPrice: 1,
-    devExit: true,
-  };
+  const base = { tpPct: 20, slPct: 12, tpScale: 2, tpRung: 0, tpNextAt: 0, trailOn: false, peakPrice: 1, devExit: true };
   const sl = hitExit(base, { price: 0.85, avg: 1, now: 1, dump: false });
   assert.equal(sl.kind, "sl");
   assert.equal(sl.frac, 1);
@@ -257,8 +205,8 @@ test("hitExit covers stop, trail, tp slices and live dump", () => {
   assert.ok(Math.abs(tp.frac - 0.5) < 1e-9);
   const dump = hitExit(base, { price: 1.1, avg: 1, now: 1, dump: true });
   assert.equal(dump.kind, "dev");
-  assert.equal(isLiveDump({ live: true, change1m: -19 }, 10), true);
-  assert.equal(isLiveDump({ live: true, change1m: -2 }, 10), false);
+  assert.equal(isLiveDump({ change1m: -19 }), true);
+  assert.equal(isLiveDump({ change1m: -2 }), false);
 });
 
 test("chain exit queues a sell without double-fire", () => {
@@ -269,28 +217,21 @@ test("chain exit queues a sell without double-fire", () => {
     addSol: 1,
     exits: { tpPct: 20, slPct: 12, trailOn: false, tpScale: 1 },
   });
-  const due = queueChainExits(rows, {
-    now: 5_000,
-    priceOf: () => 0.8,
-    holdAmt: () => 1,
-    dumpOf: () => false,
-  });
+  const due = queueChainExits(rows, { now: 5_000, priceOf: () => 0.8, holdAmt: () => 1, dumpOf: () => false });
   assert.equal(due[0].pendingKind, "sl");
   assert.equal(due[0].pendingFrac, 1);
-  const held = queueChainExits(due, {
-    now: 6_000,
-    priceOf: () => 0.8,
-    holdAmt: () => 1,
-    dumpOf: () => false,
-  });
+  const held = queueChainExits(due, { now: 6_000, priceOf: () => 0.8, holdAmt: () => 1, dumpOf: () => false });
   assert.equal(held[0].pendingKind, "sl");
 });
 
 test("lab classifies setup, chase, toxic and cluster heat", () => {
-  assert.equal(setupKind({ quality: 0.7, edge: 1.2, dd: 0.2, change5m: 8, freeze: false, bundled: 8, live: true }), "setup");
-  assert.equal(setupKind({ quality: 0.6, edge: 0.2, dd: 0.02, change5m: 40, freeze: false, bundled: 8, live: true }), "heat");
-  assert.equal(setupKind({ quality: 0.1, edge: 2, dd: 0.3, change5m: 0, freeze: false, bundled: 8, live: true }), "toxic");
-  assert.equal(setupKind({ quality: 0.5, edge: 1, dd: 0.2, change5m: 0, freeze: true, bundled: 0, live: true }), "toxic");
+  assert.equal(setupKind({ quality: 0.7, edge: 1.2, dd: 0.2, change5m: 8, freeze: false, top10: 20 }), "setup");
+  assert.equal(setupKind({ quality: 0.6, edge: 0.2, dd: 0.02, change5m: 40, freeze: false, top10: null }), "heat");
+  assert.equal(setupKind({ quality: 0.1, edge: 2, dd: 0.3, change5m: 0, freeze: false, top10: null }), "toxic");
+  assert.equal(setupKind({ quality: 0.5, edge: 1, dd: 0.2, change5m: 0, freeze: true, top10: null }), "toxic");
+  assert.equal(setupKind({ quality: 0.7, edge: 1.2, dd: 0.2, change5m: 8, freeze: false, top10: 75 }), "toxic");
+  assert.ok(pressureOf({ buys5m: 30, sells5m: 10, change5m: -50 }) > 0);
+  assert.ok(pressureOf({ buys5m: null, sells5m: null, change5m: -20 }) < 0);
   const heat = clusterHeat([
     { cluster: "dog", change5m: 30 } as never,
     { cluster: "dog", change5m: 20 } as never,
@@ -312,16 +253,31 @@ test("sentiment buckets tape vs crowd", () => {
   assert.equal(toneOf(-0.4, 0.6), "fade");
   assert.equal(toneOf(0.4, 0.6), "aligned");
   assert.equal(toneOf(-0.4, 0.1), "dead");
-  assert.ok(tapeScore(40, 50) > 0.9);
+  assert.ok(tapeScore(40, 80) > 0.9);
+  assert.ok(tapeScore(40, null) > 0.9);
   assert.ok(blendScore(0.8, 0.8, 0.8) > 50);
   assert.ok(blendScore(-0.8, 0.1, -0.8) < -40);
 });
 
-test("smart flow bias splits accumulate from distribute", () => {
+test("smart flow comes from followed wallets' chain tapes only", () => {
   assert.equal(flowBias(2, 3), "accumulate");
   assert.equal(flowBias(-2, 3), "distribute");
   assert.equal(flowBias(0.1, 3), "mixed");
   assert.equal(flowBias(1, 0.1), "idle");
+  const pk = "9WzDYwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
+  const mint = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+  const prints = followPrints(
+    [{ pk, label: "whale" }],
+    { [pk]: [{ sig: "S".repeat(64), ts: 5, side: "buy", sol: 2, mint, amount: 1000 }, { sig: "T".repeat(64), ts: 4, side: "in", sol: 1 }] },
+    100,
+  );
+  assert.equal(prints.length, 1);
+  assert.equal(prints[0].wallet, "whale");
+  assert.equal(prints[0].price, 0.2);
+  const flow = nameFlowOf(sampleToken({ mint }), prints);
+  assert.equal(flow.desks, 1);
+  assert.equal(flow.buySol, 2);
+  assert.equal(followPrints([], {}, 100).length, 0);
 });
 
 test("follow tape copies only new swaps", () => {
@@ -349,102 +305,109 @@ test("follow tape copies only new swaps", () => {
   assert.equal(styleSkip("confirm", { side: "buy", change5m: 0, srcSol: 2, confirms: 1 }), null);
 });
 
-test("fraud tags wash, trap and skips copy", () => {
-  const sec = {
-    mintable: false,
-    freeze: false,
-    lpBurned: true,
-    honeypot: false,
-    renounced: true,
-    top10: 20,
-    bundled: 4,
-    insiders: 3,
-    snipers: 4,
-    devHold: 2,
-  };
+test("fraud only scores checks that have data", () => {
+  const sec = { mintable: false, freeze: false, lpBurned: true, renounced: true, top10: 20, onchain: true };
   const clean = fraudOf({
     vol: 20,
-    vol1m: 1,
+    vol5m: 1,
     mc: 200,
     holders: 400,
     tx: 80,
-    change1m: 4,
+    change5m: 4,
     mentions: 2,
     twitter: "x",
     candles: [{ t: 1, o: 1, h: 1.04, l: 0.98, c: 1.02, v: 2 }],
     security: sec,
+    stage: "migrated",
   });
   assert.equal(clean.tag, "clean");
+  assert.ok(clean.checked >= 4);
   const wash = fraudOf({
     vol: 900,
-    vol1m: 40,
+    vol5m: 40,
     mc: 100,
     holders: 20,
     tx: 400,
-    change1m: 0.4,
+    change5m: 0.4,
     mentions: 1,
     twitter: "x",
     candles: Array.from({ length: 8 }, (_, i) => ({ t: i, o: 1, h: 1.004, l: 0.997, c: 1, v: 80 })),
     security: sec,
+    stage: "migrated",
   });
   assert.equal(wash.tag, "wash");
   assert.ok(wash.score >= 30);
   assert.equal(fraudSkip({ ...wash, score: 60 }), true);
   const trap = fraudOf({
     vol: 10,
-    vol1m: 1,
+    vol5m: 1,
     mc: 80,
     holders: 200,
     tx: 40,
-    change1m: 5,
+    change5m: 5,
     mentions: 0,
     twitter: "x",
     candles: [],
-    security: { ...sec, honeypot: true, freeze: true, mintable: true },
+    security: { ...sec, freeze: true, mintable: true },
+    stage: "bonding",
   });
   assert.equal(trap.tag, "trap");
+  const unknown = fraudOf({
+    vol: null,
+    vol5m: null,
+    mc: 80,
+    holders: null,
+    tx: null,
+    change5m: 0,
+    mentions: 0,
+    twitter: null,
+    candles: [],
+    security: { ...sec, onchain: false, top10: null },
+    stage: "new",
+  });
+  assert.equal(unknown.tag, "clean");
+  assert.equal(unknown.checked, 1);
+  assert.equal(unknown.score, 0);
+  assert.equal(isRug({ ...sec, onchain: false, freeze: true }), false);
+  assert.equal(isRug({ ...sec, freeze: true }), true);
+  assert.ok(riskScore({ ...sec, freeze: true }) > riskScore(sec));
+  assert.equal(riskScore({ ...sec, onchain: false, freeze: true, mintable: true, top10: null }), 0);
 });
 
-test("live snipe is opt-in on top of execLive", () => {
-  const tk = { live: true, mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" };
-  assert.equal(liveSnipeOk({ execLive: true, snipeLive: false }, tk), false);
-  assert.equal(liveSnipeOk({ execLive: false, snipeLive: true }, tk), false);
-  assert.equal(liveSnipeOk({ execLive: true, snipeLive: true }, tk), true);
-  assert.equal(liveSnipeOk({ execLive: true, snipeLive: true }, { live: false, mint: tk.mint }), false);
-  assert.equal(liveSnipeOk({ execLive: true, snipeLive: true }, { live: true, mint: "w1" }), false);
+test("live snipe is opt-in", () => {
+  const tk = { mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" };
+  assert.equal(liveSnipeOk({ snipeLive: false }, tk), false);
+  assert.equal(liveSnipeOk({ snipeLive: true }, tk), true);
+  assert.equal(liveSnipeOk({ snipeLive: true }, { mint: "w1" }), false);
 });
 
-test("tape signal drops skip noise and paper chatter", () => {
+test("tape signal drops skip noise", () => {
   const feed = [
     { id: "1", ts: 1, kind: "smart" as const, text: "Copy skip — mint not on pulse", textAr: "" },
-    { id: "2", ts: 2, kind: "smart" as const, text: "Skip paper Alpha on $VLUD", textAr: "" },
     { id: "3", ts: 3, kind: "smart" as const, text: "Copy dust $DOG", textAr: "" },
-    { id: "4", ts: 4, kind: "social" as const, text: "@kol just posted $DOG", textAr: "" },
-    { id: "5", ts: 5, kind: "smart" as const, text: "Alpha bought $DOG", textAr: "" },
-    { id: "6", ts: 6, kind: "smart" as const, text: "mirror buy $DOG · 0.20 SOL in 4s", textAr: "", tokenId: "t1", side: "buy" as const },
-    { id: "7", ts: 7, kind: "risk" as const, text: "Dev sold $DOG", textAr: "", tokenId: "t1", side: "sell" as const },
-    { id: "8", ts: 8, kind: "snipe" as const, text: "Snipe filled $DOG · 0.15 SOL", textAr: "", tokenId: "t1" },
-    { id: "9", ts: 9, kind: "flow" as const, text: "Confirm copy $DOG · 0.40 SOL", textAr: "", tokenId: "t1" },
+    { id: "5", ts: 5, kind: "smart" as const, text: "whale bought $DOG · 1.20 SOL", textAr: "", tokenId: "t1", side: "buy" as const },
+    { id: "6", ts: 6, kind: "smart" as const, text: "Copy queued buy $DOG · 0.20 SOL in 4s", textAr: "", tokenId: "t1", side: "buy" as const },
+    { id: "7", ts: 7, kind: "risk" as const, text: "Dump exit $DOG", textAr: "", tokenId: "t1", side: "sell" as const },
+    { id: "8", ts: 8, kind: "snipe" as const, text: "Live snipe $DOG on migrate · 0.15 SOL", textAr: "", tokenId: "t1" },
+    { id: "9", ts: 9, kind: "flow" as const, text: "Limit triggered buy $DOG", textAr: "", tokenId: "t1" },
   ];
   assert.equal(tapeRank(feed[0]!), "noise");
-  assert.equal(tapeRank(feed[3]!), "noise");
-  assert.equal(tapeRank(feed[4]!), "noise");
-  assert.equal(tapeRank(feed[5]!), "signal");
-  assert.equal(tapeRank(feed[6]!), "signal");
-  assert.equal(tapeRank(feed[8]!), "signal");
+  assert.equal(tapeRank(feed[1]!), "noise");
+  assert.equal(tapeRank(feed[2]!), "signal");
+  assert.equal(tapeRank(feed[3]!), "signal");
+  assert.equal(tapeRank(feed[4]!), "signal");
   const signal = filterTape(feed, { grade: "signal", kind: "all", tokens: [], hideRugs: true });
-  assert.deepEqual(signal.map((f) => f.id), ["6", "7", "8", "9"]);
+  assert.deepEqual(signal.map((f) => f.id), ["5", "6", "7", "8", "9"]);
   const desk = filterTape(feed, { grade: "desk", kind: "all", tokens: [], hideRugs: true });
-  assert.equal(desk.some((f) => f.id === "4"), false);
-  assert.equal(desk.some((f) => f.id === "6"), true);
-  const raw = filterTape(feed, { grade: "raw", kind: "social", tokens: [], hideRugs: true });
-  assert.deepEqual(raw.map((f) => f.id), ["4"]);
+  assert.equal(desk.some((f) => f.id === "1"), false);
+  const raw = filterTape(feed, { grade: "raw", kind: "snipe", tokens: [], hideRugs: true });
+  assert.deepEqual(raw.map((f) => f.id), ["8"]);
 });
 
 function sampleToken(over: Partial<Token> = {}): Token {
   return {
     id: "t1",
-    mint: "m1",
+    mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
     symbol: "DOG",
     name: "dog coin",
     chain: "sol",
@@ -454,38 +417,28 @@ function sampleToken(over: Partial<Token> = {}): Token {
     mc: 20_000,
     liq: 3_000,
     vol: 1_000,
-    vol1m: 80,
     vol5m: 400,
-    holders: 90,
     tx: 40,
+    buys5m: 6,
+    sells5m: 2,
+    holders: 90,
     change1m: 2,
     change5m: 5,
+    change1h: 12,
     bonding: 40,
     mentions: 2,
-    twitter: "dogs",
-    security: {
-      mintable: false,
-      freeze: false,
-      lpBurned: true,
-      honeypot: false,
-      renounced: true,
-      top10: 18,
-      bundled: 8,
-      insiders: 4,
-      snipers: 6,
-      devHold: 3,
-      onchain: true,
-    },
+    twitter: "@dogs",
+    security: { mintable: false, freeze: false, lpBurned: true, renounced: true, top10: 18, onchain: true },
     candles: [],
     supply: 1e9,
-    lastDevSell: 0,
-    live: true,
+    statsAt: 1,
+    pair: null,
     ...over,
   };
 }
 
 function slice(over: Partial<FilterSlice> = {}): FilterSlice {
-  return { chain: "sol", hideRugs: true, guardMint: true, ...FILTER_PRESETS.off, ...over };
+  return { hideRugs: true, guardMint: true, ...FILTER_PRESETS.off, ...over };
 }
 
 test("sieve query parses units, freeze, topic and exclude", () => {
@@ -509,10 +462,13 @@ test("sieve query parses units, freeze, topic and exclude", () => {
   assert.equal(tokenPasses(old, slice({ maxAgeMin: 18 }), undefined, now), false);
 });
 
-
-
-
-
-
-
-
+test("unknown fields never pass a threshold", () => {
+  const now = 1_000_000 + 10 * 60_000;
+  const blind = sampleToken({ vol: null, holders: null, tx: null, security: { ...sampleToken().security, top10: null, onchain: false } });
+  assert.equal(tokenPasses(blind, slice({ minHolders: 10 }), undefined, now), false);
+  assert.equal(tokenPasses(blind, slice({ sieve: "vol>=1" }), undefined, now), false);
+  assert.equal(tokenPasses(blind, slice({ sieve: "top10<=90" }), undefined, now), false);
+  assert.equal(tokenPasses(blind, slice({ sieve: "freeze=0" }), undefined, now), false);
+  assert.equal(tokenPasses(blind, slice(), undefined, now), true);
+  assert.equal(tokenPasses(sampleToken(), slice({ sieve: "top10<=30 holders>=50 vol>=500" }), undefined, now), true);
+});

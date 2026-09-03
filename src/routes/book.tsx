@@ -6,9 +6,7 @@ import { PageTabs } from "@/components/page-tabs";
 import { RiskStrip } from "@/components/risk-strip";
 import { Button } from "@/components/ui/button";
 import { WatchAddrForm } from "@/components/wallet-chip";
-import { CLUSTER_MSG, clusterOf } from "@/lib/cluster";
-import { formatPct, formatQty, formatSol, formatTime, formatUsd, shortMint } from "@/lib/format";
-import type { FillSource } from "@/lib/market";
+import { formatQty, formatSol, formatTime, formatUsd, shortMint } from "@/lib/format";
 import { useDesk } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import type { Msg } from "@/lib/i18n";
@@ -16,20 +14,6 @@ import type { ChainHolding } from "@/lib/solana-wallet";
 import type { LadderPhase } from "@/lib/entry";
 
 export const Route = createFileRoute("/book")({ component: BookPage });
-
-const SOURCE_MSG: Record<FillSource, Msg> = {
-  manual: "sourceManual",
-  copy: "sourceCopy",
-  limit: "sourceLimit",
-  snipe: "sourceSnipe",
-  tp: "sourceTp",
-  sl: "sourceSl",
-  trail: "sourceTrail",
-  dev: "sourceDev",
-  dca: "sourceDca",
-  social: "sourceSocial",
-  twap: "sourceTwap",
-};
 
 function BookPage() {
   const msg = useDesk((s) => s.msg);
@@ -43,6 +27,7 @@ function BookPage() {
   const cancelLadder = useDesk((s) => s.cancelLadder);
   const now = useDesk((s) => s.now);
   const equity = useDesk((s) => s.equity());
+  const chainSol = useDesk((s) => s.chainSol);
   const holdings = useDesk((s) => s.chainHoldings);
   const [tab, setTab] = useState<"chain" | "watch" | "fills">("chain");
   const signed = liveFills.filter((f) => f.status === "ok");
@@ -51,7 +36,7 @@ function BookPage() {
     <div className="mx-auto max-w-5xl p-2">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label={msg("equity")} value={formatSol(equity)} hot />
-        <Stat label={msg("chainSol")} value={formatSol(equity)} hot />
+        <Stat label={msg("chainSol")} value={chainSol == null ? "—" : formatSol(chainSol)} hot />
         <Stat label={msg("holdings")} value={String(holdings.length)} />
         <Stat label={msg("liveFills")} value={String(signed.length)} />
       </div>
@@ -105,7 +90,6 @@ function BookPage() {
                     {tk?.symbol ?? p.tokenId}
                     <span className="ms-2 font-mono text-2xs text-muted num">
                       {msg(phaseKey[p.phase])} {step} · {formatSol(p.budget - p.spent)} · {msg("dcaNext")} {wait}s
-                      {p.chain ? ` · ${msg("chainExec")}` : ""}
                       {p.pendingSol >= 0.05 ? ` · ${msg("signing")}` : ""}
                     </span>
                   </Link>
@@ -134,7 +118,6 @@ function BookPage() {
                     {tk?.symbol ?? p.tokenId}
                     <span className="ms-2 font-mono text-2xs text-muted num">
                       {p.done}/{p.slices} · {formatSol(p.sol)} · {msg("dcaNext")} {wait}s
-                      {p.chain ? ` · ${msg("chainExec")}` : ""}
                       {p.pendingSol >= 0.05 ? ` · ${msg("signing")}` : ""}
                     </span>
                   </Link>
@@ -149,18 +132,19 @@ function BookPage() {
 
       <h2 className="mt-6 mb-2 text-xs font-medium tracking-wide text-muted uppercase">{msg("orderResting")}</h2>
       <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
-        {limits.filter((o) => o.status === "open").length === 0 ? (
+        {limits.filter((o) => o.status === "open" || o.status === "triggered").length === 0 ? (
           <p className="p-4 text-sm text-muted">{msg("emptyTape")}</p>
         ) : (
           limits
-            .filter((o) => o.status === "open")
+            .filter((o) => o.status === "open" || o.status === "triggered")
             .map((o) => {
               const tk = tokens.find((t) => t.id === o.tokenId);
               return (
                 <div key={o.id} className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
                   <span className="text-sm">
                     {o.side === "buy" ? msg("buy") : msg("sell")} {tk?.symbol ?? o.tokenId.slice(0, 6)} @{" "}
-                    {formatUsd(o.triggerMc, 0)}
+                    {formatUsd(o.triggerMc, 0)} · {formatSol(o.sol)}
+                    {o.status === "triggered" ? <span className="ms-2 text-warn">{msg("signing")}</span> : null}
                   </span>
                   <Button size="sm" variant="quiet" onClick={() => cancel(o.id)}>
                     {msg("cancel")}

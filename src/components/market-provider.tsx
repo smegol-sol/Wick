@@ -4,14 +4,15 @@ import { useDesk } from "@/lib/store";
 import { FollowCopySync } from "./follow-copy-sync";
 import { LiveAutoSync } from "./live-auto-sync";
 
-async function pullLive(): Promise<Token[]> {
+type PulsePayload = { tokens?: Token[]; solUsd?: number | null };
+
+async function pullLive(): Promise<PulsePayload | null> {
   try {
     const res = await fetch("/api/pulse");
-    if (!res.ok) return [];
-    const data = (await res.json()) as { tokens?: Token[] };
-    return data.tokens?.length ? data.tokens : [];
+    if (!res.ok) return null;
+    return (await res.json()) as PulsePayload;
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -24,11 +25,12 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     let inflight = false;
 
     const pull = () => {
-      if (stop || inflight || !useDesk.getState().settings.liveOn) return;
+      if (stop || inflight) return;
       inflight = true;
       void pullLive()
-        .then((rows) => {
-          if (!stop && rows.length) useDesk.getState().ingestLive(rows);
+        .then((data) => {
+          if (stop || !data) return;
+          useDesk.getState().ingestLive(data.tokens ?? [], typeof data.solUsd === "number" ? data.solUsd : null);
         })
         .finally(() => {
           inflight = false;

@@ -3,6 +3,7 @@ import { Activity, Bell, BookOpen, Copy, Radio, ScanLine, Sigma, CircleUser } fr
 import { useEffect, useMemo, useRef, useState } from "react";
 import { WickMark } from "./mark";
 import { Input } from "./ui/input";
+import { Button } from "./ui/button";
 import { DeskProfile } from "./desk-profile";
 import { RadarPanel, RadarToast } from "./radar-panel";
 import { RiskChip } from "./risk-strip";
@@ -28,21 +29,23 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
   const msg = useDesk((s) => s.msg);
   const equity = useDesk((s) => s.equity());
   const settings = useDesk((s) => s.settings);
-  const armLiveStore = useDesk((s) => s.armLive);
   const alerts = useDesk((s) => s.alerts);
   const tokens = useDesk((s) => s.tokens);
   const liveOk = useDesk((s) => s.liveOk);
-  const liveAt = useDesk((s) => s.liveAt);
-  const now = useDesk((s) => s.now);
+  const hydrated = useDesk((s) => s.hydrated);
+  const introSeen = useDesk((s) => s.introSeen);
+  const dismissIntro = useDesk((s) => s.dismissIntro);
+  const hotVault = useDesk((s) => s.hotVault);
+  const hotUnlocked = useDesk((s) => s.hotUnlocked);
+  const walletPk = useDesk((s) => s.walletPk);
   const [q, setQ] = useState("");
   const [radar, setRadar] = useState(false);
   const [profile, setProfile] = useState(false);
   const [toast, setToast] = useState<Alert | null>(null);
-  const [needSign, setNeedSign] = useState(false);
   const toastId = useRef<string | null>(null);
   const unread = alerts.filter((a) => !a.read).length;
   const latest = alerts[0];
-  const armed = settings.execLive || settings.snipeLive;
+  const signing = canSignHot(hotVault, hotUnlocked, walletPk);
 
   useEffect(() => {
     document.documentElement.lang = "en";
@@ -61,26 +64,8 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
   const hits = useMemo(() => {
     const query = q.trim().toLowerCase();
     if (query.length < 1) return [];
-    return tokens
-      .filter((t) => `${t.symbol} ${t.name} ${t.mint}`.toLowerCase().includes(query))
-      .slice(0, 6);
+    return tokens.filter((t) => `${t.symbol} ${t.name} ${t.mint}`.toLowerCase().includes(query)).slice(0, 6);
   }, [q, tokens]);
-
-  function armLive(on: boolean) {
-    if (!on) {
-      armLiveStore(false);
-      setNeedSign(false);
-      return;
-    }
-    const st = useDesk.getState();
-    if (canSignHot(st.hotVault, st.hotUnlocked, st.walletPk)) {
-      armLiveStore(true);
-      setNeedSign(false);
-      return;
-    }
-    setNeedSign(true);
-    setProfile(true);
-  }
 
   return (
     <div dir="ltr" className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-bg text-fg">
@@ -99,10 +84,7 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={n.to}
                   to={n.to}
-                  className={cn(
-                    "flex h-11 items-center rounded-sm px-3 text-xs font-medium tracking-wide",
-                    on ? "bg-elevated text-fg" : "text-muted hover:text-fg",
-                  )}
+                  className={cn("flex h-11 items-center rounded-sm px-3 text-xs font-medium tracking-wide", on ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
                 >
                   {msg(n.key)}
                 </Link>
@@ -110,23 +92,12 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
           <div className="relative ms-auto min-w-0 flex-1 max-w-[11rem] sm:max-w-xs">
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={msg("search")}
-              aria-label={msg("search")}
-              className="h-11 text-base md:text-sm"
-            />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={msg("search")} aria-label={msg("search")} className="h-11 text-base md:text-sm" />
             {hits.length ? (
               <ul className="absolute inset-x-0 top-full z-40 mt-1 overflow-hidden rounded-md bg-surface shadow-[var(--shadow-border)]">
                 {hits.map((t) => (
                   <li key={t.id}>
-                    <Link
-                      to="/token/$id"
-                      params={{ id: t.id }}
-                      className="flex items-center justify-between px-3 py-2 text-sm hover:bg-elevated"
-                      onClick={() => setQ("")}
-                    >
+                    <Link to="/token/$id" params={{ id: t.id }} className="flex items-center justify-between px-3 py-2 text-sm hover:bg-elevated" onClick={() => setQ("")}>
                       <span>{t.symbol}</span>
                       <span className="font-mono text-2xs text-muted">{t.chain}</span>
                     </Link>
@@ -135,8 +106,10 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
               </ul>
             ) : null}
           </div>
-          <span className="hidden h-9 items-center rounded-sm px-2 font-mono text-2xs uppercase sm:flex">
-            <span className="text-warn">{msg("execArmed")}</span>
+          <span className="hidden h-9 items-center gap-2 rounded-sm px-2 font-mono text-2xs uppercase sm:flex">
+            <span className={liveOk ? "text-up" : "text-subtle"}>{liveOk ? msg("liveOn") : msg("liveDown")}</span>
+            <span className={signing ? "text-warn" : "text-subtle"}>{signing ? msg("execArmed") : msg("hotLocked")}</span>
+            {settings.snipeLive ? <span className="text-warn">{msg("snipeLive")}</span> : null}
           </span>
           <RiskChip />
           <div className="hidden text-end sm:block">
@@ -160,10 +133,7 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
           </button>
           <button
             type="button"
-            className={cn(
-              "relative flex size-11 items-center justify-center rounded-sm",
-              profile ? "bg-elevated text-fg" : "text-muted hover:text-fg",
-            )}
+            className={cn("relative flex size-11 items-center justify-center rounded-sm", profile ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
             onClick={() => {
               setRadar(false);
               setProfile((v) => !v);
@@ -171,7 +141,7 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
             aria-label={msg("profile")}
           >
             <CircleUser className="size-4" />
-            {armed ? <span className="absolute top-1.5 end-1.5 size-1.5 rounded-full bg-warn" /> : null}
+            {signing ? <span className="absolute top-1.5 end-1.5 size-1.5 rounded-full bg-warn" /> : null}
           </button>
         </div>
       </header>
@@ -203,10 +173,7 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
             <Link
               key={n.to}
               to={n.to}
-              className={cn(
-                "relative flex min-h-12 flex-col items-center justify-center gap-0.5 text-[10px] tracking-wide",
-                on ? "text-fg" : "text-muted",
-              )}
+              className={cn("relative flex min-h-12 flex-col items-center justify-center gap-0.5 text-[10px] tracking-wide", on ? "text-fg" : "text-muted")}
             >
               {on ? <span className="absolute inset-x-4 top-0 h-px bg-fg" /> : null}
               <Icon className="size-4" />
@@ -216,17 +183,25 @@ export function DeskShell({ children }: { children: React.ReactNode }) {
         })}
       </nav>
 
-      {radar ? (
-        <RadarPanel
-          onClose={() => setRadar(false)}
-        />
-      ) : null}
-      {profile ? (
-        <DeskProfile
-          onClose={() => setProfile(false)}
-          needSign={needSign}
-          onArmLive={armLive}
-        />
+      {radar ? <RadarPanel onClose={() => setRadar(false)} /> : null}
+      {profile ? <DeskProfile onClose={() => setProfile(false)} /> : null}
+
+      {hydrated && !introSeen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg bg-surface p-5 shadow-[var(--shadow-border)]">
+            <WickMark className="mb-3 size-6" />
+            <h2 className="text-lg font-medium tracking-tight">{msg("introTitle")}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted">{msg("introBody")}</p>
+            <ul className="mt-3 list-disc space-y-1 ps-5 text-2xs leading-relaxed text-subtle">
+              <li>{msg("introRealMoney")}</li>
+              <li>{msg("introSources")}</li>
+              <li>{msg("introCustody")}</li>
+            </ul>
+            <Button className="mt-4 w-full" onClick={dismissIntro}>
+              {msg("dismiss")}
+            </Button>
+          </div>
+        </div>
       ) : null}
     </div>
   );

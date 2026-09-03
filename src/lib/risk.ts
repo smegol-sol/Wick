@@ -1,4 +1,4 @@
-import { riskScore, type Security, type Token } from "./market";
+import type { Security, Token } from "./market";
 
 export type RiskWhy = "halt" | "heat" | "slots" | "loss" | "streak" | "token" | "cash" | "cluster";
 export type RiskGrade = "A" | "B" | "C" | "D" | "F";
@@ -25,7 +25,6 @@ export interface RiskBook {
 export interface RiskToken {
   security: Security;
   liq: number;
-  live?: boolean;
 }
 
 export interface SizedBuy {
@@ -75,16 +74,6 @@ export function openHeat(positions: Array<{ costSol: number }>): number {
   return positions.reduce((acc, p) => acc + p.costSol, 0);
 }
 
-export function openMark(
-  positions: Array<{ tokenId: string; amount: number; costSol: number }>,
-  tokens: Array<{ id: string; price: number }>,
-): number {
-  return positions.reduce((acc, p) => {
-    const tk = tokens.find((t) => t.id === p.tokenId);
-    return acc + (tk ? p.amount * tk.price : p.costSol);
-  }, 0);
-}
-
 export function nextStreak(streak: number, pnl: number): number {
   if (pnl < -1e-9) return streak + 1;
   if (pnl > 1e-9) return 0;
@@ -94,37 +83,34 @@ export function nextStreak(streak: number, pnl: number): number {
 export function shouldHalt(limits: RiskLimits, book: RiskBook): "loss" | "streak" | null {
   if (!limits.riskOn) return null;
   const equity = book.sol + book.marks;
-  if (limits.maxDayLoss > 0 && book.dayStart - equity >= limits.maxDayLoss) return "loss";
+  if (limits.maxDayLoss > 0 && book.dayStart > 0 && book.dayStart - equity >= limits.maxDayLoss) return "loss";
   if (limits.streakHalt > 0 && book.lossStreak >= limits.streakHalt) return "streak";
   return null;
 }
 
-/** 0 = junk, 1 = clean. Paper honeypot is always 0. Live uses on-chain mint/freeze when present. */
-export function tokenQuality(sec: Security, liq = 0, live = false): number {
-  if (live) {
-    let q = 0.74;
-    if (liq < 80) q *= 0.48;
-    else if (liq < 400) q *= 0.78;
-    else if (liq >= 2000) q = Math.min(1, q + 0.1);
-    if (sec.onchain) {
-      if (sec.mintable) q *= 0.62;
-      if (sec.freeze) q *= 0.42;
-      if (!sec.lpBurned) q *= 0.9;
-      if (sec.renounced) q = Math.min(1, q + 0.08);
-    }
-    return clamp(q, 0, 1);
+/**
+ * 0 = junk, 1 = clean. Liquidity in USD plus on-chain authorities. Unknown
+ * facts do not raise the score.
+ */
+export function tokenQuality(sec: Security, liq = 0): number {
+  let q = 0.74;
+  if (liq < 500) q *= 0.48;
+  else if (liq < 2_500) q *= 0.78;
+  else if (liq >= 12_000) q = Math.min(1, q + 0.1);
+  if (sec.onchain) {
+    if (sec.mintable) q *= 0.62;
+    if (sec.freeze) q *= 0.42;
+    if (!sec.lpBurned) q *= 0.9;
+    if (sec.renounced) q = Math.min(1, q + 0.08);
   }
-  if (sec.honeypot) return 0;
-  let q = 1 - riskScore(sec) / 100;
-  if (liq < 400) q *= 0.55;
-  else if (liq < 1500) q *= 0.8;
+  if (sec.top10 != null) {
+    if (sec.top10 >= 60) q *= 0.55;
+    else if (sec.top10 >= 40) q *= 0.8;
+  }
   return clamp(q, 0, 1);
 }
 
-/**
- * Rank a launch/migrate print. Higher is better.
- * Live mint/freeze come from chain when audited; paper still uses sim flags.
- */
+/** Rank a launch/migrate print. Higher is better. Only reported facts move it. */
 export function snipeEdge(tk: Token, now: number): number {
   const ageMin = Math.max(0, (now - tk.createdAt) / 60_000);
   let s = 0;
@@ -142,17 +128,18 @@ export function snipeEdge(tk: Token, now: number): number {
     if (tk.stage === "new" && tk.bonding >= 5 && tk.bonding < 40) s += 1.4;
     if (tk.stage === "bonding") s += tk.bonding >= 88 ? 1.6 : 0.7;
   }
-  if (tk.liq < 50) s -= 3.2;
-  else if (tk.liq < 250) s -= 0.7;
-  else if (tk.liq >= 1200) s += 1.2;
-  if (tk.live && tk.security.onchain) {
+  if (tk.liq < 500) s -= 3.2;
+  else if (tk.liq < 2_500) s -= 0.7;
+  else if (tk.liq >= 12_000) s += 1.2;
+  if (tk.security.onchain) {
     if (tk.security.freeze) s -= 3.4;
     if (tk.security.mintable && tk.stage === "migrated") s -= 1.8;
     if (tk.security.renounced) s += 0.55;
-  } else if (!tk.live) {
-    if (tk.security.honeypot) return -99;
-    if (tk.security.bundled > 32) s -= 2.8;
-    else if (tk.security.bundled < 12) s += 0.6;
+  }
+  if (tk.security.top10 != null && tk.security.top10 >= 50) s -= 1.5;
+  if (tk.buys5m != null && tk.sells5m != null && tk.buys5m + tk.sells5m >= 10) {
+    const ratio = tk.buys5m / (tk.buys5m + tk.sells5m);
+    s += (ratio - 0.5) * 2;
   }
   if (tk.stage === "new" && tk.mc > 160_000) s -= 1.6;
   return s;
@@ -168,7 +155,7 @@ export function riskGrade(score: number): RiskGrade {
 
 /** Equal-weight heat × 1.5, so a name can over-index slightly before the clip. */
 export function nameCapSol(limits: RiskLimits, book: RiskBook): number {
-  if (!limits.riskOn || limits.maxBookPct <= 0) return Number.POSITIVE_INFINITY;
+  if (!limits.riskOn || limits.maxBookPct <= 0 || !(book.dayStart > 0)) return Number.POSITIVE_INFINITY;
   const heatCap = book.dayStart * (limits.maxBookPct / 100);
   if (limits.maxPositions > 0) return (heatCap / limits.maxPositions) * 1.5;
   return heatCap * 0.5;
@@ -181,7 +168,7 @@ export function sizingScale(limits: RiskLimits, book: RiskBook, tokenScore = 1):
   const dd = Math.max(0, book.dayStart - equity);
   const ddF = limits.maxDayLoss > 0 ? clamp(1 - dd / limits.maxDayLoss, 0.2, 1) : 1;
   let heatF = 1;
-  if (limits.maxBookPct > 0) {
+  if (limits.maxBookPct > 0 && book.dayStart > 0) {
     const cap = book.dayStart * (limits.maxBookPct / 100);
     const used = openHeat(book.positions);
     heatF = cap > 0 ? clamp(1 - used / cap, 0.15, 1) : 1;
@@ -199,8 +186,7 @@ export function sizeAutoBuy(
 ): SizedBuy {
   const cash = Math.max(0, book.sol);
   const auto = opts?.auto !== false;
-  const live = !!opts?.token?.live;
-  const score = opts?.token ? tokenQuality(opts.token.security, opts.token.liq, live) : 1;
+  const score = opts?.token ? tokenQuality(opts.token.security, opts.token.liq) : 1;
   const fail = (why: RiskWhy): SizedBuy => ({ spend: 0, why, score, scale: 0 });
 
   if (!limits.riskOn) {
@@ -215,26 +201,17 @@ export function sizeAutoBuy(
   if (!stacked && limits.maxPositions > 0 && book.positions.length >= limits.maxPositions) {
     return fail("slots");
   }
-  if (
-    auto &&
-    !stacked &&
-    limits.maxCluster > 0 &&
-    (opts?.clusterNames ?? 0) >= limits.maxCluster
-  ) {
+  if (auto && !stacked && limits.maxCluster > 0 && (opts?.clusterNames ?? 0) >= limits.maxCluster) {
     return fail("cluster");
   }
+  if (opts?.token?.security.onchain && opts.token.security.freeze) return fail("token");
+  if (auto && score < 0.25) return fail("token");
 
-  const paper = auto && opts?.token && !live;
-  if (paper && opts.token?.security.honeypot) return fail("token");
-  if (paper && score < 0.25) return fail("token");
-  if (live && opts?.token?.security.onchain && opts.token.security.freeze) return fail("token");
-
-  const scaleScore = live ? 1 : score;
-  const scale = auto ? sizingScale(limits, book, scaleScore) : 1;
+  const scale = auto ? sizingScale(limits, book, score) : 1;
   let spend = Math.min(want * (auto ? scale : 1), cash);
   if (limits.maxTradeSol > 0) spend = Math.min(spend, limits.maxTradeSol);
 
-  if (limits.maxBookPct > 0) {
+  if (limits.maxBookPct > 0 && book.dayStart > 0) {
     const cap = book.dayStart * (limits.maxBookPct / 100);
     const room = cap - openHeat(book.positions);
     if (room < 0.05) return fail("heat");

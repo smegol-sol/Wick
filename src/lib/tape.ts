@@ -6,22 +6,17 @@ import { tokenQuality } from "./risk";
 export type TapeGrade = "signal" | "desk" | "raw";
 export type TapeRank = "signal" | "desk" | "noise";
 
-const SKIP_RE = /\bskip\b|mint not on pulse|skip paper/i;
+const SKIP_RE = /\bskip\b|mint not on pulse/i;
 const SOL_RE = /\d+(?:\.\d+)?\s*SOL\b/i;
-const ACTION_RE = /\b(fill|filled|queued|halt|TWAP|DCA|snipe|exit|sold)\b/i;
-const PAPER_CHAT_RE = /\b(bought|sold)\b/i;
+const ACTION_RE = /\b(fill|filled|queued|halt|TWAP|DCA|snipe|exit|sold|triggered)\b/i;
 const STYLE_SKIP_RE = /^Copy (dust|chase|confirm)\b/i;
 
 export function tapeRank(item: FeedItem): TapeRank {
   const t = item.text;
-  if (STYLE_SKIP_RE.test(t) || /mint not on pulse/i.test(t) || /skip paper/i.test(t)) return "noise";
+  if (STYLE_SKIP_RE.test(t) || /mint not on pulse/i.test(t)) return "noise";
   if (/copy skip fraud/i.test(t)) return "desk";
   if (SKIP_RE.test(t) && !/fraud/i.test(t)) return "noise";
-  if (item.kind === "social" && !SOL_RE.test(t) && !/fill/i.test(t)) return "noise";
-  if (item.kind === "smart" && PAPER_CHAT_RE.test(t) && !SOL_RE.test(t) && !/^Dev /i.test(t) && !/copy/i.test(t)) {
-    return "noise";
-  }
-  if (SOL_RE.test(t) || ACTION_RE.test(t) || /^Dev /i.test(t)) return "signal";
+  if (SOL_RE.test(t) || ACTION_RE.test(t)) return "signal";
   if (item.kind === "risk" || item.kind === "snipe") return "signal";
   return "desk";
 }
@@ -48,7 +43,7 @@ export function filterTape(
       if (opts.hideRugs && isRug(tk.security) && item.kind !== "risk") continue;
       if (opts.grade === "signal" && item.kind !== "risk") {
         if (fraudSkip(fraudOf(tk))) continue;
-        if (tokenQuality(tk.security, tk.liq, !!tk.live) < 0.28) continue;
+        if (tokenQuality(tk.security, tk.liq) < 0.28) continue;
       }
     }
     if (opts.grade !== "raw") {

@@ -15,6 +15,7 @@ import { Route as CopyRouteImport } from './routes/copy'
 import { Route as DiscoverRouteImport } from './routes/discover'
 import { Route as LabRouteImport } from './routes/lab'
 import { Route as TapeRouteImport } from './routes/tape'
+import { Route as ApiHoldersRouteImport } from './routes/api/holders'
 import { Route as ApiPulseRouteImport } from './routes/api/pulse'
 import { Route as ApiQuoteRouteImport } from './routes/api/quote'
 import { Route as ApiSendRouteImport } from './routes/api/send'
@@ -51,6 +52,11 @@ const LabRoute = LabRouteImport.update({
 const TapeRoute = TapeRouteImport.update({
   id: '/tape',
   path: '/tape',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHoldersRoute = ApiHoldersRouteImport.update({
+  id: '/api/holders',
+  path: '/api/holders',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPulseRoute = ApiPulseRouteImport.update({
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/discover': typeof DiscoverRoute
   '/lab': typeof LabRoute
   '/tape': typeof TapeRoute
+  '/api/holders': typeof ApiHoldersRoute
   '/api/pulse': typeof ApiPulseRoute
   '/api/quote': typeof ApiQuoteRoute
   '/api/send': typeof ApiSendRoute
@@ -111,6 +118,7 @@ export interface FileRoutesByTo {
   '/discover': typeof DiscoverRoute
   '/lab': typeof LabRoute
   '/tape': typeof TapeRoute
+  '/api/holders': typeof ApiHoldersRoute
   '/api/pulse': typeof ApiPulseRoute
   '/api/quote': typeof ApiQuoteRoute
   '/api/send': typeof ApiSendRoute
@@ -127,6 +135,7 @@ export interface FileRoutesById {
   '/discover': typeof DiscoverRoute
   '/lab': typeof LabRoute
   '/tape': typeof TapeRoute
+  '/api/holders': typeof ApiHoldersRoute
   '/api/pulse': typeof ApiPulseRoute
   '/api/quote': typeof ApiQuoteRoute
   '/api/send': typeof ApiSendRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/discover'
     | '/lab'
     | '/tape'
+    | '/api/holders'
     | '/api/pulse'
     | '/api/quote'
     | '/api/send'
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/discover'
     | '/lab'
     | '/tape'
+    | '/api/holders'
     | '/api/pulse'
     | '/api/quote'
     | '/api/send'
@@ -174,6 +185,7 @@ export interface FileRouteTypes {
     | '/discover'
     | '/lab'
     | '/tape'
+    | '/api/holders'
     | '/api/pulse'
     | '/api/quote'
     | '/api/send'
@@ -190,6 +202,7 @@ export interface RootRouteChildren {
   DiscoverRoute: typeof DiscoverRoute
   LabRoute: typeof LabRoute
   TapeRoute: typeof TapeRoute
+  ApiHoldersRoute: typeof ApiHoldersRoute
   ApiPulseRoute: typeof ApiPulseRoute
   ApiQuoteRoute: typeof ApiQuoteRoute
   ApiSendRoute: typeof ApiSendRoute
@@ -241,6 +254,13 @@ declare module '@tanstack/react-router' {
       path: '/tape'
       fullPath: '/tape'
       preLoaderRoute: typeof TapeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/holders': {
+      id: '/api/holders'
+      path: '/api/holders'
+      fullPath: '/api/holders'
+      preLoaderRoute: typeof ApiHoldersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/pulse': {
@@ -302,6 +322,7 @@ const rootRouteChildren: RootRouteChildren = {
   DiscoverRoute: DiscoverRoute,
   LabRoute: LabRoute,
   TapeRoute: TapeRoute,
+  ApiHoldersRoute: ApiHoldersRoute,
   ApiPulseRoute: ApiPulseRoute,
   ApiQuoteRoute: ApiQuoteRoute,
   ApiSendRoute: ApiSendRoute,

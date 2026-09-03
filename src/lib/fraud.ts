@@ -1,14 +1,17 @@
 import type { Candle, Security } from "./market";
 
-export type FraudTag = "clean" | "wash" | "bundle" | "trap" | "spoof";
-export type FraudFlag = "washVol" | "washTape" | "bundle" | "insider" | "trap" | "spoof";
+export type FraudTag = "clean" | "wash" | "insider" | "trap" | "spoof";
+export type FraudFlag = "washVol" | "washTape" | "insider" | "trap" | "spoof";
 
 export type FraudCard = {
   score: number;
   tag: FraudTag;
   flags: FraudFlag[];
+  /** How many of the checks had data. 0 means the card says nothing. */
+  checked: number;
 };
 
+/** Flat candles with volume: price pinned while prints flow. */
 export function candleWash(candles: Candle[]): number {
   const last = candles.slice(-8);
   if (last.length < 4) return 0;
@@ -25,67 +28,72 @@ export function candleWash(candles: Candle[]): number {
   const avgR = range / n;
   const avgV = vol / n;
   if (avgV > 0 && avgR < 0.01) return 18;
-  if (avgR < 0.006) return 8;
   return 0;
 }
 
-const CLEAN_SEC: Security = {
-  mintable: false,
-  freeze: false,
-  lpBurned: true,
-  honeypot: false,
-  renounced: true,
-  top10: 20,
-  bundled: 4,
-  insiders: 3,
-  snipers: 4,
-  devHold: 2,
-};
-
-export function fraudOf(tk: {
-  vol: number;
-  vol1m: number;
+export type FraudInput = {
+  vol: number | null;
+  vol5m: number | null;
   mc: number;
-  holders: number;
-  tx: number;
-  change1m: number;
+  holders: number | null;
+  tx: number | null;
+  change5m: number;
   mentions: number;
   twitter: string | null;
   candles: Candle[];
   security: Security;
-}): FraudCard {
-  const s = tk.security ?? CLEAN_SEC;
+  stage: "new" | "bonding" | "migrated";
+};
+
+/**
+ * Heuristics over reported numbers only. A check whose inputs are unknown is
+ * skipped and does not count toward the score.
+ */
+export function fraudOf(tk: FraudInput): FraudCard {
+  const s = tk.security;
   const flags: FraudFlag[] = [];
   let score = 0;
+  let checked = 0;
 
-  if (s.honeypot || (s.onchain && s.freeze) || (s.mintable && s.freeze)) {
-    score += 42;
-    flags.push("trap");
+  if (s.onchain) {
+    checked += 1;
+    if (s.freeze || (s.mintable && tk.stage === "migrated")) {
+      score += 42;
+      flags.push("trap");
+    }
   }
-  if (s.bundled >= 28 || s.snipers >= 25) {
-    score += 18;
-    flags.push("bundle");
+  if (s.top10 != null) {
+    checked += 1;
+    if (s.top10 >= 48) {
+      score += 14;
+      flags.push("insider");
+    }
   }
-  if (s.insiders >= 18 || s.top10 >= 48 || s.devHold >= 14) {
-    score += 14;
-    flags.push("insider");
+  if (tk.vol != null && tk.mc > 0) {
+    checked += 1;
+    const volMc = tk.vol / tk.mc;
+    const txPer = tk.tx != null && tk.holders != null && tk.holders > 0 ? tk.tx / tk.holders : null;
+    if ((volMc >= 2.2 && tk.holders != null && tk.holders < 90) || (txPer != null && txPer >= 8)) {
+      score += 16;
+      flags.push("washVol");
+    }
   }
-
-  const volMc = tk.mc > 0 ? tk.vol / tk.mc : 0;
-  const txPer = tk.holders > 0 ? tk.tx / tk.holders : 0;
-  if ((volMc >= 2.2 && tk.holders < 90) || txPer >= 8) {
-    score += 16;
-    flags.push("washVol");
+  if (tk.vol5m != null && tk.mc > 0) {
+    checked += 1;
+    if (tk.vol5m / tk.mc >= 0.12 && Math.abs(tk.change5m) < 3) {
+      score += 14;
+      flags.push("washTape");
+    }
   }
-  if (tk.mc > 0 && tk.vol1m / tk.mc >= 0.12 && Math.abs(tk.change1m) < 3) {
-    score += 14;
-    flags.push("washTape");
+  if (tk.candles.length >= 4) {
+    checked += 1;
+    const cw = candleWash(tk.candles);
+    if (cw >= 12) {
+      score += cw;
+      if (!flags.includes("washTape")) flags.push("washTape");
+    }
   }
-  const cw = candleWash(tk.candles ?? []);
-  if (cw >= 12) {
-    score += cw;
-    if (!flags.includes("washTape")) flags.push("washTape");
-  }
+  checked += 1;
   if (tk.mentions >= 12 && !tk.twitter) {
     score += 8;
     flags.push("spoof");
@@ -95,11 +103,11 @@ export function fraudOf(tk: {
   let tag: FraudTag = "clean";
   if (flags.includes("trap") || score >= 70) tag = "trap";
   else if (flags.includes("washVol") || flags.includes("washTape")) tag = "wash";
-  else if (flags.includes("bundle") || flags.includes("insider")) tag = "bundle";
+  else if (flags.includes("insider")) tag = "insider";
   else if (flags.includes("spoof")) tag = "spoof";
   else if (score >= 35) tag = "wash";
 
-  return { score, tag, flags };
+  return { score, tag, flags, checked };
 }
 
 export function fraudSkip(card: FraudCard): boolean {

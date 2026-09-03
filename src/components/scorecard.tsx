@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const FRAUD_MSG = {
   clean: "fraudClean",
   wash: "wash",
-  bundle: "bundleRing",
+  insider: "insiders",
   trap: "trap",
   spoof: "spoofVol",
 } as const;
@@ -22,10 +22,10 @@ export function Scorecard({ row }: { row: LabRow }) {
     { k: msg("edge"), v: row.edge.toFixed(1), tone: row.edge >= 0.7 ? "up" : row.edge < 0 ? "down" : "muted" },
     { k: msg("ath"), v: formatUsd(row.ath, 6) },
     { k: msg("drawdown"), v: formatPct(-row.dd * 100), tone: row.dd >= 0.2 ? "down" : "muted" },
-    { k: msg("volMc"), v: row.volMc.toFixed(2) },
+    { k: msg("volMc"), v: row.volMc == null ? "n/a" : row.volMc.toFixed(2) },
     {
       k: msg("pressure"),
-      v: formatPct(row.pressure * 40),
+      v: formatPct(row.pressure * 100, 0),
       tone: row.pressure > 0.15 ? "up" : row.pressure < -0.15 ? "down" : "muted",
     },
     { k: msg("clusterHeat"), v: msg(CLUSTER_MSG[row.cluster]) },
@@ -38,7 +38,7 @@ export function Scorecard({ row }: { row: LabRow }) {
   if (fraud) {
     cells.push({
       k: msg("fraud"),
-      v: `${fraud.score} ${msg(FRAUD_MSG[fraud.tag])}`,
+      v: fraud.checked === 0 ? "n/a" : `${fraud.score} ${msg(FRAUD_MSG[fraud.tag])}`,
       tone: fraud.tag === "clean" ? "up" : fraud.tag === "trap" || fraud.tag === "wash" ? "down" : "warn",
     });
   }

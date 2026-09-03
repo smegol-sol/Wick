@@ -2,7 +2,7 @@ import { isB58 } from "./guard";
 import type { ChainPrint } from "./solana-wallet";
 import { WSOL } from "./solana-wallet";
 
-export const MAX_FOLLOWS = 3;
+export const MAX_FOLLOWS = 6;
 
 const STABLE = new Set([
   WSOL,

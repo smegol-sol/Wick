@@ -19,30 +19,18 @@ function Row({
 }) {
   return (
     <label className="flex min-h-12 items-center gap-3 border-b border-border px-2 last:border-0">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className={cn("size-4", warn ? "accent-warn" : "accent-accent")}
-      />
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className={cn("size-4", warn ? "accent-warn" : "accent-accent")} />
       <span className={cn("text-sm", warn && checked ? "text-warn" : "text-fg")}>{children}</span>
     </label>
   );
 }
 
-export function DeskProfile({
-  onClose,
-  needSign,
-  onArmLive,
-}: {
-  onClose: () => void;
-  needSign: boolean;
-  onArmLive: (on: boolean) => void;
-}) {
+export function DeskProfile({ onClose }: { onClose: () => void }) {
   const msg = useDesk((s) => s.msg);
   const settings = useDesk((s) => s.settings);
   const patch = useDesk((s) => s.patchSettings);
   const equity = useDesk((s) => s.equity());
+  const chainSol = useDesk((s) => s.chainSol);
   const riskHalt = useDesk((s) => s.riskHalt);
   const vault = useDesk((s) => s.hotVault);
   const unlocked = useDesk((s) => s.hotUnlocked);
@@ -66,18 +54,20 @@ export function DeskProfile({
             </div>
             <div>
               <div className="text-2xs text-subtle">{msg("chainSol")}</div>
-              <div>{formatSol(equity)}</div>
+              <div>{chainSol == null ? "—" : formatSol(chainSol)}</div>
             </div>
           </div>
           <p className="mt-3 font-mono text-2xs text-warn">
-            {needSign ? msg("execOpenWallet") : msg("execArmed")}
-            {hot ? ` · ${msg("hotOn")}` : vault ? ` · ${msg("hotLocked")}` : ""}
+            {hot ? msg("execArmed") : vault ? msg("hotLocked") : msg("noWallet")}
             {riskHalt ? ` · ${msg("riskHalt")}` : ""}
           </p>
         </div>
 
         <h3 className="kicker mb-2">{msg("live")}</h3>
         <div className="mb-5 rounded-md bg-elevated px-1">
+          <Row checked={settings.confirmLive} onChange={(on) => patch({ confirmLive: on })}>
+            {msg("confirmLive")}
+          </Row>
           <Row checked={settings.snipeLive} onChange={(on) => patch({ snipeLive: on })} warn>
             {msg("snipeLive")}
           </Row>
@@ -87,6 +77,7 @@ export function DeskProfile({
           <Row checked={settings.snipeMigrate} onChange={(on) => patch({ snipeMigrate: on })}>
             {msg("snipeMigrate")}
           </Row>
+          <p className="px-2 py-2 font-mono text-2xs text-subtle">{msg("snipeLiveHint")}</p>
         </div>
 
         <h3 className="kicker mb-2">{msg("scan")}</h3>
@@ -114,6 +105,8 @@ export function DeskProfile({
         <div className="rounded-md bg-elevated">
           <DeskFilters />
         </div>
+
+        <p className="mt-5 text-2xs leading-relaxed text-subtle">{msg("about")}</p>
       </div>
     </Sheet>
   );

@@ -10,13 +10,14 @@ export type SieveField =
   | "liq"
   | "mc"
   | "vol"
+  | "vol5m"
   | "holders"
   | "tx"
   | "age"
   | "bond"
-  | "bundled"
-  | "dev"
-  | "snipers"
+  | "top10"
+  | "chg5m"
+  | "chg1h"
   | "grade"
   | "freeze"
   | "mint"
@@ -24,18 +25,17 @@ export type SieveField =
   | "fraud"
   | "topic";
 
+/** Fields that are only known once a source reported them. A rule on them fails when unknown. */
+export const CHAIN_FIELDS: SieveField[] = ["vol", "vol5m", "holders", "tx", "top10", "chg1h"];
+
 export type SieveRule = { field: SieveField; op: SieveOp; value: number | string };
 
 export type FilterSlice = {
-  chain: "sol" | "all";
   hideRugs: boolean;
   guardMint: boolean;
   minLiq: number;
   minMc: number;
   maxMc: number;
-  maxBundled: number;
-  maxDev: number;
-  maxSnipers: number;
   minHolders: number;
   maxAgeMin: number;
   keywords: string;
@@ -59,6 +59,8 @@ const FIELDS: Record<string, SieveField> = {
   mc: "mc",
   mcap: "mc",
   vol: "vol",
+  vol24: "vol",
+  vol5m: "vol5m",
   holders: "holders",
   h: "holders",
   tx: "tx",
@@ -66,11 +68,11 @@ const FIELDS: Record<string, SieveField> = {
   min: "age",
   bond: "bond",
   bonding: "bond",
-  bundled: "bundled",
-  bundle: "bundled",
-  dev: "dev",
-  snipers: "snipers",
-  snipe: "snipers",
+  top10: "top10",
+  top: "top10",
+  chg5m: "chg5m",
+  chg: "chg5m",
+  chg1h: "chg1h",
   grade: "grade",
   freeze: "freeze",
   mint: "mint",
@@ -115,7 +117,7 @@ export function parseSieve(raw: string): { rules: SieveRule[]; include: string[]
       exclude.push(part.slice(1).toLowerCase());
       continue;
     }
-    const m = part.match(/^([a-z]+)(>=|<=|!=|>|<|=)(.+)$/i);
+    const m = part.match(/^([a-z0-9]+)(>=|<=|!=|>|<|=)(.+)$/i);
     if (m) {
       const field = FIELDS[m[1].toLowerCase()];
       if (field) {
@@ -161,27 +163,29 @@ function splitTerms(raw: string): string[] {
 }
 
 function gradeN(tk: Token): number {
-  return GRADE_N[riskGrade(tokenQuality(tk.security, tk.liq, !!tk.live))] ?? 0;
+  return GRADE_N[riskGrade(tokenQuality(tk.security, tk.liq))] ?? 0;
 }
 
 function flagN(on: boolean): number {
   return on ? 1 : 0;
 }
 
-function readField(tk: Token, field: SieveField, now: number): number | string {
+/** `null` means the source never reported the field. */
+function readField(tk: Token, field: SieveField, now: number): number | string | null {
   if (field === "liq") return tk.liq;
   if (field === "mc") return tk.mc;
   if (field === "vol") return tk.vol;
+  if (field === "vol5m") return tk.vol5m;
   if (field === "holders") return tk.holders;
   if (field === "tx") return tk.tx;
   if (field === "age") return Math.max(0, (now - tk.createdAt) / 60_000);
   if (field === "bond") return tk.bonding;
-  if (field === "bundled") return tk.security.bundled;
-  if (field === "dev") return tk.security.devHold;
-  if (field === "snipers") return tk.security.snipers;
+  if (field === "top10") return tk.security.top10;
+  if (field === "chg5m") return tk.change5m;
+  if (field === "chg1h") return tk.change1h;
   if (field === "grade") return gradeN(tk);
-  if (field === "freeze") return flagN(!!(tk.security.onchain && tk.security.freeze));
-  if (field === "mint") return flagN(!!(tk.security.onchain && tk.security.mintable));
+  if (field === "freeze") return tk.security.onchain ? flagN(tk.security.freeze) : null;
+  if (field === "mint") return tk.security.onchain ? flagN(tk.security.mintable) : null;
   if (field === "x") return flagN(!!tk.twitter);
   if (field === "fraud") return flagN(fraudSkip(fraudOf(tk)));
   return clusterOf(tk.symbol, tk.name);
@@ -200,30 +204,23 @@ export function compileSieve(slice: FilterSlice, query?: string): SieveSpec {
 
 export function hitSieve(tk: Token, spec: SieveSpec, now = Date.now()): boolean {
   const s = spec.slice;
-  if (s.chain !== "all" && tk.chain !== s.chain) return false;
-  if (s.hideRugs) {
-    if (!tk.live && isRug(tk.security)) return false;
-    if (tk.live && s.guardMint && tk.security.onchain) {
-      if (tk.security.freeze) return false;
-      if (tk.stage === "migrated" && tk.security.mintable) return false;
-    }
+  if (s.hideRugs && isRug(tk.security)) return false;
+  if (s.guardMint && tk.security.onchain) {
+    if (tk.security.freeze) return false;
+    if (tk.stage === "migrated" && tk.security.mintable) return false;
   }
   if (s.minLiq > 0 && tk.liq < s.minLiq) return false;
   if (s.minMc > 0 && tk.mc < s.minMc) return false;
   if (s.maxMc > 0 && tk.mc > s.maxMc) return false;
-  if (s.minHolders > 0 && tk.holders < s.minHolders) return false;
+  if (s.minHolders > 0 && (tk.holders == null || tk.holders < s.minHolders)) return false;
   if (s.maxAgeMin > 0 && now - tk.createdAt > s.maxAgeMin * 60_000) return false;
-  if (!tk.live) {
-    if (s.maxBundled > 0 && tk.security.bundled > s.maxBundled) return false;
-    if (s.maxDev > 0 && tk.security.devHold > s.maxDev) return false;
-    if (s.maxSnipers > 0 && tk.security.snipers > s.maxSnipers) return false;
-  }
   if (s.hasX && !tk.twitter) return false;
   if (s.skipFraud && fraudSkip(fraudOf(tk))) return false;
   const floor = GRADE_N[s.minGrade.trim().toUpperCase()];
   if (floor != null && gradeN(tk) < floor) return false;
   for (const rule of spec.rules) {
     const left = readField(tk, rule.field, now);
+    if (left == null) return false;
     if (typeof left === "string") {
       const right = String(rule.value);
       const ok = rule.op === "!=" ? left !== right : left === right;
@@ -267,9 +264,6 @@ export function activeFilterCount(settings: FilterSlice): number {
   if (settings.minLiq > 0) n += 1;
   if (settings.minMc > 0) n += 1;
   if (settings.maxMc > 0) n += 1;
-  if (settings.maxBundled > 0) n += 1;
-  if (settings.maxDev > 0) n += 1;
-  if (settings.maxSnipers > 0) n += 1;
   if (settings.minHolders > 0) n += 1;
   if (settings.maxAgeMin > 0) n += 1;
   if (settings.keywords.trim()) n += 1;
@@ -286,9 +280,6 @@ export const FILTER_PRESETS = {
     minLiq: 0,
     minMc: 0,
     maxMc: 0,
-    maxBundled: 0,
-    maxDev: 0,
-    maxSnipers: 0,
     minHolders: 0,
     maxAgeMin: 0,
     keywords: "",
@@ -302,9 +293,6 @@ export const FILTER_PRESETS = {
     minLiq: 2500,
     minMc: 0,
     maxMc: 0,
-    maxBundled: 25,
-    maxDev: 12,
-    maxSnipers: 18,
     minHolders: 0,
     maxAgeMin: 240,
     keywords: "",
@@ -318,10 +306,7 @@ export const FILTER_PRESETS = {
     minLiq: 4000,
     minMc: 8000,
     maxMc: 400000,
-    maxBundled: 22,
-    maxDev: 10,
-    maxSnipers: 16,
-    minHolders: 20,
+    minHolders: 0,
     maxAgeMin: 90,
     keywords: "",
     exclude: "",
@@ -334,9 +319,6 @@ export const FILTER_PRESETS = {
     minLiq: 600,
     minMc: 0,
     maxMc: 120000,
-    maxBundled: 28,
-    maxDev: 14,
-    maxSnipers: 22,
     minHolders: 0,
     maxAgeMin: 18,
     keywords: "",
@@ -355,3 +337,5 @@ const CLUSTERS: Cluster[] = ["dog", "cat", "frog", "ai", "tick", "politic", "cul
 export function sieveTopics(): Cluster[] {
   return CLUSTERS;
 }
+
+export type { RiskGrade };

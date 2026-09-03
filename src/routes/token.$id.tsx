@@ -1,19 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Star } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CandleChart } from "@/components/candle-chart";
 import { TokenMark } from "@/components/mark";
 import { Scorecard } from "@/components/scorecard";
 import { FraudStrip } from "@/components/fraud-card";
 import { SecurityAudit } from "@/components/security-audit";
+import { stat } from "@/components/token-row";
 import { TradeTicket } from "@/components/trade-ticket";
 import { Button } from "@/components/ui/button";
-import { formatAge, formatMc, formatPct, formatTime, formatUsd, shortMint } from "@/lib/format";
-import { tokenHolders, tokenPrints, tokenSmartFlow } from "@/lib/market";
+import { formatAge, formatMc, formatPct, formatUsd, shortMint } from "@/lib/format";
 import { labRow } from "@/lib/lab";
 import { fraudOf } from "@/lib/fraud";
+import type { HolderInfo } from "@/lib/market";
 import { tokenMood } from "@/lib/sentiment";
-import { nameFlowOf } from "@/lib/smart-flow";
+import { followPrints, nameFlowOf, printsFor } from "@/lib/smart-flow";
 import { MoodStrip } from "@/components/mood-strip";
 import { TokenFlowList } from "@/components/smart-flow";
 import { useDesk } from "@/lib/store";
@@ -22,6 +23,34 @@ import type { Msg } from "@/lib/i18n";
 
 export const Route = createFileRoute("/token/$id")({ component: TokenPage });
 
+const HOLDERS_TTL = 30_000;
+
+function useHolders(mint: string | undefined): HolderInfo | null {
+  const cached = useDesk((s) => (mint ? (s.holderInfo[mint] ?? null) : null));
+  const setHolderInfo = useDesk((s) => s.setHolderInfo);
+  useEffect(() => {
+    if (!mint) return;
+    let stop = false;
+    const pull = () => {
+      const cur = useDesk.getState().holderInfo[mint];
+      if (cur && Date.now() - cur.at < HOLDERS_TTL) return;
+      void fetch(`/api/holders?mint=${encodeURIComponent(mint)}`)
+        .then((r) => (r.ok ? (r.json() as Promise<HolderInfo>) : null))
+        .then((info) => {
+          if (!stop && info && info.mint === mint) setHolderInfo({ ...info, at: Date.now() });
+        })
+        .catch(() => undefined);
+    };
+    pull();
+    const id = window.setInterval(pull, HOLDERS_TTL);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, [mint, setHolderInfo]);
+  return cached;
+}
+
 function TokenPage() {
   const { id } = Route.useParams();
   const token = useDesk((s) => s.tokens.find((t) => t.id === id));
@@ -29,27 +58,21 @@ function TokenPage() {
   const msg = useDesk((s) => s.msg);
   const watch = useDesk((s) => s.watch);
   const toggle = useDesk((s) => s.toggleWatch);
-  const pos = useDesk((s) => s.positions.find((p) => p.tokenId === id));
-  const wallets = useDesk((s) => s.wallets);
-  const [tab, setTab] = useState<"trades" | "holders" | "snipers" | "security" | "smart">("trades");
+  const cx = useDesk((s) => s.chainExits.find((e) => e.tokenId === id));
+  const hold = useDesk((s) => s.chainHoldings.find((h) => h.mint === token?.mint));
+  const solUsd = useDesk((s) => s.solUsd);
+  const follows = useDesk((s) => s.follows);
+  const followTape = useDesk((s) => s.followTape);
+  const holders = useHolders(token?.mint);
+  const [tab, setTab] = useState<"smart" | "holders" | "security">("security");
   const [smart, setSmart] = useState(true);
   const [focus, setFocus] = useState<string | null>(null);
 
-  const flow = useMemo(
-    () => (token ? tokenSmartFlow(token, wallets) : []),
-    [token, wallets],
-  );
-  const trackedIds = useMemo(
-    () => new Set(wallets.filter((w) => w.tracked).map((w) => w.id)),
-    [wallets],
-  );
-  const trackedFlow = useMemo(
-    () => flow.filter((p) => p.walletId && trackedIds.has(p.walletId)),
-    [flow, trackedIds],
-  );
+  const allPrints = useMemo(() => followPrints(follows, followTape, solUsd), [follows, followTape, solUsd]);
+  const flow = useMemo(() => (token ? printsFor(token.mint, allPrints) : []), [token, allPrints]);
   const legend = useMemo(() => {
     const map = new Map<string, { id: string; name: string; buys: number; sells: number }>();
-    for (const p of trackedFlow) {
+    for (const p of flow) {
       if (!p.walletId) continue;
       const cur = map.get(p.walletId) ?? { id: p.walletId, name: p.wallet ?? p.walletId, buys: 0, sells: 0 };
       if (p.side === "buy") cur.buys += 1;
@@ -57,7 +80,7 @@ function TokenPage() {
       map.set(p.walletId, cur);
     }
     return [...map.values()];
-  }, [trackedFlow]);
+  }, [flow]);
 
   if (!token) {
     return (
@@ -70,54 +93,35 @@ function TokenPage() {
     );
   }
 
-  const prints = tokenPrints(token, now);
-  const holders = tokenHolders(token);
   const card = labRow(token, now);
-  const mood = tokenMood(token, wallets);
+  const mood = tokenMood(token, allPrints);
   const watched = watch.includes(token.id);
-  const tabs: Array<typeof tab> = ["trades", "holders", "snipers", "smart", "security"];
-  const avg = pos ? pos.costSol / Math.max(pos.amount, 1e-12) : 0;
-  const marks = pos
-    ? [
-        { price: avg, label: msg("avg"), tone: "muted" as const },
-        ...(pos.tpPct != null
-          ? [
-              {
-                price: avg * (1 + pos.tpPct / 100),
-                label:
-                  pos.tpScale > 1
-                    ? `${msg("sourceTp")} ${pos.tpRung}/${pos.tpScale}`
-                    : msg("sourceTp"),
-                tone: "up" as const,
-              },
-            ]
-          : []),
-        ...(pos.slPct != null
-          ? [
-              {
-                price: pos.trailOn
-                  ? Math.max(
-                      0,
-                      Math.max(pos.peakPrice || avg, token.price, avg) * (1 - pos.slPct / 100),
-                    )
-                  : Math.max(0, avg * (1 - pos.slPct / 100)),
-                label: pos.trailOn ? msg("sourceTrail") : msg("sourceSl"),
-                tone: "down" as const,
-              },
-            ]
-          : []),
-      ]
-    : undefined;
+  const tabs: Array<typeof tab> = ["security", "holders", "smart"];
+  const avg = cx && hold && cx.basisSol > 0 && solUsd ? (cx.basisSol * solUsd) / hold.amount : 0;
+  const marks =
+    cx && hold
+      ? [
+          ...(avg > 0 ? [{ price: avg, label: msg("avg"), tone: "muted" as const }] : []),
+          ...(cx.tpPct != null && avg > 0
+            ? [{ price: avg * (1 + cx.tpPct / 100), label: cx.tpScale > 1 ? `${msg("sourceTp")} ${cx.tpRung}/${cx.tpScale}` : msg("sourceTp"), tone: "up" as const }]
+            : []),
+          ...(cx.slPct != null
+            ? [
+                {
+                  price: cx.trailOn
+                    ? Math.max(0, Math.max(cx.peakPrice || avg, token.price, avg) * (1 - cx.slPct / 100))
+                    : Math.max(0, (avg || token.price) * (1 - cx.slPct / 100)),
+                  label: cx.trailOn ? msg("sourceTrail") : msg("sourceSl"),
+                  tone: "down" as const,
+                },
+              ]
+            : []),
+        ]
+      : undefined;
   const chartPrints = smart
-    ? trackedFlow
-        .filter((p) => !focus || p.walletId === focus)
-        .map((p) => ({
-          ts: p.ts,
-          price: p.price,
-          side: p.side,
-          label: p.wallet ?? "",
-          sol: p.sol,
-        }))
+    ? flow
+        .filter((p) => (!focus || p.walletId === focus) && p.price > 0)
+        .map((p) => ({ ts: p.ts, price: p.price, side: p.side, label: p.wallet ?? "", sol: p.sol }))
     : [];
 
   return (
@@ -129,14 +133,22 @@ function TokenPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-lg font-medium tracking-tight">{token.symbol}</h1>
               <span className="text-sm text-muted">{token.name}</span>
-              <span className="font-mono text-2xs uppercase text-subtle">{token.chain}</span>
+              <span className="font-mono text-2xs uppercase text-subtle">{token.stage}</span>
             </div>
-            <button
-              className="mt-1 font-mono text-2xs text-subtle num"
-              onClick={() => navigator.clipboard?.writeText(token.mint)}
-            >
-              {shortMint(token.mint)}
-            </button>
+            <div className="mt-1 flex flex-wrap gap-3 font-mono text-2xs text-subtle num">
+              <button onClick={() => navigator.clipboard?.writeText(token.mint)}>{shortMint(token.mint)}</button>
+              <a href={`https://solscan.io/token/${token.mint}`} target="_blank" rel="noreferrer" className="hover:text-fg">
+                solscan
+              </a>
+              <a href={`https://pump.fun/coin/${token.mint}`} target="_blank" rel="noreferrer" className="hover:text-fg">
+                pump.fun
+              </a>
+              {token.pair ? (
+                <a href={`https://dexscreener.com/solana/${token.pair}`} target="_blank" rel="noreferrer" className="hover:text-fg">
+                  dexscreener
+                </a>
+              ) : null}
+            </div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-2xs text-muted num">
               <span>
                 {msg("mcap")} {formatMc(token.mc)}
@@ -145,78 +157,69 @@ function TokenPage() {
                 {msg("liquidity")} {formatUsd(token.liq, 0)}
               </span>
               <span>
-                {msg("volume")} {formatUsd(token.vol, 0)}
+                {msg("volume")} {stat(token.vol, (n) => formatUsd(n, 0))}
               </span>
               <span>
-                {msg("holders")} {token.holders}
+                {msg("vol5m")} {stat(token.vol5m, (n) => formatUsd(n, 0))}
+              </span>
+              <span>
+                {msg("tx")} {stat(token.tx, (n) => String(Math.round(n)))}
+              </span>
+              <span>
+                {msg("holders")} {stat(holders?.holders ?? token.holders, (n) => String(Math.round(n)))}
               </span>
               <span>
                 {msg("age")} {formatAge(token.createdAt, now)}
               </span>
-              {token.twitter ? <span className="text-accent">{token.twitter}</span> : null}
+              {token.twitter ? (
+                <a href={`https://x.com/${token.twitter.replace(/^@/, "")}`} target="_blank" rel="noreferrer" className="text-accent">
+                  {token.twitter}
+                </a>
+              ) : null}
             </div>
+            <p className="mt-1 font-mono text-2xs text-subtle">{token.statsAt ? msg("statsDex") : msg("statsNone")}</p>
           </div>
           <div className="text-end">
             <div className="font-mono text-lg num">{formatUsd(token.price, 6)}</div>
             <div className={cn("font-mono text-xs num", token.change5m >= 0 ? "text-up" : "text-down")}>
-              {formatPct(token.change5m)}
+              {formatPct(token.change5m)} <span className="text-subtle">5m</span>
             </div>
-            <Button
-              size="icon"
-              variant={watched ? "primary" : "quiet"}
-              className="mt-2"
-              onClick={() => toggle(token.id)}
-              aria-label={msg("watch")}
-            >
+            {token.change1h != null ? (
+              <div className={cn("font-mono text-2xs num", token.change1h >= 0 ? "text-up" : "text-down")}>
+                {formatPct(token.change1h)} <span className="text-subtle">1h</span>
+              </div>
+            ) : null}
+            <Button size="icon" variant={watched ? "primary" : "quiet"} className="mt-2" onClick={() => toggle(token.id)} aria-label={msg("watch")}>
               <Star className={cn("size-4", watched && "fill-current")} />
             </Button>
           </div>
         </header>
-        <MoodStrip
-          mood={mood.mood}
-          score={mood.score}
-          tape={mood.tape}
-          social={mood.social}
-          smart={mood.smart}
-          tone={mood.tone}
-        />
+        <MoodStrip mood={mood.mood} score={mood.score} tape={mood.tape} social={mood.social} smart={mood.smart} tone={mood.tone} />
         <Scorecard row={card} />
         <FraudStrip card={fraudOf(token)} />
         <div className="overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-border)]">
           <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
             <label className="flex items-center gap-1.5 text-2xs text-muted">
-              <input
-                type="checkbox"
-                checked={smart}
-                onChange={(e) => setSmart(e.target.checked)}
-                className="accent-accent"
-              />
+              <input type="checkbox" checked={smart} onChange={(e) => setSmart(e.target.checked)} className="accent-accent" />
               {msg("smartOnChart")}
             </label>
-            {smart && legend.length === 0 ? (
-              <span className="text-2xs text-subtle">{msg("smartEmpty")}</span>
-            ) : null}
+            {smart && legend.length === 0 ? <span className="text-2xs text-subtle">{msg("smartEmpty")}</span> : null}
             {smart
               ? legend.map((w) => (
                   <button
                     key={w.id}
                     type="button"
                     onClick={() => setFocus((cur) => (cur === w.id ? null : w.id))}
-                    className={cn(
-                      "h-7 rounded-sm px-2 font-mono text-2xs",
-                      focus === w.id ? "bg-elevated text-fg" : "text-muted hover:text-fg",
-                    )}
+                    className={cn("h-7 rounded-sm px-2 font-mono text-2xs", focus === w.id ? "bg-elevated text-fg" : "text-muted hover:text-fg")}
                   >
                     <span className="text-up">{w.buys}</span>
                     <span className="mx-1 text-subtle">/</span>
                     <span className="text-down">{w.sells}</span>
                     <span className="ms-1.5">{w.name}</span>
-                    {wallets.find((x) => x.id === w.id)?.hands === "paper" ? (
-                      <span className="ms-1 text-down">{msg("paperHands")}</span>
-                    ) : null}
                   </button>
                 ))
               : null}
+            <span className="ms-auto font-mono text-2xs text-subtle">{msg("chartHint")}</span>
           </div>
           <CandleChart candles={token.candles} marks={marks} prints={chartPrints} />
         </div>
@@ -226,72 +229,39 @@ function TokenPage() {
               <button
                 key={k}
                 onClick={() => setTab(k)}
-                className={cn(
-                  "h-9 rounded-sm px-3 text-xs font-medium",
-                  tab === k ? "bg-elevated text-fg" : "text-muted",
-                )}
+                className={cn("h-9 rounded-sm px-3 text-xs font-medium", tab === k ? "bg-elevated text-fg" : "text-muted")}
               >
                 {msg(k as Msg)}
               </button>
             ))}
           </div>
           <div className="p-3">
-            {tab === "security" ? <SecurityAudit security={token.security} live={!!token.live} /> : null}
-            {tab === "smart" ? (
-              <TokenFlowList flow={nameFlowOf(token, wallets)} prints={flow} wallets={wallets} />
-            ) : null}
+            {tab === "security" ? <SecurityAudit security={token.security} holders={holders} /> : null}
+            {tab === "smart" ? <TokenFlowList flow={nameFlowOf(token, allPrints)} prints={flow} /> : null}
             {tab === "holders" ? (
-              <ul>
-                {holders.map((h) => (
-                  <li key={h.label} className="flex items-center gap-3 py-1.5">
-                    <span className="w-20 text-xs text-muted">{h.label}</span>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-elevated">
-                      <div className="h-full bg-accent" style={{ width: `${Math.min(100, h.pct)}%` }} />
-                    </div>
-                    <span className="w-12 text-end font-mono text-2xs num">{h.pct.toFixed(1)}%</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {tab === "snipers" ? (
-              <ul>
-                {prints
-                  .filter((p) => p.side === "buy")
-                  .slice(0, 10)
-                  .map((p, i) => (
-                    <li key={p.id} className="flex justify-between border-b border-border py-2 text-sm">
-                      <span className="text-muted">
-                        {msg("firstBuyers")} #{i + 1}
-                      </span>
-                      <span className="font-mono text-2xs num">
-                        {p.sol.toFixed(2)} SOL · {p.wallet ?? "—"}
-                      </span>
+              holders && holders.top.length ? (
+                <ul>
+                  {holders.top.map((h, i) => (
+                    <li key={h.address} className="flex items-center gap-3 py-1.5">
+                      <span className="w-5 font-mono text-2xs text-subtle">{i + 1}</span>
+                      <a
+                        href={`https://solscan.io/account/${h.address}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-28 truncate font-mono text-2xs text-muted hover:text-fg"
+                      >
+                        {shortMint(h.address)}
+                      </a>
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-elevated">
+                        <div className="h-full bg-accent" style={{ width: `${Math.min(100, h.pct)}%` }} />
+                      </div>
+                      <span className="w-14 text-end font-mono text-2xs num">{h.pct.toFixed(2)}%</span>
                     </li>
                   ))}
-              </ul>
-            ) : null}
-            {tab === "trades" ? (
-              <ul>
-                {trackedFlow.slice(0, 8).map((p) => (
-                  <li key={p.id} className="flex items-center justify-between border-b border-border py-1.5">
-                    <span className={cn("text-xs font-medium", p.side === "buy" ? "text-up" : "text-down")}>
-                      {p.side === "buy" ? msg("buy") : msg("sell")}
-                    </span>
-                    <span className="truncate px-2 text-xs text-accent">{p.wallet}</span>
-                    <span className="font-mono text-2xs text-muted num">{p.sol.toFixed(3)} SOL</span>
-                  </li>
-                ))}
-                {prints.map((p) => (
-                  <li key={p.id} className="flex items-center justify-between border-b border-border py-1.5">
-                    <span className={cn("text-xs font-medium", p.side === "buy" ? "text-up" : "text-down")}>
-                      {p.side === "buy" ? msg("buy") : msg("sell")}
-                    </span>
-                    <span className="truncate px-2 text-2xs text-subtle">{p.wallet ?? "—"}</span>
-                    <span className="font-mono text-2xs text-muted num">{p.sol.toFixed(3)} SOL</span>
-                    <span className="font-mono text-2xs text-subtle num">{formatTime(p.ts)}</span>
-                  </li>
-                ))}
-              </ul>
+                </ul>
+              ) : (
+                <p className="text-sm text-muted">{holders ? msg("holdersNoRpc") : msg("loadingHoldings")}</p>
+              )
             ) : null}
           </div>
         </div>

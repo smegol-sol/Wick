@@ -6,11 +6,11 @@ export const Route = createFileRoute("/api/pulse")({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        if (!rateLimit(`pulse:${clientKey(request)}`, 24)) {
+        if (!rateLimit(`pulse:${clientKey(request)}`, 30)) {
           return jsonErr("rate", 429);
         }
-        const tokens = await loadSolanaPulse();
-        return jsonOk({ tokens });
+        const pulse = await loadSolanaPulse();
+        return jsonOk({ tokens: pulse.tokens, solUsd: pulse.solUsd, at: pulse.at });
       },
     },
   },

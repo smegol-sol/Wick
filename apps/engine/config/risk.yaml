@@ -1,0 +1,28 @@
+# Tier-1 numbers from ENGINE.md §5 and ADR-0005. The engine refuses to start
+# when `tier` and `executionWalletCapSol` disagree with the ladder.
+tier: 1
+executionWalletCapSol: 15
+perTradePct: 1.5
+poolSharePct: 1
+minTradeSol: 0.05
+maxOpenPositions: 6
+maxTokenExposurePct: 3
+youngTokenExposurePct: 50
+dailyHaltPct: -5
+weeklyHaltPct: -10
+losingStreakToSuggest: 4
+postLossDayMul: 0.5
+socialMulMin: 0.8
+socialMulMax: 1.2
+priorityFeeCapSol: 0.002
+feeReserveSol: 0.05
+quote:
+  maxAgeMs: 3000
+  maxImpactEntryPct: 3
+  maxImpactExitPct: 5
+  minHopLiquidityUsd: 10000
+health:
+  maxSlotLag: 20
+  maxSourceAgeSec: 30
+  decisionBudgetMs: 50
+  budgetBreachMinutes: 5

@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/* The desk's tokens (apps/desk/src/styles.css), unchanged, so the two apps read as one. */
+@theme {
+  --color-bg: #0a0b0c;
+  --color-surface: #111214;
+  --color-elevated: #18191c;
+  --color-fg: #ecece8;
+  --color-muted: #8b8b84;
+  --color-subtle: #5c5c56;
+  --color-border: color-mix(in oklab, #ecece8 10%, transparent);
+  --color-accent: #8aa07a;
+  --color-accent-fg: #0a0b0c;
+  --color-up: #7dcfb6;
+  --color-down: #c46b5a;
+  --color-warn: #c4a574;
+  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 0.9rem;
+  --shadow-border: 0 0 0 1px color-mix(in oklab, #ecece8 10%, transparent);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-quick: 150ms;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    color-scheme: dark;
+  }
+  body {
+    min-height: 100dvh;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    letter-spacing: -0.011em;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+    letter-spacing: -0.02em;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  :focus-visible {
+    outline: 1px solid color-mix(in oklab, var(--color-accent) 70%, transparent);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.kicker {
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.panel {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-border);
+}

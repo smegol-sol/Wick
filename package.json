@@ -1,0 +1,36 @@
+{
+  "name": "wick",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm -w @wick/desk run dev",
+    "build": "npm -w @wick/desk run build",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test --workspaces --if-present",
+    "smoke": "node scripts/smoke.mjs",
+    "audit": "npm audit --audit-level=high --omit=dev"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "@eslint/js": "^9.20.0",
+    "@types/node": "^22.16.5",
+    "eslint": "^9.20.0",
+    "eslint-config-prettier": "^10.1.1",
+    "eslint-plugin-prettier": "^5.2.6",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^15.15.0",
+    "playwright": "^1.62.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.56.1"
+  }
+}

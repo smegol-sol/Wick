@@ -1,0 +1,146 @@
+{
+  "uid": "wick-host",
+  "title": "WICK · Host",
+  "tags": ["wick"],
+  "timezone": "utc",
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "CPU busy %",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom" },
+      "targets": [
+        {
+          "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
+          "legendFormat": "busy",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0 }, "overrides": [] }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Memory used %",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom" },
+      "targets": [
+        {
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+          "legendFormat": "used",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 85 }
+            ]
+          },
+          "custom": { "thresholdsStyle": { "mode": "line" } }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Root disk used %",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom" },
+      "targets": [
+        {
+          "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"})",
+          "legendFormat": "used",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
+          "custom": { "thresholdsStyle": { "mode": "line" } }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Postgres: connections and DB size",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom" },
+      "targets": [
+        {
+          "expr": "sum(pg_stat_activity_count{datname=\"wick\"})",
+          "legendFormat": "connections",
+          "refId": "A"
+        },
+        {
+          "expr": "pg_database_size_bytes{datname=\"wick\"} / 1e9",
+          "legendFormat": "size GB",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Disk I/O (bytes/s)",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom" },
+      "targets": [
+        {
+          "expr": "sum(rate(node_disk_read_bytes_total[5m]))",
+          "legendFormat": "read",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(node_disk_written_bytes_total[5m]))",
+          "legendFormat": "write",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Network (bytes/s)",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom" },
+      "targets": [
+        {
+          "expr": "sum(rate(node_network_receive_bytes_total{device!~\"lo|docker.*|veth.*\"}[5m]))",
+          "legendFormat": "in",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(node_network_transmit_bytes_total{device!~\"lo|docker.*|veth.*\"}[5m]))",
+          "legendFormat": "out",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] }
+    }
+  ]
+}

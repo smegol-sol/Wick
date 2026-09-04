@@ -1,0 +1,184 @@
+# WICK engine host (ADR-0003, ADR-0009). One VPS, no public ports except SSH.
+# Everything listens on the Docker network or on the Tailscale address only.
+#
+#   cp .env.example .env && edit it
+#   docker compose up -d
+#   docker compose logs -f engine
+
+name: wick
+
+x-restart: &restart
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  db:
+    <<: *restart
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_DB: wick
+      POSTGRES_USER: wick
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      TIMESCALEDB_TELEMETRY: "off"
+    command: >
+      postgres -c shared_buffers=1GB -c effective_cache_size=3GB -c work_mem=32MB
+               -c max_connections=60 -c timescaledb.max_background_workers=8
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wick -d wick"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  redis:
+    <<: *restart
+    image: redis:7-alpine
+    command:
+      [
+        "redis-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--maxmemory",
+        "256mb",
+        "--maxmemory-policy",
+        "allkeys-lru",
+      ]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  engine:
+    <<: *restart
+    build:
+      context: ../../..
+      dockerfile: apps/engine/Dockerfile
+    image: wick-engine:local
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://wick:${POSTGRES_PASSWORD}@db:5432/wick
+      REDIS_URL: redis://redis:6379
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-}
+      HEALTHCHECK_URL: ${HEALTHCHECK_URL:-}
+      ENGINE_HTTP_HOST: 0.0.0.0
+      ENGINE_HTTP_PORT: "9464"
+      DASHBOARD_TOKEN: ${DASHBOARD_TOKEN:?set DASHBOARD_TOKEN in .env}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RISK_FILE: /repo/apps/engine/config/risk.yaml
+    volumes:
+      - ../config/risk.yaml:/repo/apps/engine/config/risk.yaml:ro
+      - vault:/var/lib/wick
+
+  prometheus:
+    <<: *restart
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - promdata:/prometheus
+
+  alertmanager:
+    <<: *restart
+    image: prom/alertmanager:v0.27.0
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN in .env}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?set TELEGRAM_CHAT_ID in .env}
+    entrypoint: ["/bin/sh", "-c"]
+    # Alertmanager does not expand env vars itself; render the template first.
+    command:
+      - >
+        sed -e "s|__TELEGRAM_BOT_TOKEN__|$$TELEGRAM_BOT_TOKEN|g" -e "s|__TELEGRAM_CHAT_ID__|$$TELEGRAM_CHAT_ID|g"
+        /etc/alertmanager/alertmanager.tpl.yml > /tmp/alertmanager.yml &&
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.tpl.yml:ro
+      - amdata:/alertmanager
+
+  grafana:
+    <<: *restart
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-wick}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?set GRAFANA_PASSWORD in .env}
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://${TAILSCALE_HOSTNAME:-wick}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafdata:/var/lib/grafana
+
+  node-exporter:
+    <<: *restart
+    image: prom/node-exporter:v1.8.2
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /:/host:ro,rslave
+
+  postgres-exporter:
+    <<: *restart
+    image: prometheuscommunity/postgres-exporter:v0.16.0
+    environment:
+      DATA_SOURCE_NAME: postgresql://wick:${POSTGRES_PASSWORD}@db:5432/wick?sslmode=disable
+    depends_on:
+      db: { condition: service_healthy }
+
+  redis-exporter:
+    <<: *restart
+    image: oliver006/redis_exporter:v1.66.0
+    environment:
+      REDIS_ADDR: redis://redis:6379
+
+  caddy:
+    <<: *restart
+    image: caddy:2.9-alpine
+    # Bind only to the tailnet address; nothing on 0.0.0.0.
+    ports:
+      - "${TAILSCALE_IP:?set TAILSCALE_IP in .env}:80:80"
+    environment:
+      DASHBOARD_TOKEN: ${DASHBOARD_TOKEN:?set DASHBOARD_TOKEN in .env}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../../console/dist:/srv/console:ro
+      - caddydata:/data
+    depends_on: [engine, grafana, prometheus]
+
+  backup:
+    <<: *restart
+    image: timescale/timescaledb:2.17.2-pg16
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      HEALTHCHECK_BACKUP_URL: ${HEALTHCHECK_BACKUP_URL:-}
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - backups:/backups
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  dbdata:
+  vault:
+  promdata:
+  amdata:
+  grafdata:
+  caddydata:
+  backups:

@@ -18,6 +18,7 @@ export type CollectorConfig = SamplerConfig & { auditEveryMs: number; slotPollMs
 
 export type CollectorState = {
   lastOk: Record<string, number>;
+  solUsd: number | null;
   slotLag: number | null;
   lastSlotReadings: { url: string; slot: number | null; ms: number }[];
 };
@@ -31,7 +32,12 @@ function auditKey(a: Audit): string {
 }
 
 export class Collector {
-  readonly state: CollectorState = { lastOk: {}, slotLag: null, lastSlotReadings: [] };
+  readonly state: CollectorState = {
+    lastOk: {},
+    solUsd: null,
+    slotLag: null,
+    lastSlotReadings: [],
+  };
   readonly sampler: Sampler;
   private latest = new Map<string, SourceToken>();
   private auditedAt = new Map<string, { at: number; key: string }>();
@@ -79,7 +85,10 @@ export class Collector {
       for (const b of batches) {
         m.sourceCallDuration.observe({ source: b.source }, (performance.now() - t0) / 1000);
         if (b.tokens.length) this.mark(b.source, b.at);
-        if (b.solUsd != null) this.mark("jupiter-price", b.at);
+        if (b.solUsd != null) {
+          this.mark("jupiter-price", b.at);
+          this.state.solUsd = b.solUsd;
+        }
         let dexFresh = 0;
         for (const tk of b.tokens) {
           this.latest.set(tk.mint, tk);

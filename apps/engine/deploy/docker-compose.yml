@@ -70,6 +70,7 @@ services:
       HEALTHCHECK_URL: ${HEALTHCHECK_URL:-}
       ENGINE_HTTP_HOST: 0.0.0.0
       ENGINE_HTTP_PORT: "9464"
+      DASHBOARD_TOKEN: ${DASHBOARD_TOKEN:?set DASHBOARD_TOKEN in .env}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       RISK_FILE: /repo/apps/engine/config/risk.yaml
     volumes:
@@ -155,6 +156,7 @@ services:
       DASHBOARD_TOKEN: ${DASHBOARD_TOKEN:?set DASHBOARD_TOKEN in .env}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../../console/dist:/srv/console:ro
       - caddydata:/data
     depends_on: [engine, grafana, prometheus]
 

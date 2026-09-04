@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createApi } from "./api/server.ts";
 import { makeSolanaAdapter } from "./chains/solana/index.ts";
 import { loadRisk, parseEnv } from "./config.ts";
 import { migrate } from "./db/migrate.ts";
@@ -71,7 +72,19 @@ async function main(): Promise<void> {
     );
 
   const stopLoop = m.watchEventLoop();
-  const server = startHttp(cfg.httpHost, cfg.httpPort, { health, version: version() });
+  const token = process.env.DASHBOARD_TOKEN?.trim() || null;
+  if (!token)
+    log.warn("DASHBOARD_TOKEN unset; the API accepts every caller (local development only)");
+  const api = createApi({
+    db,
+    health,
+    version: version(),
+    tier: risk.tier,
+    walletCapSol: risk.executionWalletCapSol,
+    solUsd: () => collector.state.solUsd,
+    token,
+  });
+  const server = startHttp(cfg.httpHost, cfg.httpPort, { health, version: version(), api });
   m.up.set(1);
   collector.start();
   log.info("listening", { host: cfg.httpHost, port: cfg.httpPort });

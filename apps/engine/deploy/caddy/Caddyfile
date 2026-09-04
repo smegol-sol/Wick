@@ -29,7 +29,10 @@
 		reverse_proxy engine:9464
 	}
 
+	# The console (apps/console/dist), built on the host with `npm run build -w @wick/console`.
 	handle {
-		respond "wick" 200
+		root * /srv/console
+		try_files {path} /index.html
+		file_server
 	}
 }

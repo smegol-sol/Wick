@@ -57,7 +57,7 @@ Every mutating call is written to `events` with who, when and from where.
 ### 4. The control surface is the WICK web app as an installed PWA, plus a Telegram bot. No native app in v1.
 
 - **PWA:** the existing app becomes the read-and-approve client (ENGINE §17): intents with their reasons, approve/reject, funnel, rule stats, halt, unseal. Installed on the phone it behaves like an app, works over the tailnet, and needs no store review. Push notifications come from the bot, not from the browser.
-- **Telegram bot:** alerts, the daily report, and three commands restricted to the owner's chat id: `/halt` (immediate, no second factor), `/approve <id> <totp>`, `/status`. The bot never unseals the vault and never clears a halt; those need the PWA and a second factor.
+- **Telegram bot:** alerts, the daily report, and two commands restricted to the owner's chat id: `/halt` (immediate, no second factor) and `/status`. The bot never approves, never unseals the vault and never clears a halt; those need the PWA and a second factor. (Amended 2026-09-04: `/approve <id> <totp>` was in the first version; it was removed for v1 because a command that stops money is worth exposing to a chat bot and a command that moves money is not. Revisited in Phase 5.)
 - **Native app:** rejected for v1. It would cost weeks, need store review for a crypto trading app, and add a second client to secure, for nothing the PWA over Tailscale does not already give on the phone. Revisit only if the PWA proves inadequate in daily use.
 
 ## Consequences

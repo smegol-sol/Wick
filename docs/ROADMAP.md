@@ -55,8 +55,11 @@ Exit condition: 72 hours of uninterrupted stream, the Operations board showing e
 - [ ] The vault on the host and unsealing from the console, the kill-switch file, wallet and tier caps in code.
 - [ ] Every mutating API call writes an `events` row; approve, halt and unseal wired to the executor (ADR-0009).
 - [ ] The console in live mode: intents with their reasons, adjustments and regime reason; approve and reject; funnel; halt; unseal with the second factor. The desk retires.
-- [ ] The Telegram bot: alerts, the daily report, and `/halt`, `/approve` with TOTP and `/status`, restricted to the owner's chat id.
+- [ ] The Telegram bot: alerts, the daily report, `/status` and `/halt`, restricted to the owner's chat id. No `/approve` in v1: approval stays in the console on the tailnet (ADR-0009, amended).
 - [ ] `outcomes` for every intent at 5, 30 and 120 minutes, executed or rejected.
+- [ ] A decision fingerprint on every intent: the rules-file hash, the code version and the price source next to the stored features, so any decision can be reproduced after the rules change.
+- [ ] A resume point for the log stream: after a reconnect, the followed wallets' and the migration authority's signatures since the last seen one are fetched, so a dropped connection loses no print and no migration.
+- [ ] Before the first real SOL, moved up from Phase 5: a short written threat model, secret scanning in CI, and the failure drills in `docs/OPS.md` (RPC cut, Postgres stopped, unattended restart), each ending in a safe stop.
 - [ ] mirror-follow on webhooks with the copy gap measured.
 - [ ] Integration tests for the full path on devnet.
 
@@ -87,10 +90,10 @@ Exit condition: replay shows the full supply map improves the default rule's exp
 
 ## Phase 5: hardening and security (two weeks)
 
-- [ ] A written threat model and an external security review (a precondition for capital tier 3).
-- [ ] Strict CSP and local fonts in the console, passkeys instead of the bearer token, and a review of the bot's commands.
+- [ ] An external security review (a precondition for capital tier 3); the threat model itself moved to Phase 2.
+- [ ] Strict CSP and local fonts in the console, passkeys instead of the bearer token, and a decision on whether `/approve` returns to the bot.
 - [ ] Jito bundles as the tier-2 execution route with a written tip cap (ENGINE.md §12).
-- [ ] Failure drills: RPC cut, Postgres stopped, unattended restart; each must end in a safe stop.
+- [ ] Failure drills repeated on the production host after every custody change (first run moved to Phase 2).
 - [ ] Custody review (ADR-0003) against the capital ladder (ADR-0005): a separate signer or KMS at tier 3.
 - [ ] Time-sliced sizing and multiple execution wallets for tier 3.
 

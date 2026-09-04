@@ -44,7 +44,7 @@ Every document in the repository is English (§20).
 
    replay: the same decision + gates over stored features (ADR-0007)
    control plane: HTTP/WS API on the tailnet, the WICK PWA and a
-   Telegram bot (ADR-0009). Reads, approves, halts, unseals. Never signs.
+   Telegram bot (ADR-0009). Reads and halts. Never approves, never signs.
 ```
 
 One Node process at first, as separate modules with fixed contracts, split into processes only when a measurement says so. Postgres is the source of truth, Redis is for immediate hand-off only.
@@ -487,7 +487,7 @@ ADR-0009 §2–4 in short:
 
 - One HTTP + WebSocket API on the host, behind a reverse proxy that listens only on the Tailscale address. No public ports except key-only SSH. Every mutating call is an `events` row.
 - The WICK web app, installed as a PWA on the phone and laptop, is the read-and-approve client: intents with why, gate results and adjustments, funnel, rule stats, regime reason, halt, unseal. It gains a `server` mode that reads the API instead of calling sources itself.
-- A Telegram bot delivers alerts and the daily report and accepts three commands from the owner's chat id: `/halt` (immediate, no second factor), `/approve <id> <totp>`, `/status`. Unseal and halt-clear need the PWA plus a second factor.
+- A Telegram bot delivers alerts and the daily report and accepts two commands from the owner's chat id: `/halt` (immediate, no second factor) and `/status`. Approve, unseal and halt-clear need the PWA, the last two with a second factor (ADR-0009, amended).
 - Passkeys replace the bearer token in Phase 5. No native app in v1.
 
 ## 18. Chain adapters

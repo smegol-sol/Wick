@@ -422,7 +422,7 @@ chain_events(ts, mint, kind, sig, data jsonb)                                 --
 launch_txs(mint pk, slot, creator, buyers jsonb, bundle_pct, sniper_pct, parsed_at)
 audits(mint, at, program, mint_auth, freeze_auth, extensions jsonb, lp_state, top10, funding_flags jsonb)
 supply_maps(mint, at, dev_pct, bundle_pct, sniper_pct, fresh_pct, lp_pct, cluster_pct, trend, inputs jsonb)
-microstructure(mint, at, net_flow_1m, net_flow_5m, organic_vol_pct_5m, depth_buy_2pct, depth_sell_2pct)  -- hypertable
+microstructure(mint, at, net_flow_1m, net_flow_5m, organic_vol_pct_5m, depth_buy_2pct, depth_sell_2pct, buys_1m, sells_1m, buys_5m, sells_5m, unique_buyers_5m)  -- hypertable, 1s
 regime(at, sol_change_1h, breadth_5m, launches_ph, migrations_ph, safety_reject_rate_1h, size_mul, reason)
 wallets(pk pk, label, kind, tracked_since, status, stats jsonb)               -- kind: owner | discovered
 wallet_profiles(wallet pk, class, confidence, stats jsonb, profiled_at)

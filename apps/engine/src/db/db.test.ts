@@ -111,6 +111,12 @@ test(
             truncated: false,
           };
         },
+        async trades() {
+          return [];
+        },
+        async txSummary() {
+          return null;
+        },
         async quote() {
           return null;
         },
@@ -148,6 +154,8 @@ test(
         slotPollMs: 5000,
         launchPerTick: 2,
         launchRetryMs: 60_000,
+        followRefreshMs: 30_000,
+        migrationAuthority: "39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg",
       });
       await c.tick();
       const tok = await db.query("select symbol, stage from tokens where mint = $1", [mint]);

@@ -73,6 +73,37 @@ export const chainEvents = new client.Counter({
   registers: [registry],
 });
 
+export const streamConnected = new client.Gauge({
+  name: "wick_stream_connected",
+  help: "1 when the RPC WebSocket log stream is connected",
+  registers: [registry],
+});
+
+export const streamSubscriptions = new client.Gauge({
+  name: "wick_stream_subscriptions",
+  help: "Live logsSubscribe subscriptions",
+  registers: [registry],
+});
+
+export const streamEvents = new client.Counter({
+  name: "wick_stream_events_total",
+  help: "Log notifications handled, by what they became",
+  labelNames: ["kind"] as const,
+  registers: [registry],
+});
+
+export const walletPrints = new client.Counter({
+  name: "wick_wallet_prints_total",
+  help: "wallet_prints rows written",
+  registers: [registry],
+});
+
+export const microRows = new client.Counter({
+  name: "wick_microstructure_rows_total",
+  help: "microstructure rows written",
+  registers: [registry],
+});
+
 export const ingestCycle = new client.Histogram({
   name: "wick_ingest_cycle_duration_seconds",
   help: "One ingest tick, poll to commit",

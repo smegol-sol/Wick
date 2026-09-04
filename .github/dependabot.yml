@@ -9,6 +9,14 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+      # ESLint and its plugins move majors together; a lone @eslint/js bump cannot install.
+      eslint:
+        patterns: ["eslint", "@eslint/*", "typescript-eslint", "eslint-plugin-*"]
+        update-types: [major]
+    ignore:
+      # The desk's signing path is frozen until it retires (ADR-0010); 2.x renames the subpath exports.
+      - dependency-name: "@noble/curves"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

@@ -7,10 +7,13 @@ import { evaluateHealth, slotLagOf } from "./health.ts";
 import { Sampler } from "./ingest/sampler.ts";
 import { readMint } from "./chains/solana/extensions.ts";
 import { Collector } from "./ingest/collector.ts";
-import type { ChainAdapter, LaunchTx } from "@wick/core/chain";
-import type { Audit, Stage } from "@wick/core/contracts";
+import type { ChainAdapter, LaunchTx, Trade, TxSummary } from "@wick/core/chain";
+import type { Audit, Snapshot, Stage } from "@wick/core/contracts";
 import { classifyLp, keyBytes, parsePool } from "./chains/solana/lp.ts";
 import { parseLaunch, type ParsedTx, type SigInfo } from "./chains/solana/launch.ts";
+import { summaryOf, tradesOf } from "./chains/solana/trades.ts";
+import { FeatureBook } from "./ingest/features.ts";
+import { LogStream, wsUrlOf, type LogEvent } from "./ingest/stream.ts";
 import type { Db } from "./db/pool.ts";
 import { REASON_CODES, REASON_CODE_CAP, GATES } from "@wick/core/contracts";
 
@@ -272,6 +275,8 @@ test("reason codes stay inside the ADR-0008 budget", () => {
 
 type FakeChain = ChainAdapter & {
   audits: number;
+  tradesBySig: Map<string, Trade[]>;
+  summaries: Map<string, TxSummary>;
   launches: number;
   lp: Audit["lp"];
   launch: Omit<LaunchTx, "mint"> | null;
@@ -282,6 +287,8 @@ function fakeChain(): FakeChain {
   const chain = {
     chain: "solana" as const,
     audits: 0,
+    tradesBySig: new Map<string, Trade[]>(),
+    summaries: new Map<string, TxSummary>(),
     launches: 0,
     lp: null as Audit["lp"],
     launch: null as Omit<LaunchTx, "mint"> | null,
@@ -350,6 +357,12 @@ function fakeChain(): FakeChain {
       if (!chain.launch) return null;
       return { ...chain.launch, mint };
     },
+    async trades(sig: string) {
+      return chain.tradesBySig.get(sig) ?? [];
+    },
+    async txSummary(sig: string) {
+      return chain.summaries.get(sig) ?? null;
+    },
     async quote() {
       return null;
     },
@@ -399,6 +412,8 @@ test("collector writes tokens, snapshots and one audit per change, and feeds hea
     slotPollMs: 5000,
     launchPerTick: 2,
     launchRetryMs: 60_000,
+    followRefreshMs: 30_000,
+    migrationAuthority: MIGRATOR,
   });
   await c.tick();
   await c.pollSlots();
@@ -421,6 +436,8 @@ test("collector writes tokens, snapshots and one audit per change, and feeds hea
 });
 
 const MINT = "So11111111111111111111111111111111111111112";
+const MIGRATOR = "39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg";
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const LP_MINT = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const CREATOR = "Dev1111111111111111111111111111111111111111";
 const CURVE = "Curve11111111111111111111111111111111111111";
@@ -494,12 +511,13 @@ function tx(
   keys: string[],
   balances: { account: string; owner: string; pre: number; post: number }[],
   lamports: Record<string, [number, number]> = {},
+  mint = MINT,
 ): ParsedTx {
   const accountKeys = keys.map((pubkey, i) => ({ pubkey, signer: i === 0 }));
   const tb = (which: "pre" | "post") =>
     balances.map((b) => ({
       accountIndex: keys.indexOf(b.account),
-      mint: MINT,
+      mint,
       owner: b.owner,
       uiTokenAmount: { amount: String(b[which]), decimals: 6 },
     }));
@@ -631,6 +649,8 @@ test("collector parses each launch once, and writes migrate and lp_state events 
     slotPollMs: 5000,
     launchPerTick: 2,
     launchRetryMs: 0,
+    followRefreshMs: 0,
+    migrationAuthority: MIGRATOR,
   });
   const tick = async () => {
     await new Promise((r) => setTimeout(r, 8));
@@ -662,4 +682,273 @@ test("collector parses each launch once, and writes migrate and lp_state events 
     2,
     "an LP change is an audit change",
   );
+});
+
+test("trades and summary come from balance deltas of signers only", () => {
+  const t = tx(
+    500,
+    ["Trader", "traderAta", "curveAta"],
+    [
+      { account: "curveAta", owner: CURVE, pre: 900, post: 850 },
+      { account: "traderAta", owner: "Trader", pre: 0, post: 50 },
+    ],
+    { Trader: [3e9, 2.5e9] },
+    USDC,
+  );
+  const trades = tradesOf("sigA", t);
+  assert.deepEqual(trades, [
+    {
+      sig: "sigA",
+      slot: 500,
+      ts: (1_700_000_000 + 500) * 1000,
+      wallet: "Trader",
+      mint: USDC,
+      side: "buy",
+      sol: 0.5,
+      amount: 50 / 1e6,
+    },
+  ]);
+  const sum = summaryOf("sigA", t)!;
+  assert.deepEqual(sum.signers, ["Trader"]);
+  assert.deepEqual(sum.mints, [USDC]);
+  assert.equal(sum.holders[USDC], CURVE, "the largest non-signer holder is the pool");
+  assert.equal(sum.ok, true);
+  assert.deepEqual(tradesOf("x", { ...t, meta: { ...t.meta!, err: { some: 1 } } }), []);
+  assert.equal(summaryOf("x", null), null);
+});
+
+function fakeSocket() {
+  const handlers = new Map<string, ((...a: unknown[]) => void)[]>();
+  const sent: { id: number; method: string; params: unknown[] }[] = [];
+  const sock = {
+    readyState: 1,
+    send: (d: string) => sent.push(JSON.parse(d)),
+    close: () => sock.emit("close"),
+    on: (ev: string, cb: (...a: unknown[]) => void) => {
+      handlers.set(ev, [...(handlers.get(ev) ?? []), cb]);
+    },
+    emit: (ev: string, ...a: unknown[]) => {
+      for (const cb of handlers.get(ev) ?? []) cb(...a);
+    },
+    sent,
+  };
+  return sock;
+}
+
+test("log stream subscribes to the wanted set, maps notifications, and resubscribes after a drop", () => {
+  const events: LogEvent[] = [];
+  const sockets: ReturnType<typeof fakeSocket>[] = [];
+  const stream = new LogStream("wss://rpc.example", {
+    onEvent: (e) => events.push(e),
+    connect: () => {
+      const s = fakeSocket();
+      sockets.push(s);
+      return s;
+    },
+    backoffMs: 1,
+  });
+  stream.setAddresses(["A", "B"]);
+  stream.start();
+  const s1 = sockets[0]!;
+  s1.emit("open");
+  assert.deepEqual(
+    s1.sent.map((m) => [m.method, (m.params[0] as { mentions: string[] }).mentions[0]]),
+    [
+      ["logsSubscribe", "A"],
+      ["logsSubscribe", "B"],
+    ],
+  );
+  stream.onMessage(JSON.stringify({ jsonrpc: "2.0", id: s1.sent[0]!.id, result: 11 }));
+  stream.onMessage(JSON.stringify({ jsonrpc: "2.0", id: s1.sent[1]!.id, result: 12 }));
+  assert.equal(stream.state.subscribed, 2);
+  stream.onMessage(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      method: "logsNotification",
+      params: {
+        subscription: 12,
+        result: { context: { slot: 77 }, value: { signature: "sigB", err: null, logs: ["x"] } },
+      },
+    }),
+  );
+  assert.equal(events.length, 1);
+  assert.equal(events[0]!.address, "B");
+  assert.equal(events[0]!.slot, 77);
+  stream.setAddresses(["B", "C"]);
+  const after = s1.sent.slice(2).map((m) => m.method);
+  assert.deepEqual(after, ["logsSubscribe", "logsUnsubscribe"]);
+  assert.equal(stream.state.subscribed, 1);
+  s1.emit("close");
+  assert.equal(stream.state.connected, false);
+  stream.stop();
+  assert.equal(
+    wsUrlOf("https://mainnet.helius-rpc.com/?api-key=k"),
+    "wss://mainnet.helius-rpc.com/?api-key=k",
+  );
+});
+
+test("feature book: flow and depth from reserves, stream counts, follow prints, and null when unknown", () => {
+  const book = new FeatureBook();
+  const t0 = 1_700_000_000_000;
+  const snap = (ts: number, liq: number): Snapshot => ({
+    ts,
+    mint: MINT,
+    price: 0.001,
+    mc: 1000,
+    liq,
+    vol5m: null,
+    vol24: null,
+    tx24: null,
+    buys5m: 4,
+    sells5m: 1,
+    holders: 100,
+    top10: null,
+    source: "pump.fun",
+    statsAt: null,
+  });
+  assert.equal(book.features(MINT, t0), null, "nothing known yet");
+  book.noteToken(MINT, "bonding", t0 - 120_000);
+  book.noteSnapshot(snap(t0 - 300_000, 1000), 100);
+  book.noteSnapshot(snap(t0 - 70_000, 1500), 100);
+  book.noteSnapshot(snap(t0, 2000), 100);
+  const micro = book.micro(MINT, t0)!;
+  assert.equal(micro.netFlowSol1m, 5, "1,500 to 2,000 USD at 100 USD/SOL");
+  assert.equal(micro.netFlowSol5m, 10);
+  assert.ok(Math.abs(micro.depthBuy2PctUsd! - (20 + 30) * (Math.sqrt(1.02) - 1) * 100) < 1e-9);
+  assert.equal(micro.organicVolPct5m, null);
+  book.noteTradeSeen(MINT, "buy", t0 - 500);
+  book.noteTradeSeen(MINT, "buy", t0 - 400);
+  book.noteTradeSeen(MINT, "sell", t0 - 90_000);
+  assert.deepEqual(book.counts(MINT, t0, 60_000), { buys: 2, sells: 0 });
+  assert.deepEqual(book.counts(MINT, t0, 300_000), { buys: 2, sells: 1 });
+  assert.equal(book.counts("other", t0, 60_000), null);
+  book.notePrint(
+    { sig: "p1", slot: 1, ts: t0 - 1000, wallet: "W", mint: MINT, side: "buy", sol: 1, amount: 5 },
+    t0,
+  );
+  const f = book.features(MINT, t0)!;
+  assert.equal(f.ageSec, 120);
+  assert.equal(f.stage, "bonding");
+  assert.equal(f.followBuys3m, 1);
+  assert.equal(f.uniqueBuyers5m, null);
+  assert.equal(f.supply, null);
+  assert.equal(f.micro?.netFlowSol1m, 5);
+});
+
+test("collector: prints from followed wallets, migrations from the authority, trade counts into microstructure", async () => {
+  const queries: { sql: string; values: unknown[] }[] = [];
+  const db = {
+    query: async (sql: string, values: unknown[] = []) => {
+      queries.push({ sql, values });
+      if (sql.includes("from wallets")) return { rows: [{ pk: "Follower" }] };
+      return { rows: [] };
+    },
+  } as unknown as Db;
+  const chain = fakeChain();
+  chain.tradesBySig.set("printSig", [
+    {
+      sig: "printSig",
+      slot: 9,
+      ts: 1_700_000_000_000,
+      wallet: "Follower",
+      mint: "M2",
+      side: "sell",
+      sol: 0.7,
+      amount: 12,
+    },
+    {
+      sig: "printSig",
+      slot: 9,
+      ts: 1_700_000_000_000,
+      wallet: "Other",
+      mint: "M2",
+      side: "buy",
+      sol: 0.7,
+      amount: 12,
+    },
+  ]);
+  chain.summaries.set("migSig", {
+    sig: "migSig",
+    slot: 20,
+    ts: 1_700_000_000_000,
+    ok: true,
+    signers: [MIGRATOR],
+    mints: [MINT],
+    holders: { [MINT]: "PoolPda" },
+  });
+  const c = new Collector(db, chain, {
+    activeSampleMs: 5,
+    coolingSampleMs: 60_000,
+    activeWindowMs: 7_200_000,
+    coolingWindowMs: 86_400_000,
+    auditEveryMs: 600_000,
+    slotPollMs: 5000,
+    launchPerTick: 0,
+    launchRetryMs: 60_000,
+    followRefreshMs: 0,
+    migrationAuthority: MIGRATOR,
+  });
+  await c.tick();
+  const at = Date.now();
+  await c.onLog({ address: "Follower", signature: "printSig", slot: 9, err: null, logs: [], at });
+  const print = queries.find((q) => q.sql.includes("insert into wallet_prints"));
+  assert.ok(print, "one print for the followed wallet only");
+  assert.equal(print.values[1], "Follower");
+  assert.equal(print.values[5], "sell");
+  assert.equal(queries.filter((q) => q.sql.includes("insert into wallet_prints")).length, 1);
+
+  await c.onLog({
+    address: MIGRATOR,
+    signature: "migSig",
+    slot: 20,
+    err: null,
+    logs: ["Program log: Instruction: Migrate"],
+    at,
+  });
+  const mig = queries.find(
+    (q) => q.sql.includes("insert into chain_events") && q.values[2] === "migrate",
+  );
+  assert.ok(mig);
+  assert.equal(mig.values[3], "migSig");
+  assert.equal(JSON.parse(mig.values[4] as string).pair, "PoolPda");
+  await c.onLog({ address: MIGRATOR, signature: "migSig", slot: 20, err: null, logs: ["x"], at });
+  assert.equal(
+    queries.filter((q) => q.values[2] === "migrate").length,
+    1,
+    "a signature is handled once",
+  );
+
+  await c.onLog({
+    address: MINT,
+    signature: "t1",
+    slot: 21,
+    err: null,
+    logs: ["Program log: Instruction: Buy"],
+    at,
+  });
+  await c.onLog({
+    address: MINT,
+    signature: "t2",
+    slot: 21,
+    err: null,
+    logs: ["Program log: Instruction: Sell"],
+    at,
+  });
+  await c.onLog({
+    address: MINT,
+    signature: "t3",
+    slot: 21,
+    err: { failed: 1 },
+    logs: ["Program log: Instruction: Buy"],
+    at,
+  });
+  await new Promise((r) => setTimeout(r, 8));
+  await c.tick();
+  const micro = queries.filter((q) => q.sql.includes("insert into microstructure")).at(-1)!;
+  assert.ok(micro);
+  assert.equal(micro.values[1], MINT);
+  assert.equal(micro.values[7], 1, "buys_1m counts the successful buy");
+  assert.equal(micro.values[8], 1, "sells_1m");
+  assert.equal(micro.values[11], null, "unique buyers stay unknown");
+  assert.ok(c.book.features(MINT, Date.now()), "features assemble for the active mint");
 });

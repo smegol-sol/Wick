@@ -1,11 +1,12 @@
 /**
  * Ingest v1: polls the chain adapter's sources every second, keeps the
- * active/cooling set (ADR-0007), writes `tokens`, `token_snapshots` and
- * `audits`, and feeds source heartbeats and slot lag to health and metrics.
- * It decides nothing.
+ * active/cooling set (ADR-0007), writes `tokens`, `token_snapshots`,
+ * `audits`, `launch_txs` and the `chain_events` polling can see (create,
+ * migrate, LP state), and feeds source heartbeats and slot lag to health and
+ * metrics. It decides nothing.
  */
-import type { ChainAdapter, SourceToken } from "@wick/core/chain";
-import type { Audit, Snapshot } from "@wick/core/contracts";
+import type { ChainAdapter, LaunchTx, SourceToken } from "@wick/core/chain";
+import type { Audit, Snapshot, Stage } from "@wick/core/contracts";
 import type { Db } from "../db/pool.ts";
 import { slotLagOf } from "../health.ts";
 import { errText, logger } from "../log.ts";
@@ -14,7 +15,15 @@ import { Sampler, type SamplerConfig } from "./sampler.ts";
 
 const log = logger("ingest");
 
-export type CollectorConfig = SamplerConfig & { auditEveryMs: number; slotPollMs: number };
+export type CollectorConfig = SamplerConfig & {
+  auditEveryMs: number;
+  slotPollMs: number;
+  /** Launch parses started per tick, and how long to wait before retrying one that found nothing. */
+  launchPerTick: number;
+  launchRetryMs: number;
+};
+
+const LAUNCH_TRIES = 3;
 
 export type CollectorState = {
   lastOk: Record<string, number>;
@@ -40,7 +49,9 @@ export class Collector {
   };
   readonly sampler: Sampler;
   private latest = new Map<string, SourceToken>();
-  private auditedAt = new Map<string, { at: number; key: string }>();
+  private stages = new Map<string, Stage>();
+  private auditedAt = new Map<string, { at: number; key: string; lp: Audit["lp"] }>();
+  private launches = new Map<string, { tries: number; at: number; done: boolean }>();
   private timers: NodeJS.Timeout[] = [];
   private stopped = false;
   private ticking = false;
@@ -93,6 +104,7 @@ export class Collector {
         for (const tk of b.tokens) {
           this.latest.set(tk.mint, tk);
           this.sampler.seen(tk.mint, now);
+          await this.noteStage(tk, now);
           if (tk.snapshot.statsAt != null && now - tk.snapshot.statsAt < 15_000) dexFresh++;
         }
         if (dexFresh) this.mark("dexscreener", now);
@@ -118,6 +130,7 @@ export class Collector {
       await this.writeSnapshots(rows);
       this.sampler.sampled([...due.active, ...due.cooling], now);
       await this.auditDue(due.active, now, ctrl.signal);
+      await this.launchDue(due.active, now, ctrl.signal);
 
       const counts = this.sampler.counts(now);
       m.activeTokens.set({ state: "active" }, counts.active);
@@ -206,8 +219,12 @@ export class Collector {
     for (const mint of todo.slice(0, 5)) {
       let audit: Audit | null = null;
       const t0 = performance.now();
+      const tk = this.latest.get(mint);
       try {
-        audit = await this.chain.audit(mint, signal);
+        audit = await this.chain.audit(
+          { mint, stage: tk?.stage ?? "new", pair: tk?.pair ?? null },
+          signal,
+        );
       } catch (e) {
         log.warn("audit failed", { err: errText(e) });
       }
@@ -216,7 +233,15 @@ export class Collector {
       this.mark("rpc");
       const key = auditKey(audit);
       const prev = this.auditedAt.get(mint);
-      this.auditedAt.set(mint, { at: now, key });
+      this.auditedAt.set(mint, { at: now, key, lp: audit.lp });
+      if (prev && prev.lp !== audit.lp && audit.lp != null) {
+        await this.writeEvent(now, mint, "lp_state", null, {
+          source: "poll",
+          from: prev.lp,
+          to: audit.lp,
+          ...(audit.lpRead ?? {}),
+        });
+      }
       if (prev?.key === key) continue;
       try {
         await this.db.query(
@@ -239,6 +264,98 @@ export class Collector {
         m.dbErrors.inc({ op: "audits" });
         log.error("audit insert failed", { err: errText(e) });
       }
+    }
+  }
+
+  /** A stage change seen by polling is a chain event too, until the webhooks carry it. */
+  private async noteStage(tk: SourceToken, now: number): Promise<void> {
+    const prev = this.stages.get(tk.mint);
+    this.stages.set(tk.mint, tk.stage);
+    if (prev && prev !== "migrated" && tk.stage === "migrated") {
+      await this.writeEvent(now, tk.mint, "migrate", null, {
+        source: "poll",
+        from: prev,
+        pair: tk.pair,
+      });
+    }
+  }
+
+  /** Parse each active mint's launch once; retry a few times when the history is not readable yet. */
+  private async launchDue(active: string[], now: number, signal: AbortSignal): Promise<void> {
+    const tries = (mint: string) => this.launches.get(mint)?.tries ?? 0;
+    const todo = active
+      .filter((mint) => {
+        const l = this.launches.get(mint);
+        return !l || (!l.done && l.tries < LAUNCH_TRIES && now - l.at >= this.cfg.launchRetryMs);
+      })
+      .sort((a, b) => tries(a) - tries(b));
+    for (const mint of todo.slice(0, this.cfg.launchPerTick)) {
+      const l = this.launches.get(mint) ?? { tries: 0, at: 0, done: false };
+      l.tries++;
+      l.at = now;
+      this.launches.set(mint, l);
+      let launch: LaunchTx | null = null;
+      const t0 = performance.now();
+      try {
+        launch = await this.chain.launchTx(mint, signal);
+      } catch (e) {
+        log.warn("launch parse failed", { err: errText(e), mint });
+      }
+      m.sourceCallDuration.observe({ source: "rpc" }, (performance.now() - t0) / 1000);
+      if (!launch) {
+        if (l.tries >= LAUNCH_TRIES) log.warn("launch not parsed, giving up", { mint });
+        continue;
+      }
+      this.mark("rpc");
+      l.done = true;
+      await this.writeLaunch(launch);
+    }
+  }
+
+  private async writeLaunch(l: LaunchTx): Promise<void> {
+    try {
+      await this.db.query(
+        `insert into launch_txs (mint, slot, creator, buyers, bundle_pct, sniper_pct)
+         values ($1,$2,$3,$4,$5,$6) on conflict (mint) do nothing`,
+        [l.mint, l.slot, l.creator, JSON.stringify(l.buyers), l.bundlePct, l.sniperPct],
+      );
+      await this.db.query(`update tokens set creator = $2 where mint = $1 and creator is null`, [
+        l.mint,
+        l.creator,
+      ]);
+      m.launchTxsParsed.inc();
+    } catch (e) {
+      m.dbErrors.inc({ op: "launch_txs" });
+      log.error("launch insert failed", { err: errText(e), mint: l.mint });
+      return;
+    }
+    await this.writeEvent(l.ts ?? Date.now(), l.mint, "create", l.sig, {
+      source: "rpc",
+      slot: l.slot,
+      creator: l.creator,
+      buyers: l.buyers.length,
+      bundlePct: l.bundlePct,
+      sniperPct: l.sniperPct,
+      truncated: l.truncated,
+    });
+  }
+
+  private async writeEvent(
+    at: number,
+    mint: string,
+    kind: string,
+    sig: string | null,
+    data: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.db.query(
+        `insert into chain_events (ts, mint, kind, sig, data) values ($1,$2,$3,$4,$5)`,
+        [ts(at), mint, kind, sig, JSON.stringify(data)],
+      );
+      m.chainEvents.inc({ kind });
+    } catch (e) {
+      m.dbErrors.inc({ op: "chain_events" });
+      log.error("chain event insert failed", { err: errText(e), kind, mint });
     }
   }
 

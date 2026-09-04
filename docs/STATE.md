@@ -30,7 +30,7 @@ Last updated: 2026-09-04 · branch `claude/new-project-review-h5rmic`
 - **Control plane and operations (ADR-0009):** an HTTP/WS API on Tailscale only, the console as an installed PWA, a Telegram bot for alerts and `/halt` and `/approve`, no native app; exporters, Alertmanager, a dead-man ping and self-halt on bad health.
 - **Language:** the whole platform is English: code, identifiers, strings, documents, the state ledger and the roadmap. No second language in the UI.
 - **Numbers:** any number without a source is `null` and renders n/a; filters reject unknown (ADR-0001).
-- **Merging:** squash to `main`; the PR title is checked by commitlint. Standing rule (owner, 2026-09-04): the assistant performs the merge, only after the owner's explicit permission for that specific merge; no PR is opened or merged unasked. Merge plan adopted the same day (`CONTRIBUTING.md`): one foundation PR, then one PR per verifiable slice, a tag on `main` at the end of each phase, deploys from tags only.
+- **Merging:** squash to `main`; the PR title is checked by commitlint. Standing rule (owner, 2026-09-04): the assistant performs the merge, only after the owner's explicit permission for that specific merge; a PR is opened without asking (standing permission, 2026-09-04) and is never merged unasked. Merge plan adopted the same day (`CONTRIBUTING.md`): one foundation PR, then one PR per verifiable slice, a tag on `main` at the end of each phase, deploys from tags only.
 
 ## Open
 

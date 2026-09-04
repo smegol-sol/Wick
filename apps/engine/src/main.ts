@@ -56,6 +56,8 @@ async function main(): Promise<void> {
     coolingWindowMs: cfg.coolingWindowMs,
     auditEveryMs: cfg.auditEveryMs,
     slotPollMs: cfg.slotPollMs,
+    launchPerTick: 2,
+    launchRetryMs: 60_000,
   });
 
   const health = (): Health =>

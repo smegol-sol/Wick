@@ -30,7 +30,13 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
-      - run: npm run audit
+      - name: audit (the registry's audit endpoint is flaky; three attempts, a real finding fails all three)
+        run: |
+          for attempt in 1 2 3; do
+            if npm run audit; then exit 0; fi
+            if [ "$attempt" -lt 3 ]; then echo "audit attempt $attempt failed, retrying in 30s"; sleep 30; fi
+          done
+          exit 1
       - name: commitlint (PR title, which squash-merge lands on main)
         if: github.event_name == 'pull_request'
         env:

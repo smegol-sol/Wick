@@ -3,7 +3,7 @@
 ## Branches and merging
 
 - `main` is protected: no direct pushes, one review, green CI, squash merge.
-- **Who merges (standing rule):** the assistant performs merges to `main`, and only after the owner's explicit permission for that specific merge, given in the chat. A pull request is opened and merged only when asked; permission for one merge never carries over to the next.
+- **Who merges (standing rule):** the assistant performs merges to `main`, and only after the owner's explicit permission for that specific merge, given in the chat. Permission for one merge never carries over to the next. Opening a pull request is covered by a standing permission: the assistant opens one whenever a slice is ready, without asking.
 - Work on a branch named `feat/...`, `fix/...`, `chore/...` or `docs/...`.
 - Open a PR early. The PR template asks whether the change touches the money path; answer it honestly.
 - Every PR that moves the project forward updates `docs/STATE.md` (phase table, open items, session log).
@@ -24,7 +24,7 @@ The checks appear in the search box only after they have run once on a pull requ
 1. **The foundation PR is the one exception to "small PRs".** `main` started empty, so everything built before it lands in one squash (PR #1). Its branch stays reachable from the PR as the detailed record.
 2. **After it: one PR per verifiable slice of work, never per phase.** Examples: the LP state reader with launch-transaction parsing; the webhooks with the features row; the VPS bring-up with its recorded result. Target 1,000 to 1,500 changed lines so a PR is reviewed in one sitting.
 3. **Every PR:** the three checks green, `docs/STATE.md` updated in the same PR, a Conventional Commits title (it is what lands on `main`), and any file under CODEOWNERS (the money path) named explicitly in the description.
-4. **Permission twice, every time:** once to open the PR, once to merge it, each valid for that one operation (the standing rule above).
+4. **Permission to merge, every time:** opening a PR is covered by the standing permission; merging one needs the owner's explicit go-ahead for that PR (the standing rule above).
 5. **After each merge:** the work branch restarts from the new `main` under the same name; nothing is stacked on merged history.
 6. **End of each phase:** a tag on `main` (`v0.1.0` when Phase 1 closes, and so on). The host deploys from a tag on `main` only, never from a branch.
 

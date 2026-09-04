@@ -27,10 +27,10 @@ Exit condition: a PR fails when it breaks a test and cannot merge without review
 - [x] Docker Compose for the host: engine, Postgres+Timescale, Redis, Prometheus, Grafana, Alertmanager, exporters, Caddy, daily backup (`apps/engine/deploy`). Awaits the real VPS.
 - [x] Database schema from ENGINE.md §14 with migrations and the retention policy from ADR-0007 (0001 tables; 0002 hypertables, compression, retention and the 10-second aggregate; tested in CI on TimescaleDB).
 - [x] `ingest`: pump.fun, DexScreener and the mint audit (moved from the desk), Token-2022 extension checks.
-- [ ] LP state (burned / locked / deployer) from the pool account.
+- [x] LP state (burned / locked / deployer) from the pool account: PumpSwap and Raydium v4 layouts, LP supply and largest holders, known lockers; `curve` on the bonding curve; unknown stays `null` (holders need a private RPC).
 - [ ] Helius webhooks for create, migrate, LP and followed-wallet events (instead of polling).
-- [ ] Launch transaction parsing (`launch_txs`): creator, buyers in the create slot and the next three, snipers in the first ten.
-- [x] Data collection as an explicit deliverable: a snapshot every second for active tokens, every 60 seconds for cooling ones, audits on change only (ADR-0007). Chain events wait for the webhooks.
+- [x] Launch transaction parsing (`launch_txs`): creator, buyers in the create slot and the next three, snipers in the first ten, from token-balance deltas; parsed once per mint, capped at 60 transactions.
+- [x] Data collection as an explicit deliverable: a snapshot every second for active tokens, every 60 seconds for cooling ones, audits on change only (ADR-0007). `chain_events` carries what polling can see (create, migrate, LP state); the rest waits for the webhooks.
 - [ ] A `features` row every second per active mint, with `uniqueBuyers5m` from events.
 - [x] `/metrics` with the liveness and ingest metrics from ENGINE.md §15, the Operations and Host boards.
 - [ ] The Quality board (waits for the decision layer).

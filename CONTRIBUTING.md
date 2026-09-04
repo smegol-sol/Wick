@@ -7,7 +7,16 @@
 - Open a PR early. The PR template asks whether the change touches the money path; answer it honestly.
 - Every PR that moves the project forward updates `docs/STATE.md` (phase table, open items, session log).
 
-Branch protection is a repository setting, not code. Settings → Branches → Add rule for `main`: require a pull request with 1 approval, require status checks `checks` and `build-and-smoke`, require linear history, block force pushes.
+Branch protection is a repository setting, not code. GitHub → the repository → Settings → Rules → Rulesets → New ruleset → New branch ruleset:
+
+- Name `main`, Enforcement status `Active`, Target branches → Add target → `Include default branch`.
+- Rules: `Restrict deletions`, `Block force pushes`, `Require linear history`, `Require a pull request before merging` (required approvals `0` while there is one maintainer; `1` once a second one exists), `Require status checks to pass` with `Require branches to be up to date before merging` and these three checks, typed exactly as the workflow names them:
+  - `typecheck · lint · format · test · audit`
+  - `engine · migrations on TimescaleDB`
+  - `build · render smoke`
+- Leave the bypass list empty. With one maintainer and zero required approvals the owner can still merge their own PR once the checks are green; nothing can be pushed to `main` directly.
+
+The checks appear in the search box only after they have run once on a pull request; type the names by hand before that. On a private repository rulesets need a GitHub Pro plan; on a public one they are free.
 
 ## Commits
 

@@ -3,6 +3,7 @@
 ## Branches and merging
 
 - `main` is protected: no direct pushes, one review, green CI, squash merge.
+- **Who merges (standing rule):** the assistant performs merges to `main`, and only after the owner's explicit permission for that specific merge, given in the chat. A pull request is opened and merged only when asked; permission for one merge never carries over to the next.
 - Work on a branch named `feat/...`, `fix/...`, `chore/...` or `docs/...`.
 - Open a PR early. The PR template asks whether the change touches the money path; answer it honestly.
 - Every PR that moves the project forward updates `docs/STATE.md` (phase table, open items, session log).
@@ -14,7 +15,7 @@ Branch protection is a repository setting, not code. GitHub → the repository �
   - `typecheck · lint · format · test · audit`
   - `engine · migrations on TimescaleDB`
   - `build · render smoke`
-- Leave the bypass list empty. With one maintainer and zero required approvals the owner can still merge their own PR once the checks are green; nothing can be pushed to `main` directly.
+- Leave the bypass list empty. With one maintainer and zero required approvals a PR can be merged once the checks are green; nothing can be pushed to `main` directly. The standing rule above still applies: no merge without the owner's go-ahead.
 
 The checks appear in the search box only after they have run once on a pull request; type the names by hand before that. On a private repository rulesets need a GitHub Pro plan; on a public one they are free.
 

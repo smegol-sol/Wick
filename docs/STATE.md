@@ -30,7 +30,7 @@ Last updated: 2026-09-04 · branch `claude/new-project-review-h5rmic`
 - **Control plane and operations (ADR-0009):** an HTTP/WS API on Tailscale only, the console as an installed PWA, a Telegram bot for alerts and `/halt` and `/approve`, no native app; exporters, Alertmanager, a dead-man ping and self-halt on bad health.
 - **Language:** the whole platform is English: code, identifiers, strings, documents, the state ledger and the roadmap. No second language in the UI.
 - **Numbers:** any number without a source is `null` and renders n/a; filters reject unknown (ADR-0001).
-- **Merging:** squash to `main`; the PR title is checked by commitlint.
+- **Merging:** squash to `main`; the PR title is checked by commitlint. Standing rule (owner, 2026-09-04): the assistant performs the merge, only after the owner's explicit permission for that specific merge; no PR is opened or merged unasked.
 
 ## Open
 
@@ -59,6 +59,7 @@ State at last update: everything above green, 35 tests (17 core, 3 desk, 3 conso
 
 | Date       | Done                                                                                                                                                                                                                                                                                                 |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-04 | Merge policy recorded as permanent in `CLAUDE.md`, `CONTRIBUTING.md` and this ledger: the assistant merges, only with the owner's explicit permission each time; ruleset steps and check names for `main` written out                                                                                |
 | 2026-09-04 | Everything English: ADRs 0001–0004, the roadmap and this ledger translated; the console loses its second language and toggle; the language rule recorded                                                                                                                                             |
 | 2026-09-04 | ADR-0010 and the console: the API contract, the engine's endpoints (state, intents with approve/reject, positions, token with candles, funnel, halt, WebSocket), `apps/console` on mock data, Caddy serves it, CI builds and smokes it                                                               |
 | 2026-09-04 | Engine skeleton: contracts and ChainAdapter in core, the Solana adapter, config with the capital-ladder check, health, metrics and HTTP, migrations (tables + conditional Timescale), ingest v1 (per-second snapshots, Token-2022 audit, slot lag), the full deploy stack, OPS.md, CI on TimescaleDB |

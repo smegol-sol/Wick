@@ -56,6 +56,7 @@ test(
                   creator: null,
                   createdAt: at - 60_000,
                   stage: "bonding",
+                  pair: null,
                   snapshot: {
                     ts: at,
                     mint,
@@ -80,7 +81,7 @@ test(
         async stats() {
           return [];
         },
-        async audit(m) {
+        async audit({ mint: m }) {
           return {
             mint: m,
             at,
@@ -94,10 +95,21 @@ test(
             decimals: 9,
             supply: 1e9,
             lp: null,
+            lpRead: null,
           };
         },
-        async launchTx() {
-          return null;
+        async launchTx(m) {
+          return {
+            mint: m,
+            slot: 5,
+            sig: "createSig",
+            ts: at - 120_000,
+            creator: "Dev1111111111111111111111111111111111111111",
+            buyers: [{ wallet: "B1", slot: 5, sol: 0.5, pct: 2.5 }],
+            bundlePct: 2.5,
+            sniperPct: 2.5,
+            truncated: false,
+          };
         },
         async quote() {
           return null;
@@ -124,9 +136,9 @@ test(
           return [{ url: "a", slot: 1, ms: 1 }];
         },
       };
-      await db.query("delete from token_snapshots where mint = $1", [mint]);
-      await db.query("delete from audits where mint = $1", [mint]);
-      await db.query("delete from tokens where mint = $1", [mint]);
+      for (const t of ["token_snapshots", "audits", "launch_txs", "chain_events", "tokens"]) {
+        await db.query(`delete from ${t} where mint = $1`, [mint]);
+      }
       const c = new Collector(db, chain, {
         activeSampleMs: 1000,
         coolingSampleMs: 60_000,
@@ -134,6 +146,8 @@ test(
         coolingWindowMs: 86_400_000,
         auditEveryMs: 600_000,
         slotPollMs: 5000,
+        launchPerTick: 2,
+        launchRetryMs: 60_000,
       });
       await c.tick();
       const tok = await db.query("select symbol, stage from tokens where mint = $1", [mint]);
@@ -154,6 +168,24 @@ test(
       assert.equal(aud.rows[0]?.program, "token2022");
       assert.equal(aud.rows[0]?.freeze_auth, true);
       assert.equal(aud.rows[0]?.extensions?.transferFeeBps, 100);
+      const launch = await db.query(
+        "select slot, creator, buyers, bundle_pct from launch_txs where mint = $1",
+        [mint],
+      );
+      assert.equal(launch.rows[0]?.slot, "5");
+      assert.equal(launch.rows[0]?.buyers?.[0]?.wallet, "B1");
+      assert.equal(launch.rows[0]?.bundle_pct, 2.5);
+      const creator = await db.query("select creator from tokens where mint = $1", [mint]);
+      assert.equal(creator.rows[0]?.creator, "Dev1111111111111111111111111111111111111111");
+      const ev = await db.query(
+        "select kind, sig, data from chain_events where mint = $1 order by ts",
+        [mint],
+      );
+      assert.deepEqual(
+        ev.rows.map((r) => [r.kind, r.sig]),
+        [["create", "createSig"]],
+      );
+      assert.equal(ev.rows[0]?.data?.creator, "Dev1111111111111111111111111111111111111111");
     } finally {
       await db.end();
     }

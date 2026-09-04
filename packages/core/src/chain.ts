@@ -55,6 +55,33 @@ export type LaunchTx = {
   truncated: boolean;
 };
 
+/** One wallet's side of one transaction in one mint, from balance deltas. Signers only; pools never sign. */
+export type Trade = {
+  sig: string;
+  slot: number;
+  /** Block time, ms; null when the node had none. */
+  ts: number | null;
+  wallet: string;
+  mint: string;
+  side: "buy" | "sell";
+  /** SOL the wallet's balance moved by, absolute, fees included. */
+  sol: number;
+  /** Tokens received or sent, absolute, in the mint's own units (not raw). */
+  amount: number;
+};
+
+export type TxSummary = {
+  sig: string;
+  slot: number;
+  ts: number | null;
+  ok: boolean;
+  signers: string[];
+  /** Non-native mints with a balance in the transaction. */
+  mints: string[];
+  /** Per mint, the owner of the largest balance after the transaction that did not sign: a pool or a curve. */
+  holders: Record<string, string>;
+};
+
 export type QuoteRequest = {
   side: "buy" | "sell";
   mint: string;
@@ -96,6 +123,10 @@ export interface ChainAdapter {
   stats(mints: string[], signal: AbortSignal): Promise<Snapshot[]>;
   audit(ref: AuditRef, signal: AbortSignal): Promise<Audit | null>;
   launchTx(mint: string, signal: AbortSignal): Promise<LaunchTx | null>;
+  /** Every signer's trades in one confirmed transaction; empty when it is not a trade or not found. */
+  trades(sig: string, signal: AbortSignal): Promise<Trade[]>;
+  /** The mints and signers a confirmed transaction touched; null when not found. */
+  txSummary(sig: string, signal: AbortSignal): Promise<TxSummary | null>;
   quote(req: QuoteRequest, signal: AbortSignal): Promise<Quote | null>;
   buildTx(quote: Quote, wallet: string, signal: AbortSignal): Promise<UnsignedTx>;
   simulate(tx: UnsignedTx, signal: AbortSignal): Promise<SimResult>;

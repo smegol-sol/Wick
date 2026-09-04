@@ -5,13 +5,15 @@
  * migrate, LP state), and feeds source heartbeats and slot lag to health and
  * metrics. It decides nothing.
  */
-import type { ChainAdapter, LaunchTx, SourceToken } from "@wick/core/chain";
+import type { ChainAdapter, LaunchTx, SourceToken, Trade } from "@wick/core/chain";
 import type { Audit, Snapshot, Stage } from "@wick/core/contracts";
 import type { Db } from "../db/pool.ts";
 import { slotLagOf } from "../health.ts";
 import { errText, logger } from "../log.ts";
 import * as m from "../metrics.ts";
+import { FeatureBook } from "./features.ts";
 import { Sampler, type SamplerConfig } from "./sampler.ts";
+import type { LogEvent, LogStream } from "./stream.ts";
 
 const log = logger("ingest");
 
@@ -21,9 +23,15 @@ export type CollectorConfig = SamplerConfig & {
   /** Launch parses started per tick, and how long to wait before retrying one that found nothing. */
   launchPerTick: number;
   launchRetryMs: number;
+  /** How often the followed-wallet set is re-read, and whose transactions count as migrations. */
+  followRefreshMs: number;
+  migrationAuthority: string;
 };
 
 const LAUNCH_TRIES = 3;
+/** A poll-side migrate event is skipped when the stream reported the same mint within this window. */
+const STREAM_MIGRATE_GRACE_MS = 10 * 60_000;
+const SEEN_SIGS_CAP = 5000;
 
 export type CollectorState = {
   lastOk: Record<string, number>;
@@ -48,7 +56,12 @@ export class Collector {
     lastSlotReadings: [],
   };
   readonly sampler: Sampler;
+  readonly book = new FeatureBook();
   private latest = new Map<string, SourceToken>();
+  private followed = new Set<string>();
+  private followedAt = 0;
+  private streamMigrated = new Map<string, number>();
+  private seenSigs = new Set<string>();
   private stages = new Map<string, Stage>();
   private auditedAt = new Map<string, { at: number; key: string; lp: Audit["lp"] }>();
   private launches = new Map<string, { tries: number; at: number; done: boolean }>();
@@ -59,11 +72,13 @@ export class Collector {
   private readonly db: Db;
   private readonly chain: ChainAdapter;
   private readonly cfg: CollectorConfig;
+  private readonly stream: LogStream | null;
 
-  constructor(db: Db, chain: ChainAdapter, cfg: CollectorConfig) {
+  constructor(db: Db, chain: ChainAdapter, cfg: CollectorConfig, stream: LogStream | null = null) {
     this.db = db;
     this.chain = chain;
     this.cfg = cfg;
+    this.stream = stream;
     this.sampler = new Sampler(cfg);
   }
 
@@ -104,6 +119,7 @@ export class Collector {
         for (const tk of b.tokens) {
           this.latest.set(tk.mint, tk);
           this.sampler.seen(tk.mint, now);
+          this.book.noteToken(tk.mint, tk.stage, tk.createdAt);
           await this.noteStage(tk, now);
           if (tk.snapshot.statsAt != null && now - tk.snapshot.statsAt < 15_000) dexFresh++;
         }
@@ -126,11 +142,15 @@ export class Collector {
         }
       }
 
+      for (const r of rows) this.book.noteSnapshot(r, this.state.solUsd);
       await this.upsertTokens([...this.latest.values()].filter((t) => due.active.includes(t.mint)));
       await this.writeSnapshots(rows);
       this.sampler.sampled([...due.active, ...due.cooling], now);
       await this.auditDue(due.active, now, ctrl.signal);
       await this.launchDue(due.active, now, ctrl.signal);
+      await this.refreshFollowed(now);
+      this.syncStream(due.active);
+      await this.writeMicro(due.active, now);
 
       const counts = this.sampler.counts(now);
       m.activeTokens.set({ state: "active" }, counts.active);
@@ -231,6 +251,7 @@ export class Collector {
       m.sourceCallDuration.observe({ source: "rpc" }, (performance.now() - t0) / 1000);
       if (!audit) continue;
       this.mark("rpc");
+      this.book.noteAudit(audit);
       const key = auditKey(audit);
       const prev = this.auditedAt.get(mint);
       this.auditedAt.set(mint, { at: now, key, lp: audit.lp });
@@ -272,6 +293,8 @@ export class Collector {
     const prev = this.stages.get(tk.mint);
     this.stages.set(tk.mint, tk.stage);
     if (prev && prev !== "migrated" && tk.stage === "migrated") {
+      const fromStream = this.streamMigrated.get(tk.mint);
+      if (fromStream != null && now - fromStream < STREAM_MIGRATE_GRACE_MS) return;
       await this.writeEvent(now, tk.mint, "migrate", null, {
         source: "poll",
         from: prev,
@@ -308,6 +331,7 @@ export class Collector {
       }
       this.mark("rpc");
       l.done = true;
+      this.book.noteLaunch(launch);
       await this.writeLaunch(launch);
     }
   }
@@ -356,6 +380,167 @@ export class Collector {
     } catch (e) {
       m.dbErrors.inc({ op: "chain_events" });
       log.error("chain event insert failed", { err: errText(e), kind, mint });
+    }
+  }
+
+  /** The owner's followed wallets: `wallets` rows with kind owner and status follow. */
+  private async refreshFollowed(now: number): Promise<void> {
+    if (now - this.followedAt < this.cfg.followRefreshMs) return;
+    this.followedAt = now;
+    try {
+      const res = await this.db.query<{ pk: string }>(
+        `select pk from wallets where kind = 'owner' and status = 'follow'`,
+      );
+      this.followed = new Set(res.rows.map((r) => r.pk));
+    } catch (e) {
+      m.dbErrors.inc({ op: "wallets" });
+      log.error("followed wallets read failed", { err: errText(e) });
+    }
+  }
+
+  /** Subscriptions: every active mint, every followed wallet, the migration authority. */
+  private syncStream(active: string[]): void {
+    if (!this.stream) return;
+    this.stream.setAddresses([...active, ...this.followed, this.cfg.migrationAuthority]);
+    const st = this.stream.state;
+    m.streamConnected.set(st.connected ? 1 : 0);
+    m.streamSubscriptions.set(st.subscribed);
+    if (st.connected && st.lastMessageAt != null) this.mark("stream", st.lastMessageAt);
+  }
+
+  /** One notification from the log stream. Never throws; the stream must stay up. */
+  async onLog(e: LogEvent): Promise<void> {
+    if (e.err != null) return;
+    const key = `${e.address}:${e.signature}`;
+    if (this.seenSigs.has(key)) return;
+    this.seenSigs.add(key);
+    if (this.seenSigs.size > SEEN_SIGS_CAP) {
+      const first = this.seenSigs.values().next().value;
+      if (first) this.seenSigs.delete(first);
+    }
+    try {
+      if (this.followed.has(e.address)) await this.handlePrint(e);
+      else if (e.address === this.cfg.migrationAuthority) await this.handleMigrate(e);
+      else if (this.latest.has(e.address)) this.handleTradeLog(e);
+      else m.streamEvents.inc({ kind: "ignored" });
+    } catch (err) {
+      log.warn("stream event failed", { err: errText(err), sig: e.signature });
+    }
+  }
+
+  private handleTradeLog(e: LogEvent): void {
+    let seen = false;
+    for (const line of e.logs) {
+      const mm = /Instruction: (Buy|Sell)\b/.exec(line);
+      if (!mm) continue;
+      this.book.noteTradeSeen(e.address, mm[1] === "Buy" ? "buy" : "sell", e.at);
+      seen = true;
+    }
+    m.streamEvents.inc({ kind: seen ? "trade" : "other" });
+  }
+
+  private async handlePrint(e: LogEvent): Promise<void> {
+    const ctrl = new AbortController();
+    const kill = setTimeout(() => ctrl.abort(), 8000);
+    let trades: Trade[] = [];
+    try {
+      trades = await this.chain.trades(e.signature, ctrl.signal);
+    } finally {
+      clearTimeout(kill);
+    }
+    const mine = trades.filter((t) => t.wallet === e.address);
+    if (!mine.length) {
+      m.streamEvents.inc({ kind: "other" });
+      return;
+    }
+    for (const t of mine) {
+      this.book.notePrint(t, e.at);
+      try {
+        await this.db.query(
+          `insert into wallet_prints (sig, wallet, ts, seen_at, mint, side, sol, amount)
+           values ($1,$2,$3,$4,$5,$6,$7,$8) on conflict (sig) do nothing`,
+          [t.sig, t.wallet, ts(t.ts ?? e.at), ts(e.at), t.mint, t.side, t.sol, t.amount],
+        );
+        m.walletPrints.inc();
+      } catch (err) {
+        m.dbErrors.inc({ op: "wallet_prints" });
+        log.error("wallet print insert failed", { err: errText(err) });
+      }
+    }
+    m.streamEvents.inc({ kind: "print" });
+  }
+
+  private async handleMigrate(e: LogEvent): Promise<void> {
+    if (!e.logs.some((l) => /migrat/i.test(l))) {
+      m.streamEvents.inc({ kind: "other" });
+      return;
+    }
+    const ctrl = new AbortController();
+    const kill = setTimeout(() => ctrl.abort(), 8000);
+    let summary = null;
+    try {
+      summary = await this.chain.txSummary(e.signature, ctrl.signal);
+    } finally {
+      clearTimeout(kill);
+    }
+    if (!summary?.ok || !summary.mints.length) {
+      m.streamEvents.inc({ kind: "other" });
+      return;
+    }
+    for (const mint of summary.mints) {
+      this.streamMigrated.set(mint, e.at);
+      const tk = this.latest.get(mint);
+      if (tk) this.book.noteToken(mint, "migrated", tk.createdAt);
+      await this.writeEvent(summary.ts ?? e.at, mint, "migrate", e.signature, {
+        source: "stream",
+        slot: summary.slot,
+        pair: summary.holders[mint] ?? null,
+        seenAt: e.at,
+      });
+    }
+    m.streamEvents.inc({ kind: "migrate" });
+  }
+
+  /** One microstructure row per active mint per tick (ENGINE §10 from reserves; counts from the stream). */
+  private async writeMicro(active: string[], now: number): Promise<void> {
+    const values: unknown[] = [];
+    const tuples: string[] = [];
+    const cols = 12;
+    let n = 0;
+    for (const mint of active) {
+      const micro = this.book.micro(mint, now);
+      if (!micro) continue;
+      const c1 = this.book.counts(mint, now, 60_000);
+      const c5 = this.book.counts(mint, now, 5 * 60_000);
+      const o = n * cols;
+      tuples.push(`(${Array.from({ length: cols }, (_, k) => `$${o + k + 1}`).join(",")})`);
+      values.push(
+        ts(now),
+        mint,
+        micro.netFlowSol1m,
+        micro.netFlowSol5m,
+        micro.organicVolPct5m,
+        micro.depthBuy2PctUsd,
+        micro.depthSell2PctUsd,
+        c1?.buys ?? null,
+        c1?.sells ?? null,
+        c5?.buys ?? null,
+        c5?.sells ?? null,
+        null,
+      );
+      n++;
+    }
+    if (!n) return;
+    try {
+      await this.db.query(
+        `insert into microstructure (at, mint, net_flow_1m, net_flow_5m, organic_vol_pct_5m, depth_buy_2pct, depth_sell_2pct, buys_1m, sells_1m, buys_5m, sells_5m, unique_buyers_5m)
+         values ${tuples.join(",")}`,
+        values,
+      );
+      m.microRows.inc(n);
+    } catch (e) {
+      m.dbErrors.inc({ op: "microstructure" });
+      log.error("microstructure insert failed", { err: errText(e), rows: n });
     }
   }
 

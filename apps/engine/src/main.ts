@@ -13,6 +13,8 @@ import { makePool, ping } from "./db/pool.ts";
 import { evaluateHealth, type Health } from "./health.ts";
 import { startHttp } from "./http.ts";
 import { Collector } from "./ingest/collector.ts";
+import { LogStream, wsUrlOf } from "./ingest/stream.ts";
+import { rpcUrls } from "@wick/core/rpc";
 import { errText, logger, setLogLevel } from "./log.ts";
 import * as m from "./metrics.ts";
 
@@ -49,16 +51,25 @@ async function main(): Promise<void> {
   const dbTimer = setInterval(() => void ping(db).then((ok) => (dbOk = ok)), 10_000);
 
   const chain = makeSolanaAdapter();
-  const collector = new Collector(db, chain, {
-    activeSampleMs: cfg.activeSampleMs,
-    coolingSampleMs: cfg.coolingSampleMs,
-    activeWindowMs: cfg.activeWindowMs,
-    coolingWindowMs: cfg.coolingWindowMs,
-    auditEveryMs: cfg.auditEveryMs,
-    slotPollMs: cfg.slotPollMs,
-    launchPerTick: 2,
-    launchRetryMs: 60_000,
-  });
+  const wsUrl = cfg.solanaWsUrl ?? wsUrlOf(rpcUrls()[0]!);
+  const stream = new LogStream(wsUrl, { onEvent: (e) => void collector.onLog(e), pingMs: 20_000 });
+  const collector = new Collector(
+    db,
+    chain,
+    {
+      activeSampleMs: cfg.activeSampleMs,
+      coolingSampleMs: cfg.coolingSampleMs,
+      activeWindowMs: cfg.activeWindowMs,
+      coolingWindowMs: cfg.coolingWindowMs,
+      auditEveryMs: cfg.auditEveryMs,
+      slotPollMs: cfg.slotPollMs,
+      launchPerTick: 2,
+      launchRetryMs: 60_000,
+      followRefreshMs: cfg.followRefreshMs,
+      migrationAuthority: cfg.migrationAuthority,
+    },
+    stream,
+  );
 
   const health = (): Health =>
     evaluateHealth(
@@ -88,6 +99,7 @@ async function main(): Promise<void> {
   });
   const server = startHttp(cfg.httpHost, cfg.httpPort, { health, version: version(), api });
   m.up.set(1);
+  stream.start();
   collector.start();
   log.info("listening", { host: cfg.httpHost, port: cfg.httpPort });
 
@@ -115,6 +127,7 @@ async function main(): Promise<void> {
     log.info("stopping", { sig });
     m.up.set(0);
     collector.stop();
+    stream.stop();
     stopLoop();
     clearInterval(dbTimer);
     if (deadman) clearInterval(deadman);

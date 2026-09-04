@@ -28,10 +28,10 @@ Exit condition: a PR fails when it breaks a test and cannot merge without review
 - [x] Database schema from ENGINE.md §14 with migrations and the retention policy from ADR-0007 (0001 tables; 0002 hypertables, compression, retention and the 10-second aggregate; tested in CI on TimescaleDB).
 - [x] `ingest`: pump.fun, DexScreener and the mint audit (moved from the desk), Token-2022 extension checks.
 - [x] LP state (burned / locked / deployer) from the pool account: PumpSwap and Raydium v4 layouts, LP supply and largest holders, known lockers; `curve` on the bonding curve; unknown stays `null` (holders need a private RPC).
-- [ ] Helius webhooks for create, migrate, LP and followed-wallet events (instead of polling).
+- [x] Push events instead of polling: an RPC WebSocket log stream (`logsSubscribe`) on every active mint, every followed wallet and the migration authority; migrations and followed-wallet prints land as they happen. Chosen over Helius HTTP webhooks because a webhook needs a public endpoint and the host has none (ADR-0009); LP add/remove events on pools wait for the pool subscriptions in Phase 2.
 - [x] Launch transaction parsing (`launch_txs`): creator, buyers in the create slot and the next three, snipers in the first ten, from token-balance deltas; parsed once per mint, capped at 60 transactions.
 - [x] Data collection as an explicit deliverable: a snapshot every second for active tokens, every 60 seconds for cooling ones, audits on change only (ADR-0007). `chain_events` carries what polling can see (create, migrate, LP state); the rest waits for the webhooks.
-- [ ] A `features` row every second per active mint, with `uniqueBuyers5m` from events.
+- [x] The features row every second per active mint, assembled in memory from stored rows (snapshots, audits, launch, events, stream counts) and served to the decision layer; the microstructure row (net flow and depth from reserves, stream-counted buys and sells) is written every second. `uniqueBuyers5m` stays null until per-trade wallets exist (needs event decoding or an enhanced stream).
 - [x] `/metrics` with the liveness and ingest metrics from ENGINE.md §15, the Operations and Host boards.
 - [ ] The Quality board (waits for the decision layer).
 - [x] A dedicated RPC with public fallbacks; slot lag measured every 5 seconds across every endpoint and fed into health.

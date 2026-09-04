@@ -26,6 +26,7 @@ import { loadSolanaPulse } from "@wick/core/solana-pulse";
 import { readMint, type ParsedMintAccount } from "./extensions.ts";
 import { fetchLaunch } from "./launch.ts";
 import { readLp } from "./lp.ts";
+import { fetchTx, summaryOf, tradesOf } from "./trades.ts";
 
 const NOT_YET = "not implemented until Phase 2 (executor)";
 
@@ -118,6 +119,14 @@ export function makeSolanaAdapter(): ChainAdapter {
 
     async launchTx(mint, signal): Promise<LaunchTx | null> {
       return fetchLaunch(mint, signal);
+    },
+
+    async trades(sig, signal) {
+      return tradesOf(sig, await fetchTx(sig, signal));
+    },
+
+    async txSummary(sig, signal) {
+      return summaryOf(sig, await fetchTx(sig, signal));
     },
 
     async quote(req, signal): Promise<Quote | null> {

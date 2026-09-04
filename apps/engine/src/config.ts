@@ -44,6 +44,10 @@ export type EngineConfig = {
   databaseUrl: string;
   redisUrl: string | null;
   solanaRpcUrl: string | null;
+  /** wss endpoint for logsSubscribe; derived from the RPC URL when unset. */
+  solanaWsUrl: string | null;
+  /** The pump.fun migration authority; its transactions are the migrate events. */
+  migrationAuthority: string;
   httpHost: string;
   httpPort: number;
   healthcheckUrl: string | null;
@@ -56,7 +60,12 @@ export type EngineConfig = {
   coolingWindowMs: number;
   auditEveryMs: number;
   slotPollMs: number;
+  /** How often the followed-wallet set is re-read from the database. */
+  followRefreshMs: number;
 };
+
+/** pump.fun's migration authority on mainnet; override with PUMP_MIGRATION_AUTHORITY when it rotates. */
+export const PUMP_MIGRATION_AUTHORITY = "39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg";
 
 function num(v: unknown, fallback: number): number {
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
@@ -143,12 +152,16 @@ export function parseEnv(env: Record<string, string | undefined>): EngineConfig 
     throw new Error(`LOG_LEVEL ${level} unknown`);
   const rpc = env.SOLANA_RPC_URL?.trim();
   if (rpc && !/^https:\/\//.test(rpc)) throw new Error("SOLANA_RPC_URL must be https");
+  const ws = env.SOLANA_WS_URL?.trim();
+  if (ws && !/^wss:\/\//.test(ws)) throw new Error("SOLANA_WS_URL must be wss");
   const hc = env.HEALTHCHECK_URL?.trim();
   if (hc && !/^https:\/\//.test(hc)) throw new Error("HEALTHCHECK_URL must be https");
   return {
     databaseUrl,
     redisUrl: env.REDIS_URL?.trim() || null,
     solanaRpcUrl: rpc || null,
+    solanaWsUrl: ws || null,
+    migrationAuthority: env.PUMP_MIGRATION_AUTHORITY?.trim() || PUMP_MIGRATION_AUTHORITY,
     httpHost: env.ENGINE_HTTP_HOST?.trim() || "127.0.0.1",
     httpPort: num(env.ENGINE_HTTP_PORT, 9464),
     healthcheckUrl: hc || null,
@@ -160,5 +173,6 @@ export function parseEnv(env: Record<string, string | undefined>): EngineConfig 
     coolingWindowMs: num(env.COOLING_WINDOW_MS, 24 * 3600_000),
     auditEveryMs: num(env.AUDIT_EVERY_MS, 10 * 60_000),
     slotPollMs: num(env.SLOT_POLL_MS, 5000),
+    followRefreshMs: num(env.FOLLOW_REFRESH_MS, 30_000),
   };
 }

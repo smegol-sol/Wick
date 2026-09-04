@@ -12,9 +12,9 @@ A first proposal listed seven screens. The owner objected that seven equal tabs 
 
 ### 1. A new app, `apps/console`, replaces the desk as the control surface
 
-- Vite + React 19 + TanStack Router in SPA mode, no SSR; Tailwind 4 with the desk's design tokens; TanStack Query for the API and a WebSocket for pushes; lightweight-charts for candles built from our own snapshots; installable as a PWA. Arabic and English, phone first, bundle target under 300 KB gzipped.
+- Vite + React 19 + TanStack Router in SPA mode, no SSR; Tailwind 4 with the desk's design tokens; TanStack Query for the API and a WebSocket for pushes; lightweight-charts for candles built from our own snapshots; installable as a PWA. English only, phone first, bundle target under 300 KB gzipped.
 - Static files served by Caddy on the tailnet next to the engine's API. No Vercel, no API routes of its own, nothing that signs.
-- Reused from the desk: design tokens, the token mark, number formatting, i18n keys where they still apply. Not reused: the store, browser polling, `live-auto`, the desk's API routes.
+- Reused from the desk: design tokens, the token mark, number formatting. Not reused: the store, browser polling, `live-auto`, the desk's API routes.
 - The desk is frozen to bug fixes and retired at the end of Phase 2, once the console covers approve, halt and unseal. Two UIs are not maintained past that.
 
 ### 2. Screens are sorted by frequency of use: two screens and one detail

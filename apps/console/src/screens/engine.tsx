@@ -3,7 +3,7 @@ import { formatPct } from "@wick/core/format";
 import { useState } from "react";
 import { Button, Empty, Kicker, Pill } from "@/components/ui";
 import { api, isMock, readToken, setMock, writeToken } from "@/lib/api";
-import { useLang } from "@/lib/lang-context";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 function pct(v: number | null | undefined, digits = 0): string {
@@ -11,7 +11,6 @@ function pct(v: number | null | undefined, digits = 0): string {
 }
 
 export function EngineScreen() {
-  const { t } = useLang();
   const qc = useQueryClient();
   const state = useQuery({ queryKey: ["state"], queryFn: api.state, retry: 1 });
   const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules, retry: 1 });

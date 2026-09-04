@@ -1,6 +1,6 @@
-# ADR-0001: كل رقم له مصدر أو يظهر n/a
+# ADR-0001: Every number has a source or renders n/a
 
-- الحالة: مقبول (سبتمبر 2026)
-- السياق: النسخة الأصلية من WICK كانت تولّد الحاملين والحجم والعمليات ونسب الحزم من دوال hash وتعرضها كأرقام حقيقية بجانب مال حقيقي.
-- القرار: كل حقل في نموذج `Token` إما يأتي من مصدر موثّق (pump.fun، DexScreener، RPC، Jupiter) أو يكون `null` ويُعرض n/a. أي فلتر أو قاعدة على حقل `null` ترفض العملة ولا تمرّرها. بطاقات التحليل (الاحتيال، المزاج، الإعدادات) تذكر عدد الفحوص التي كان لها بيانات.
-- النتائج: قوائم أطول من n/a في الدقائق الأولى لعمر العملة. واجهة تثق فيها. أي مصدر جديد يدخل بصف في جدول المصادر في README واختبار يثبت سلوك `null`.
+- Status: accepted (September 2026)
+- Context: the original WICK generated holders, volume, transaction counts and bundle ratios from hash functions and showed them as real numbers next to real money.
+- Decision: every field in the `Token` model either comes from a documented source (pump.fun, DexScreener, RPC, Jupiter) or is `null` and renders n/a. Any filter or rule on a `null` field rejects the token instead of passing it. Analysis cards (fraud, mood, setups) state how many of their checks had data.
+- Consequences: longer lists of n/a in a token's first minutes, and a UI that can be trusted. Every new source enters with a row in the README sources table and a test that proves the `null` behaviour.

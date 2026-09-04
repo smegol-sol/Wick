@@ -2,7 +2,7 @@
 
 Inputs this design is built on: starting capital 2,500 USD (about 24 SOL at 101 USD), custody on a VPS with a sealed execution key (ADR-0003), suggest and auto modes (ADR-0004), confirmed entry as the default style with migration sniping as an option, a capital ladder with liquidity-bounded sizing (ADR-0005), a chain-agnostic core trading Solana first (ADR-0006), data collection with replay from day one (ADR-0007), one wallet profiler and a decision budget (ADR-0008), and a private PWA plus Telegram bot as the control plane (ADR-0009). Method reference: The Meme Coin Handbook, chapters 6, 8, 9, 12, 16, 19 and 23.
 
-Written in English because these names are the names in the code (§20). The roadmap and state ledger stay in Arabic for the owner.
+Every document in the repository is English (§20).
 
 ## 1. Shape
 
@@ -500,4 +500,4 @@ Everything chain-specific lives behind `ChainAdapter` (ADR-0006), one implementa
 
 ## 20. Language
 
-Code, identifiers, reason codes, schema, logs, configuration and engine documents (this file and ADRs from 0005 on) are English, so the name in the document is the name in the code. The roadmap, the state ledger and ADRs 0001–0004 stay in Arabic for the owner; a decision recorded there is restated in English here when it touches the engine.
+The whole platform is English: code, identifiers, reason codes, schema, logs, configuration, UI strings and every document, including the roadmap, the state ledger and every ADR. The name in a document is the name in the code. The owner's chat is the only place another language is used.

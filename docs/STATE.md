@@ -1,72 +1,74 @@
-# حالة المشروع
+# Project state
 
-هذا الملف هو أول ما يُقرأ في كل جلسة جديدة، وآخر ما يُحدَّث قبل الدفع. يجيب عن أربعة أسئلة: أين نحن، ما الذي تقرر، ما المفتوح، وكيف نتحقق. التفاصيل الطويلة مكانها `ROADMAP.md` و`ENGINE.md` و`adr/`، لا هنا.
+Read this file first in every session and update it last before pushing. It answers four questions: where we are, what was decided, what is open, and how to verify. Long detail lives in `ROADMAP.md`, `ENGINE.md` and `adr/`, not here.
 
-آخر تحديث: 2026-09-04 · الفرع: `claude/new-project-review-h5rmic`
+Last updated: 2026-09-04 · branch `claude/new-project-review-h5rmic`
 
-## أين نحن
+## Where we are
 
-| المرحلة (من ROADMAP)                 | الحالة  | ملاحظة                                                                       |
-| ------------------------------------ | ------- | ---------------------------------------------------------------------------- |
-| ما قبل 0: تحويل WICK إلى منصة حقيقية | مكتملة  | لا بيانات مصطنعة، لا وضع ورقي، RPC قابل للضبط، خطوة تأكيد قبل كل صفقة        |
-| 0: الحوكمة وبوابات الجودة            | مكتملة  | عدا حماية main (إجراء يدوي على GitHub)                                       |
-| 1: الخادم والبيانات                  | جارية   | تقسيم monorepo مكتمل؛ التالي واجهة ChainAdapter وهيكل المحرك وقاعدة البيانات |
-| 2: القرار والبوابات ووضع الاقتراح    | لم تبدأ |                                                                              |
-| 3: التعلّم المستوى 2 والوضع التلقائي | لم تبدأ |                                                                              |
-| 4 إلى 7                              | لم تبدأ |                                                                              |
+| Phase (from ROADMAP)                | Status      | Note                                                                                                                                |
+| ----------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Pre-0: turn WICK into a real desk   | done        | no fabricated data, no paper mode, configurable RPC, a confirm step before every trade                                              |
+| 0: governance and quality gates     | done        | except `main` protection (a manual GitHub setting)                                                                                  |
+| 1: host and data                    | in progress | skeleton, schema, ingest v1, deploy stack, API and console are in; left: LP state, webhooks, launch parsing, features; then the VPS |
+| 2: decision, gates and suggest mode | not started |                                                                                                                                     |
+| 3: level-2 learning and auto mode   | not started |                                                                                                                                     |
+| 4 to 7                              | not started |                                                                                                                                     |
 
-## ما الذي تقرر (ملخص، التفاصيل في ADRs)
+## What was decided (summary; details in the ADRs)
 
-- **رأس المال الابتدائي:** 2,500 دولار. المخاطرة 1.5% لكل صفقة، 6 مراكز كحد أقصى، إيقاف يومي عند خسارة 5%، بنية تحتية ≤ 70 دولارًا شهريًا.
-- **سُلّم رأس المال (ADR-0005):** ثلاث درجات 2,500 ثم 10,000 ثم 30,000 بمعايير ترقية مكتوبة، والحجم دائمًا الأصغر بين نسبة حقوق الملكية وحصة من سيولة المسبح وسقف العملة.
-- **الحفظ:** المنصة تستخدم محفظة ساخنة في المتصفح (ADR-0002). المحرك على VPS بمفتاح مختوم (ADR-0003)، ويُستبدل بموقّع منفصل أو KMS كشرط للدرجة 3.
-- **الاستقلالية:** وضعان، اقتراح ثم تلقائي، وثلاثة مستويات تعلّم (ADR-0004). وضع shadow يسبق suggest لكل قاعدة جديدة.
-- **الشبكات (ADR-0006):** Solana فقط في الإصدار الأول، النواة لا تعرف السلسلة عبر `ChainAdapter`، Base مرشحة بعد 90 يومًا بتوقّع موجب.
-- **البيانات وbacktest (ADR-0007):** التجميع بالثانية من اليوم الأول للمرحلة 1، وreplay هو كود القرار نفسه على اللقطات المخزّنة، ونتائجه موسومة دائمًا.
-- **خريطة المعروض:** بوابة `supply` جديدة (المطوّر، الحزمة، القنّاصون، المحافظ الحديثة، الاتجاه) بثلاث درجات تعامل: رفض أو تصغير الحجم أو انتظار التوزيع. الأساسي في المرحلة 2، شجرة التمويل في المرحلة 4.
-- **النسخ الذكي:** اكتشاف المحافظ وتصنيفها ودرجاتها بأرقام في المرحلة 4، بحد 6 محافظ منسوخة إجمالًا.
-- **مصنّف المحافظ وميزانية القرار (ADR-0008):** وحدة واحدة تصنّف المحافظ ويقرأ منها الجميع؛ أربع ميزات بنية دقيقة فقط؛ الرفض لخطر رأس المال فقط، سبع بوابات، ≤ 40 ميزة، ≤ 25 كود، قرار < 50 ms، وأي ميزة بلا دليل من replay خلال 60 يومًا تُحذف. دفتر الأوامر وMEV الهجومي وDCA الزمني وواجهة X المدفوعة غير مبنية عمدًا.
-- **الواجهة الجديدة (ADR-0010):** `apps/console` بشاشتين وتفصيل (الآن، المحرك، العملة) على عقد الواجهة في core، ووضع مثال موسوم؛ المكتب القديم مجمَّد ويتقاعد نهاية المرحلة 2. لا تُضاف شاشة إلا لسؤال يومي لا تجيب عنه "الآن".
-- **لوحة التحكم والتشغيل (ADR-0009):** واجهة HTTP/WS على Tailscale فقط، التطبيق الحالي كـ PWA على الهاتف، بوت Telegram للتنبيهات و/halt و/approve، لا تطبيق أصلي؛ exporters وAlertmanager وdead-man ping وإيقاف ذاتي عند تدهور الصحة.
-- **اللغة:** الكود ووثائق المحرك (ENGINE.md وADR من 0005) بالإنجليزية. STATE وROADMAP وADR 0001–0004 بالعربية.
-- **الأرقام:** أي رقم بلا مصدر يكون `null` ويُعرض n/a، والمرشحات ترفض المجهول (ADR-0001).
-- **الدمج:** squash إلى main، وعنوان الـ PR يُفحص بـ commitlint.
+- **Starting capital:** 2,500 USD. 1.5% risk per trade, 6 positions at most, a daily halt at −5%, infrastructure ≤ 70 USD a month.
+- **Capital ladder (ADR-0005):** three tiers, 2,500 then 10,000 then 30,000, with written promotion criteria; size is always the minimum of an equity share, a pool-liquidity share and the token cap.
+- **Custody:** the desk uses a browser hot wallet (ADR-0002). The engine runs on a VPS with a sealed key (ADR-0003), replaced by a separate signer or KMS as a tier-3 precondition.
+- **Autonomy:** two modes, suggest then auto, and three learning levels (ADR-0004). Shadow precedes suggest for every new rule.
+- **Chains (ADR-0006):** Solana only in v1; the core is chain-agnostic behind `ChainAdapter`; Base is the candidate after 90 days of positive expectancy.
+- **Data and backtesting (ADR-0007):** second-resolution collection from day one of Phase 1; replay is the production decision code over stored snapshots, always labelled.
+- **Supply map:** a `supply` gate (dev, bundle, snipers, fresh wallets, trend) with three handlings: reject, shrink size, or wait for distribution. Basics in Phase 2, the funding tree in Phase 4.
+- **Smart copy:** wallet discovery, classification and numeric scores in Phase 4, at most 6 copied wallets in total.
+- **Wallet profiler and decision budget (ADR-0008):** one module classifies wallets and everything reads it; four microstructure features only; rejects for capital-loss risk only, seven gates, ≤ 40 features, ≤ 25 codes, decisions under 50 ms, and any feature without replay evidence within 60 days is removed. Order books, offensive MEV, time-based DCA and the paid X API are deliberately not built.
+- **Console (ADR-0010):** `apps/console` with two screens and a detail (Now, Engine, Token) on the API contract in core, with a labelled mock mode; the desk is frozen and retires at the end of Phase 2. A screen is added only for a daily question Now cannot answer.
+- **Control plane and operations (ADR-0009):** an HTTP/WS API on Tailscale only, the console as an installed PWA, a Telegram bot for alerts and `/halt` and `/approve`, no native app; exporters, Alertmanager, a dead-man ping and self-halt on bad health.
+- **Language:** the whole platform is English: code, identifiers, strings, documents, the state ledger and the roadmap. No second language in the UI.
+- **Numbers:** any number without a source is `null` and renders n/a; filters reject unknown (ADR-0001).
+- **Merging:** squash to `main`; the PR title is checked by commitlint.
 
-## ما المفتوح
+## Open
 
-- [ ] **إجراء يدوي:** تفعيل حماية فرع main من إعدادات GitHub (الخطوات في `CONTRIBUTING.md`).
-- [ ] **إجراء يدوي على Vercel:** ضبط Root Directory للمشروع على `apps/desk` بعد الدمج، وإلا يفشل النشر.
-- [ ] **تشغيل المحرك على VPS:** الخطوات في `docs/OPS.md`؛ يحتاج منك حساب Hetzner وTailscale وبوت Telegram وhealthchecks.io ومفتاح RPC.
-- [ ] المتبقي من استيعاب المرحلة 1: حالة LP من حساب المسبح، Helius webhooks (إنشاء/هجرة/LP/صفقات المحافظ)، تحليل معاملات الإطلاق، صف الميزات كل ثانية.
-- [ ] اختيار مزوّد RPC وwebhooks (Helius افتراضيًا) ومزوّد VPS (Hetzner افتراضيًا) وخدمة dead-man (healthchecks.io افتراضيًا) عند بدء المرحلة 1.
-- [ ] عدّاد الحاملين (holders) يعمل فقط مع RPC خاص؛ العام يرفض `getTokenLargestAccounts`.
-- [ ] الخطوط من Google Fonts محجوبة في بيئة الاختبار؛ يظهر خطأ console واحد في فحص العرض وهو متوقع.
-- [ ] ملفا البحث العربيان المرافقان لكتاب Meme Coin Handbook لم يُرفعا بعد (اختياري).
+- [ ] **Manual:** enable `main` branch protection in GitHub settings (steps in `CONTRIBUTING.md`).
+- [ ] **Manual, Vercel:** set the desk project's Root Directory to `apps/desk` after the merge, or its deploy fails. (The desk retires at the end of Phase 2; the console is served from the VPS.)
+- [ ] **Bring the engine up on a VPS:** steps in `docs/OPS.md`; needs a Hetzner account, Tailscale, a Telegram bot, healthchecks.io and an RPC key from the owner.
+- [ ] Phase 1 ingest remainder: LP state from the pool account, Helius webhooks (create, migrate, LP, followed-wallet prints), launch transaction parsing, the per-second features row.
+- [ ] Provider choices at VPS time: RPC and webhooks (Helius by default), VPS (Hetzner by default), dead-man service (healthchecks.io by default).
+- [ ] The holder count works only with a private RPC; public ones refuse `getTokenLargestAccounts`.
+- [ ] Google Fonts is blocked in the test sandbox; the one console error in the desk's render smoke is expected.
+- [ ] The desk (`apps/desk`) still carries its Arabic dictionary; it is frozen to bug fixes and retires with Phase 2, so it is left as is.
 
-## كيف نتحقق
+## How to verify
 
 ```sh
 npm run typecheck && npm run lint && npm run format:check && npm test && npm run audit
 NITRO_PRESET=node-server npm run build && PORT=3000 node apps/desk/.output/server/index.mjs &
 npm run smoke -- http://127.0.0.1:3000/ screenshots
-# مع Postgres محلي: TEST_DATABASE_URL=postgres://wick@127.0.0.1:5432/wick npm -w @wick/engine test
+VITE_MOCK=1 npm run build -w @wick/console && (cd apps/console && npx vite preview --port 8091 &) && npm run smoke -- http://127.0.0.1:8091/ screenshots/console
+# with a local Postgres: TEST_DATABASE_URL=postgres://wick@127.0.0.1:5432/wick npm -w @wick/engine test
 ```
 
-الحالة عند آخر تحديث: كل ما سبق أخضر، 30 اختبارًا ناجحًا (17 في core، 3 في desk، 10 في engine منها اختبار تكامل على Postgres)، 0 ثغرات، 0 تحذيرات lint.
+State at last update: everything above green, 35 tests (17 core, 3 desk, 3 console, 12 engine including a Postgres integration test), 0 vulnerabilities, 0 lint warnings.
 
-## سجل الجلسات
+## Session log
 
-| التاريخ    | ما أُنجز                                                                                                                                                                                                                                                     |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2026-09-03 | استيراد المشروع، إزالة سقالة Grok، منصة حقيقية، خارطة الطريق، إصلاح وحدات price impact، ENGINE وADRs 0001–0004، المرحلة 0، STATE.md                                                                                                                          |
-| 2026-09-04 | هيكل المحرك: العقود وChainAdapter في core، محوّل Solana، config مع فحص سُلّم رأس المال، health وmetrics وHTTP، migrations (جداول + Timescale مشروط)، الاستيعاب v1 (لقطات بالثانية، تدقيق Token-2022، slot lag)، حزمة النشر كاملة، OPS.md، CI على TimescaleDB |
-| 2026-09-04 | ADR-0010 والواجهة الجديدة: عقد الواجهة، نقاط المحرك (الحالة، النوايا والموافقة، المراكز، العملة بالشموع، القمع، الإيقاف، WebSocket)، `apps/console` على وضع مثال، Caddy يقدّمها، CI يبنيها ويفحصها                                                           |
-| 2026-09-04 | بدء المرحلة 1: تقسيم المستودع إلى npm workspaces (`packages/core`، `apps/desk`، `apps/engine`)، نقل المنطق النقي إلى core، تقسيم الاختبارات، CI على المسارات الجديدة                                                                                         |
-| 2026-09-04 | فرز المقترحات الإضافية: ADR-0008 (مصنّف المحافظ، البنية الدقيقة، ميزانية القرار) وADR-0009 (لوحة التحكم والتشغيل)؛ ENGINE.md موسّع بطبقات القرار والقمع ونظام السوق وسياسة MEV والمراقبة                                                                     |
-| 2026-09-03 | مراجعة القرارات مع المالك؛ ADR 0005–0007 (سُلّم رأس المال، النواة بلا سلسلة، التجميع وreplay)؛ ENGINE.md بالإنجليزية مع خريطة المعروض والنسخ الذكي؛ خارطة الطريق المحدّثة                                                                                    |
+| Date       | Done                                                                                                                                                                                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-04 | Everything English: ADRs 0001–0004, the roadmap and this ledger translated; the console loses its second language and toggle; the language rule recorded                                                                                                                                          |
+| 2026-09-04 | ADR-0010 and the console: the API contract, the engine's endpoints (state, intents with approve/reject, positions, token with candles, funnel, halt, WebSocket), `apps/console` on mock data, Caddy serves it, CI builds and smokes it                                                             |
+| 2026-09-04 | Engine skeleton: contracts and ChainAdapter in core, the Solana adapter, config with the capital-ladder check, health, metrics and HTTP, migrations (tables + conditional Timescale), ingest v1 (per-second snapshots, Token-2022 audit, slot lag), the full deploy stack, OPS.md, CI on TimescaleDB |
+| 2026-09-04 | Phase 1 start: the repository split into npm workspaces (`packages/core`, `apps/desk`, `apps/engine`), pure logic moved to core, tests split, CI on the new paths                                                                                                                                  |
+| 2026-09-04 | Triage of the extra proposals: ADR-0008 (wallet profiler, microstructure, decision budget) and ADR-0009 (control plane and operations); ENGINE.md extended with decision layers, funnel, regime, MEV policy and monitoring                                                                          |
+| 2026-09-03 | Decision review with the owner; ADRs 0005–0007 (capital ladder, chain-agnostic core, collection and replay); ENGINE.md with the supply map and smart copy; roadmap updated                                                                                                                         |
+| 2026-09-03 | Import, Grok scaffolding removed, real desk, roadmap, price-impact unit fix, ENGINE and ADRs 0001–0004, Phase 0, STATE.md                                                                                                                                                                          |
 
-## كيف تبدأ جلسة جديدة
+## Starting a new session
 
-1. اقرأ هذا الملف ثم قسم المرحلة الحالية في `ROADMAP.md`، ثم `ENGINE.md` إن كنت ستلمس المحرك.
-2. شغّل أوامر التحقق أعلاه وتأكد أنها خضراء قبل أي تعديل.
-3. اعمل على فرع، وحدّث هذا الملف (الجدول، المفتوح، سجل الجلسات) في نفس الـ PR.
+1. Read this file, then the current phase in `ROADMAP.md`, then `ENGINE.md` if the engine is touched.
+2. Run the verification commands above and confirm they are green before any change.
+3. Work on a branch and update this file (the table, the open list, the session log) in the same PR.

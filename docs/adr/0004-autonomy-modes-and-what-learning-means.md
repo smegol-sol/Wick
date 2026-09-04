@@ -1,15 +1,15 @@
-# ADR-0004: وضعا الاستقلالية، وتعريف "يتعلم من أخطائه"
+# ADR-0004: Autonomy modes, and what "learns from its mistakes" means
 
-- الحالة: مقبول (سبتمبر 2026)
-- السياق: المالك يريد محركاً يقترح ويوافق هو في البداية، ثم يتداول بالكامل بالنيابة عنه، ويتعلم من أخطائه.
-- القرار في الاستقلالية:
-  - كل قاعدة استراتيجية لها وضع: `suggest` أو `auto`. الوضع الافتراضي لكل قاعدة جديدة `suggest`.
-  - في `suggest` يُنشر القرار (النية) على لوحة التحكم وTelegram بمهلة 90 ثانية. بلا موافقة تنتهي النية وتُسجَّل `expired`. الموافقة لا تتجاوز أي بوابة: النية الموافَق عليها تمر بالبوابات كاملة قبل التوقيع.
-  - الترقية إلى `auto` قرار بشري فقط، ويُتاح للقاعدة بعد 20 اقتراحاً على الأقل، بنسبة موافقة 60% فأكثر، وتوقّع عائد موجب على الاقتراحات المنفَّذة.
-  - العودة إلى `suggest` تلقائية عند: خسارة يومية 5%، أربع خسائر متتالية لنفس القاعدة، أو أي رفض من بوابة التنفيذ ثلاث مرات متتالية.
-- القرار في التعلّم، ثلاثة مستويات بالترتيب ولا يُقفز فوق مستوى:
-  1. **ذاكرة القرارات**: كل نية مع ميزاتها لحظة القرار، كل بوابة ونتيجتها بكود سبب، كل اقتباس، كل معاملة ونتيجتها من السلسلة، وقياس النتيجة بعد 5 و30 و120 دقيقة سواء نُفّذت النية أم رُفضت. الرفض المسجّل هو نصف التعلّم.
-  2. **تقييم القواعد وتعديل الأوزان**: وظيفة يومية تحسب لكل قاعدة على نافذة 14 يوماً: العدد، نسبة النجاح، التوقّع، أسوأ سحب، التوزيع لا المتوسط. الوزن يتغيّر بحد 10% يومياً داخل [0.25، 1.5]. قاعدة بعدد 20 فأكثر وتوقّع سالب سبعة أيام تُعطَّل، ولا تُعاد إلا بيد المشغّل. كل تغيير يُكتب مع سببه ورقمه. المحافظ المتابَعة تخضع لنفس المنطق: فجوة النسخ والانزلاق الفعلي لكل محفظة، وخفض رتبة من تكلّف أكثر مما تكسب.
-  3. **نماذج تنبؤية**: لا تُبنى قبل تراكم 2,000 نية مسجّلة على الأقل، وتُختبر بالورق على الأقل 30 يوماً قبل أن تؤثر في حجم أي صفقة، ولا تتجاوز صلاحيتها تعديل الحجم داخل حدود البوابات.
-- ما يُرفض صراحة: أي تعديل ذاتي بلا صف في `rule_stats` يحمل السبب والرقم. أي "تعلّم" لا يمكن شرحه في جملة على لوحة التحكم.
-- النتائج: تعلّم أبطأ لكنه قابل للتفسير والتراجع. البيانات المسجّلة من اليوم الأول هي رأس المال الحقيقي للمراحل اللاحقة.
+- Status: accepted (September 2026)
+- Context: the owner wants an engine that suggests and lets them approve at first, then trades fully on their behalf, and learns from its mistakes.
+- Decision on autonomy:
+  - Every strategy rule has a mode: `suggest` or `auto`. The default for every new rule is `suggest`. (ADR-0007 adds `shadow` before `suggest`.)
+  - In `suggest` the decision (the intent) is published to the control panel and Telegram with a 90-second deadline. Without approval the intent expires and is recorded `expired`. Approval skips no gate: an approved intent passes the full gate chain before signing.
+  - Promotion to `auto` is a human decision only, and becomes available to a rule after at least 20 suggestions, an approval rate of 60% or more, and positive expectancy on the executed suggestions.
+  - Demotion to `suggest` is automatic on: a 5% daily loss, four consecutive losses for the same rule, or three consecutive rejections from the execution gate.
+- Decision on learning, three levels in order, and no level is skipped:
+  1. **Decision memory**: every intent with its features at decision time, every gate and its result with a reason code, every quote, every transaction and its on-chain result, and the outcome measured after 5, 30 and 120 minutes whether the intent was executed or rejected. A recorded rejection is half of the learning.
+  2. **Rule evaluation and weight changes**: a daily job computes, per rule over a 14-day window, the count, win rate, expectancy, worst drawdown, and the distribution rather than the mean. A weight moves at most 10% a day inside [0.25, 1.5]. A rule with 20 or more intents and negative expectancy for seven days is disabled and only the operator re-enables it. Every change is written with its reason and number. Followed wallets get the same logic: copy gap and realized slippage per wallet, and demotion for any wallet that costs more than it earns.
+  3. **Predictive models**: not built before at least 2,000 recorded intents, paper-tested for at least 30 days before touching any trade size, and never allowed to do more than adjust size inside the gate limits.
+- Explicitly rejected: any self-change without a `rule_stats` row carrying the reason and the number. Any "learning" that cannot be explained in one sentence on the control panel.
+- Consequences: slower learning that is explainable and reversible. Data recorded from day one is the real capital of the later phases.

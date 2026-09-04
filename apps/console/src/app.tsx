@@ -9,15 +9,13 @@ import {
 } from "@tanstack/react-router";
 import { WickMark } from "@/components/mark";
 import { isMock } from "@/lib/api";
-import { LangProvider } from "@/lib/lang";
-import { useLang } from "@/lib/lang-context";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { EngineScreen } from "@/screens/engine";
 import { NowScreen } from "@/screens/now";
 import { TokenScreen } from "@/screens/token";
 
 function Shell() {
-  const { t, toggle } = useLang();
   const tab =
     "h-10 rounded-sm px-3 text-sm font-medium text-muted hover:text-fg [&.active]:bg-elevated [&.active]:text-fg";
   return (
@@ -35,13 +33,6 @@ function Shell() {
           <Link to="/engine" className={cn(tab)}>
             {t("engine")}
           </Link>
-          <button
-            type="button"
-            onClick={toggle}
-            className="h-10 px-2 text-2xs text-subtle hover:text-fg"
-          >
-            {t("lang")}
-          </button>
         </nav>
       </header>
       <main className="flex-1">
@@ -81,9 +72,7 @@ const queryClient = new QueryClient({
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <LangProvider>
-        <RouterProvider router={router} />
-      </LangProvider>
+      <RouterProvider router={router} />
     </QueryClientProvider>
   );
 }

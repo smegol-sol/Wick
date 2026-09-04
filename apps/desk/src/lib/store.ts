@@ -1428,7 +1428,7 @@ export const useDesk = create<DeskState>()(
             kind: note.kind,
             tokenId: note.tokenId,
             text: `${mark} ${note.en}`.trim(),
-            textAr: `${mark} ${note.ar}`.trim(),
+            textAr: `${mark} ${note.en}`.trim(),
           });
           if (note.kind === "risk") {
             alerts = pushAlert(
@@ -1438,7 +1438,7 @@ export const useDesk = create<DeskState>()(
                 kind: "risk",
                 tokenId: note.tokenId,
                 text: `${mark} ${note.en}`.trim(),
-                textAr: `${mark} ${note.ar}`.trim(),
+                textAr: `${mark} ${note.en}`.trim(),
               },
               state.settings.radarRisk,
             );

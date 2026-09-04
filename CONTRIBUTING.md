@@ -36,6 +36,8 @@ All four of the first commands must pass before a PR is opened; CI runs the same
 
 ## Rules that do not bend
 
+0. Everything in the repository is English: code, strings, documents. No second language in the UI.
+
 1. A number without a source is `null` and renders n/a. Filters reject unknown, never pass it.
 2. Nothing signs without passing every gate. Human approval does not skip a gate.
 3. Money stops in the engine, never in a notification.

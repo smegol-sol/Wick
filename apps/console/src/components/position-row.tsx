@@ -2,11 +2,10 @@ import { Link } from "@tanstack/react-router";
 import type { PositionView } from "@wick/core/api";
 import { formatAge, formatPct, formatSol } from "@wick/core/format";
 import { TokenMark } from "./mark";
-import { useLang } from "@/lib/lang-context";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function PositionRow({ p, now }: { p: PositionView; now: number }) {
-  const { t } = useLang();
   const tone = p.pnlSol == null ? "text-muted" : p.pnlSol >= 0 ? "text-up" : "text-down";
   return (
     <Link

@@ -29,7 +29,7 @@ export interface Ladder {
   pendingSince: number;
 }
 
-export type LadderNote = { tokenId: string; en: string; ar: string; kind: "flow" | "risk" };
+export type LadderNote = { tokenId: string; en: string; kind: "flow" | "risk" };
 export type LadderSlice = { tokenId: string; sol: number; source: "dca" | "twap" };
 
 const CONFIRM_MS = 14_000;
@@ -220,7 +220,6 @@ export function tickLadders(
       notes.push({
         tokenId: l.tokenId,
         en: "Ladder stopped — name gone",
-        ar: "توقف السلّم — الاسم اختفى",
         kind: "risk",
       });
       return { ...l, status: "stopped" as const, pendingSol: 0, pendingSrc: null, pendingSince: 0 };
@@ -236,7 +235,6 @@ export function tickLadders(
         notes.push({
           tokenId: l.tokenId,
           en: "Signal died — dump before confirm",
-          ar: "ماتت الإشارة — هبوط قبل التأكيد",
           kind: "risk",
         });
         return { ...l, status: "stopped" as const };
@@ -247,7 +245,6 @@ export function tickLadders(
           notes.push({
             tokenId: l.tokenId,
             en: "Signal held — DCA down",
-            ar: "الإشارة ثبتت — تجميع على الهبوط",
             kind: "flow",
           });
           l = toDip(l, ctx.now);
@@ -255,7 +252,6 @@ export function tickLadders(
           notes.push({
             tokenId: l.tokenId,
             en: "Signal faded — no entry",
-            ar: "خفتت الإشارة — بلا دخول",
             kind: "risk",
           });
           return { ...l, status: "stopped" as const };
@@ -267,7 +263,6 @@ export function tickLadders(
         notes.push({
           tokenId: l.tokenId,
           en: "Dip window done — TWAP in",
-          ar: "انتهى الهبوط — دخول TWAP",
           kind: "flow",
         });
         l = toTwap(l, ctx.now);
@@ -317,8 +312,8 @@ export function tickLadders(
   return { ladders: next, slices, notes };
 }
 
-export function phaseMsg(phase: LadderPhase): { en: string; ar: string } {
-  if (phase === "confirm") return { en: "Confirm", ar: "تأكيد" };
-  if (phase === "dip") return { en: "DCA down", ar: "هبوط" };
-  return { en: "TWAP", ar: "TWAP" };
+export function phaseMsg(phase: LadderPhase): { en: string } {
+  if (phase === "confirm") return { en: "Confirm" };
+  if (phase === "dip") return { en: "DCA down" };
+  return { en: "TWAP" };
 }

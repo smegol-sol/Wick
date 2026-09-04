@@ -5,10 +5,9 @@ import { PositionRow } from "@/components/position-row";
 import { StatusStrip } from "@/components/status-strip";
 import { Empty, Kicker } from "@/components/ui";
 import { api, subscribe } from "@/lib/api";
-import { useLang } from "@/lib/lang-context";
+import { t } from "@/lib/i18n";
 
 export function NowScreen() {
-  const { t } = useLang();
   const qc = useQueryClient();
   const [online, setOnline] = useState(false);
   const state = useQuery({

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { GateList } from "./gate-list";
 import { TokenMark } from "./mark";
 import { Button, Pill } from "./ui";
-import { useLang } from "@/lib/lang-context";
+import { t } from "@/lib/i18n";
 
 function useNow(everyMs: number): number {
   const [now, setNow] = useState(() => Date.now());
@@ -27,7 +27,6 @@ export function IntentCard({
   onReject?: (id: string) => void;
   busy?: boolean;
 }) {
-  const { t } = useLang();
   const now = useNow(1000);
   const { intent } = view;
   const left = ttlLeftMs(view, now);

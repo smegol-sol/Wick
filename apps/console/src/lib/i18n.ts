@@ -1,7 +1,5 @@
-/** Console strings. Small on purpose: two screens and a detail. */
-export type Lang = "en" | "ar";
-
-const en = {
+/** Console strings. English only (STATE.md, language). Small on purpose: two screens and a detail. */
+const STRINGS = {
   now: "Now",
   engine: "Engine",
   token: "Token",
@@ -53,7 +51,6 @@ const en = {
   example: "Example data. Nothing here is real.",
   apiToken: "API token",
   save: "Save",
-  lang: "العربية",
   candles: "Candles from our snapshots",
   supplyMap: "Supply map",
   holders: "Top holders",
@@ -105,138 +102,10 @@ const en = {
   window: "Window",
   intents: "Intents",
   autoOk: "auto ok",
-};
+} as const;
 
-export type Msg = keyof typeof en;
+export type Msg = keyof typeof STRINGS;
 
-const ar: Record<Msg, string> = {
-  now: "الآن",
-  engine: "المحرك",
-  token: "العملة",
-  back: "رجوع",
-  approve: "موافقة",
-  reject: "رفض",
-  approved: "تمت الموافقة",
-  rejected: "مرفوضة",
-  expired: "انتهت",
-  executed: "نُفّذت",
-  failed: "فشلت",
-  shadow: "ظل",
-  proposed: "بانتظارك",
-  expiresIn: "تنتهي خلال",
-  why: "لماذا",
-  gates: "البوابات",
-  adjusted: "الحجم معدَّل",
-  size: "الحجم",
-  pending: "بانتظارك",
-  noPending: "لا شيء ينتظرك. المحرك يراقب.",
-  positions: "المراكز المفتوحة",
-  noPositions: "لا مراكز مفتوحة.",
-  equity: "حقوق الملكية",
-  dayPnl: "اليوم",
-  regime: "نظام السوق",
-  health: "الصحة",
-  healthy: "سليم",
-  selfHalt: "إيقاف ذاتي",
-  halted: "متوقف",
-  vault: "الخزنة",
-  vaultSealed: "مختومة",
-  vaultUnsealed: "مفتوحة",
-  vaultNone: "بلا مفتاح",
-  rules: "القواعد",
-  mode: "الوضع",
-  weight: "الوزن",
-  stats: "الإحصاء",
-  funnel: "القمع",
-  rejections: "الرفض",
-  adjustments: "التعديلات",
-  replays: "تشغيلات replay",
-  ops: "التشغيل",
-  halt: "أوقف الآن",
-  haltReason: "السبب",
-  clearHalt: "رفع الإيقاف",
-  unseal: "فتح الخزنة",
-  needsSecondFactor: "يحتاج العامل الثاني؛ يصل في المرحلة 2.",
-  tier: "الدرجة",
-  example: "بيانات مثال. لا شيء هنا حقيقي.",
-  apiToken: "رمز الواجهة",
-  save: "حفظ",
-  lang: "English",
-  candles: "شموع من لقطاتنا",
-  supplyMap: "خريطة المعروض",
-  holders: "أكبر الحاملين",
-  gateHistory: "تاريخ البوابات",
-  na: "n/a",
-  entered: "دخل",
-  passed: "خرج",
-  n: "ن",
-  expectancy: "التوقّع",
-  winRate: "نسبة النجاح",
-  worstDd: "أسوأ سحب",
-  since: "منذ",
-  eligibleAuto: "مؤهلة للتلقائي",
-  notEligible: "غير مؤهلة بعد",
-  noRules: "لا قواعد بعد. تصل مع المرحلة 2.",
-  noReplays: "لا تشغيلات replay بعد.",
-  noIntents: "لا نوايا لهذه العملة.",
-  offline: "المحرك غير متاح",
-  connect: "اتصال",
-  connected: "متصل",
-  mock: "وضع المثال",
-  dev: "حصة المطوّر",
-  bundle: "الحزمة",
-  snipers: "القنّاصون",
-  fresh: "محافظ حديثة",
-  lp: "في المسبح",
-  cluster: "تجمّع تمويل",
-  trend: "الأوائل",
-  distributing: "يوزّعون",
-  accumulating: "يراكمون",
-  flat: "ثابت",
-  authorities: "الصلاحيات",
-  mintAuth: "سك",
-  freezeAuth: "تجميد",
-  extensions: "Token-2022",
-  netFlow5m: "صافي التدفّق 5د",
-  organic: "الحجم العضوي",
-  depth: "العمق ±2%",
-  liquidity: "السيولة",
-  mcap: "القيمة السوقية",
-  age: "العمر",
-  buysSells: "شراء / بيع 5د",
-  stage: "المرحلة",
-  reason: "السبب",
-  cost: "التكلفة",
-  value: "القيمة",
-  pnl: "الربح",
-  trail: "الوقف المتحرك",
-  window: "النافذة",
-  intents: "النوايا",
-  autoOk: "تلقائي ممكن",
-};
-
-const DICT: Record<Lang, Record<Msg, string>> = { en, ar };
-
-export function t(lang: Lang, key: Msg): string {
-  return DICT[lang][key];
-}
-
-export function readLang(): Lang {
-  try {
-    const v = localStorage.getItem("wick.lang");
-    if (v === "ar" || v === "en") return v;
-  } catch {
-    /* private mode */
-  }
-  return "en";
-}
-
-export function writeLang(lang: Lang): void {
-  try {
-    localStorage.setItem("wick.lang", lang);
-  } catch {
-    /* ignore */
-  }
-  document.documentElement.lang = lang;
-  document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+export function t(key: Msg): string {
+  return STRINGS[key];
 }

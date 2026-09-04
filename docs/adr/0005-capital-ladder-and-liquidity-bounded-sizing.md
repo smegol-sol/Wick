@@ -1,7 +1,6 @@
 # ADR-0005: Capital ladder and liquidity-bounded sizing
 
 - Status: accepted (September 2026)
-- Language: engine documents from this ADR onward are written in English so that names in the documents are the names in the code (see ENGINE.md §13).
 
 ## Context
 

@@ -7,11 +7,10 @@ import { TokenMark } from "@/components/mark";
 import { SupplyMapCard } from "@/components/supply-map";
 import { Empty, Kicker, Pill, Stat } from "@/components/ui";
 import { api } from "@/lib/api";
-import { useLang } from "@/lib/lang-context";
+import { t } from "@/lib/i18n";
 
 export function TokenScreen() {
   const { mint } = useParams({ from: "/token/$mint" });
-  const { t } = useLang();
   const q = useQuery({
     queryKey: ["token", mint],
     queryFn: () => api.token(mint),

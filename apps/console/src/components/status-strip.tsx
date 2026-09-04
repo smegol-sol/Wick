@@ -1,10 +1,9 @@
 import type { ApiState } from "@wick/core/api";
 import { formatPct, formatSol } from "@wick/core/format";
 import { Pill, Stat } from "./ui";
-import { useLang } from "@/lib/lang-context";
+import { t } from "@/lib/i18n";
 
 export function StatusStrip({ state, online }: { state: ApiState | undefined; online: boolean }) {
-  const { t } = useLang();
   if (!state) {
     return (
       <div className="panel flex items-center gap-3 px-4 py-3 text-sm text-muted">

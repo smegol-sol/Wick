@@ -1,15 +1,15 @@
-# ADR-0003: المحرك يعمل على VPS واحد بمفتاح تنفيذ مختوم يُفتح يدوياً
+# ADR-0003: The engine runs on one VPS with a sealed execution key unsealed by hand
 
-- الحالة: مقبول (سبتمبر 2026)
-- السياق: المطلوب محرك يعمل 24 ساعة، يحفظ ويقيّم قراراته، ويوقّع بالنيابة. رأس المال الابتدائي 2,500 دولار، فتكلفة البنية لازم تبقى نسبة صغيرة منه، وكل تعقيد سحابي إضافي غير مبرّر.
-- البدائل المرفوضة:
-  - KMS سحابي: أصح تصميم أمني لكن يضيف حساباً سحابياً وIAM وتكلفة وتعقيداً لا يبرّرهما مبلغ بهذا الحجم. يُعاد النظر فيه عند تجاوز رأس المال 25 ألف دولار.
-  - Serverless: لا يناسب worker دائماً ولا قفلاً توزيعياً ولا اتصال WebSocket مفتوحاً.
-  - المتصفح: يتوقف عند إغلاق التبويب.
-- القرار:
-  - VPS واحد (Hetzner CPX31 أو ما يعادله، ~15 يورو شهرياً) في أوروبا، Docker Compose يشغّل: `engine` (Node 22)، Postgres مع TimescaleDB، Redis، Prometheus، Grafana. النسخ الاحتياطي اليومي لقاعدة البيانات إلى تخزين خارجي.
-  - **محفظة تنفيذ منفصلة** بسقف تمويل 15 SOL في البداية، تُعبّأ يدوياً من المحفظة الرئيسية. المحفظة الرئيسية لا تلمسها أي خدمة.
-  - مفتاح التنفيذ مختوم بنفس صيغة خزنة WICK (`hot-wallet.ts`) ومحفوظ على القرص. عند إقلاع `engine` المفتاح مقفل والتداول متوقف حتى يُدخل المشغّل كلمة السر من لوحة التحكم عبر اتصال مصادَق. إعادة التشغيل غير المراقَبة تعني توقفاً آمناً لا تداولاً أعمى.
-  - مفتاح الإيقاف (kill switch) ملف على القرص يفحصه المحرك كل ثانية ويقرأه مسار مستقل عن صحة المحرك، ويُفعَّل عبر SSH أو أمر Telegram موقّع. المال يتوقف في المحرك لا في التنبيه.
-  - سقوف على مستوى المحفظة داخل الكود: حد لكل معاملة، حد يومي، حد لأقصى رصيد تشغيلي، لا يمكن رفعها من لوحة التحكم إلا بإعادة نشر.
-- النتائج: نقطة فشل واحدة (الخادم)، مقبولة بهذا الحجم. الأمان أمان الخادم: SSH بمفاتيح فقط، جدار ناري، تحديثات تلقائية، لا منافذ عامة سوى لوحة التحكم خلف مصادقة. يُراجع القرار عند نمو رأس المال أو عند أول حادثة.
+- Status: accepted (September 2026)
+- Context: an engine that runs 24 hours a day, records and evaluates its decisions, and signs on the owner's behalf. Starting capital is 2,500 USD, so infrastructure must stay a small fraction of it and any extra cloud complexity is unjustified.
+- Alternatives rejected:
+  - Cloud KMS: the sounder security design, but it adds a cloud account, IAM, cost and complexity that this amount does not justify. Revisited when capital exceeds 25,000 USD (ADR-0005 makes it a tier-3 precondition).
+  - Serverless: no place for a permanent worker, a distributed lock or an open WebSocket.
+  - The browser: stops when the tab closes.
+- Decision:
+  - One VPS (Hetzner CPX31 or equivalent, about 15 EUR a month) in Europe, Docker Compose running `engine` (Node 22), Postgres with TimescaleDB, Redis, Prometheus and Grafana. A daily database backup to external storage.
+  - **A separate execution wallet** with a funding cap of 15 SOL at first, filled by hand from the main wallet. No service ever touches the main wallet.
+  - The execution key is sealed in the same format as the WICK vault (`hot-wallet.ts`) and kept on disk. When `engine` boots the key is locked and trading is halted until the operator enters the passphrase from the control panel over an authenticated connection. An unattended restart means a safe stop, not blind trading.
+  - The kill switch is a file on disk the engine checks every second, read by a path independent of the engine's own health, and set over SSH or a signed Telegram command. Money stops in the engine, not in a notification.
+  - Wallet-level caps live in code: per transaction, per day, and a maximum operating balance; none can be raised from the control panel, only by a redeploy.
+- Consequences: one point of failure (the host), acceptable at this size. Security is host security: SSH keys only, a firewall, automatic updates, no public ports except the control panel behind authentication (ADR-0009 later removes even that: the panel lives on the tailnet). Revisited when capital grows or after the first incident.

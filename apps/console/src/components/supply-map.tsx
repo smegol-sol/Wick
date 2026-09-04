@@ -1,5 +1,5 @@
 import type { SupplyMap } from "@wick/core/contracts";
-import { useLang } from "@/lib/lang-context";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type Row = {
@@ -10,7 +10,6 @@ type Row = {
 };
 
 export function SupplyMapCard({ supply }: { supply: SupplyMap | null }) {
-  const { t } = useLang();
   if (!supply) return <p className="px-4 py-4 text-sm text-muted">{t("na")}</p>;
   const rows: Row[] = [
     { key: "dev", value: supply.devPct, warn: 5, bad: 10 },

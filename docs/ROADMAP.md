@@ -14,13 +14,14 @@
 - [x] قوالب PR وissues، CODEOWNERS، SECURITY.md، CONTRIBUTING.md.
 - [x] Dependabot أسبوعياً و`npm audit --audit-level=high` في CI.
 - [x] ملف الحالة `docs/STATE.md` وقاعدة تحديثه في كل PR.
-- [ ] تحويل المستودع إلى monorepo خفيف: `apps/desk` (الحالي)، `apps/engine`، `packages/core`. يُنفَّذ كأول خطوة في المرحلة 1 حين يوجد كود محرك فعلي.
+- [x] تحويل المستودع إلى monorepo خفيف: `apps/desk` (الحالي)، `apps/engine`، `packages/core`.
 
 شرط الإنجاز: PR يفشل لو كسر اختباراً ولا يُدمج بلا مراجعة.
 
 ## المرحلة 1: الخادم والبيانات (أسبوعان)
 
-- [ ] تقسيم monorepo مع `packages/core` وواجهة `ChainAdapter` ومحوّل Solana (ADR-0006).
+- [x] تقسيم monorepo مع `packages/core` (npm workspaces، المنطق النقي في core، والمكتب يستورده كـ `@wick/core`).
+- [ ] واجهة `ChainAdapter` ومحوّل Solana في `apps/engine` (ADR-0006).
 - [ ] VPS بـ Docker Compose: engine، Postgres+Timescale، Redis، Prometheus، Grafana، نسخ احتياطي يومي.
 - [ ] مخطط قاعدة البيانات من ENGINE.md §14 مع migrations، وسياسة الاحتفاظ من ADR-0007.
 - [ ] `ingest`: pump.fun وDexScreener وتدقيق mint (نقل الكود الحالي)، فحص Token-2022 (الامتدادات) وحالة LP الثلاثية.

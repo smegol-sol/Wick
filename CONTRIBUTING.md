@@ -32,7 +32,7 @@ npm test
 npm run build
 ```
 
-All four of the first commands must pass before a PR is opened; CI runs the same set.
+All four of the first commands must pass before a PR is opened; CI runs the same set. They run from the repository root and cover every workspace (`packages/core`, `apps/desk`, `apps/engine`). Shared pure logic goes in `packages/core` and is imported as `@wick/core/<module>`; nothing in core may import a browser or React module.
 
 ## Rules that do not bend
 

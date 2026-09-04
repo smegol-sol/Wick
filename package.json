@@ -1,55 +1,36 @@
 {
   "name": "wick",
   "private": true,
-  "sideEffects": false,
   "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "dev": "npm -w @wick/desk run dev",
+    "build": "npm -w @wick/desk run build",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "node --experimental-strip-types --import ./scripts/test-loader.mjs --test src/lib/*.test.ts",
-    "smoke": "node scripts/smoke.mjs",
     "format:check": "prettier --check .",
+    "test": "npm run test --workspaces --if-present",
+    "smoke": "node scripts/smoke.mjs",
     "audit": "npm audit --audit-level=high --omit=dev"
-  },
-  "dependencies": {
-    "@noble/curves": "^1.9.7",
-    "@tailwindcss/vite": "^4.3.0",
-    "@tanstack/react-router": "^1.170.0",
-    "@tanstack/react-start": "^1.168.0",
-    "@tanstack/router-plugin": "^1.168.0",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "lucide-react": "^0.510.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "tailwind-merge": "^3.5.0",
-    "tailwindcss": "^4.3.0",
-    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
     "@eslint/js": "^9.20.0",
-    "@solana/web3.js": "^1.98.4",
     "@types/node": "^22.16.5",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "@vitejs/plugin-react": "^5.2.0",
     "eslint": "^9.20.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
-    "nitro": "3.0.260610-beta",
     "playwright": "^1.62.0",
     "prettier": "^3.4.0",
     "typescript": "^5.7.0",
-    "typescript-eslint": "^8.56.1",
-    "vite": "^8.2.0"
+    "typescript-eslint": "^8.56.1"
   }
 }

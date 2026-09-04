@@ -2,7 +2,8 @@ import { existsSync, statSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+// The workspace whose tests are running; `npm -w <pkg> test` sets cwd to it.
+const ROOT = process.cwd();
 const EXTS = [".ts", ".tsx", ".mts", ".js", ".mjs"];
 
 function isFile(p) {

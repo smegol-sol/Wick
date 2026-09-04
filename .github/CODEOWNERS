@@ -1,9 +1,11 @@
 # Every change is reviewed by the owner until a second maintainer exists.
 * @smegol-sol
 # Anything that signs or sizes gets a second look regardless.
-/src/lib/hot-wallet.ts @smegol-sol
-/src/lib/live-exec.ts @smegol-sol
-/src/lib/live-auto.ts @smegol-sol
-/src/lib/risk.ts @smegol-sol
-/src/routes/api/swap.ts @smegol-sol
-/src/routes/api/send.ts @smegol-sol
+/packages/core/src/hot-wallet.ts @smegol-sol
+/packages/core/src/risk.ts @smegol-sol
+/packages/core/src/exits.ts @smegol-sol
+/apps/desk/src/lib/live-exec.ts @smegol-sol
+/apps/desk/src/lib/live-auto.ts @smegol-sol
+/apps/desk/src/routes/api/swap.ts @smegol-sol
+/apps/desk/src/routes/api/send.ts @smegol-sol
+/apps/engine/ @smegol-sol

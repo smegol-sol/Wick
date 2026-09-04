@@ -6,4 +6,4 @@ node_modules
 dist
 screenshots
 package-lock.json
-src/routeTree.gen.ts
+apps/desk/src/routeTree.gen.ts

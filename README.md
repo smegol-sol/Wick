@@ -28,20 +28,22 @@ Progress, decisions and open items live in [`docs/STATE.md`](docs/STATE.md). Rea
 ## Run it
 
 ```sh
-cp .env.example .env   # set SOLANA_RPC_URL
-npm install
-npm run dev            # http://127.0.0.1:8080
+cp apps/desk/.env.example apps/desk/.env   # set SOLANA_RPC_URL
+npm install                                # one install for every workspace
+npm run dev                                # http://127.0.0.1:8080
 ```
 
-Checks:
+Checks, all from the repository root:
 
 ```sh
-npm run typecheck
+npm run typecheck      # every workspace
 npm run lint
-npm test               # src/lib/*.test.ts via node --test
-npm run build          # nitro, vercel preset by default
+npm test               # packages/core and apps/desk, node --test
+npm run build          # the desk; nitro, vercel preset by default
 npm run smoke          # Playwright render check against a running server
 ```
+
+Deploying the desk to Vercel: set the project's Root Directory to `apps/desk` (the build still runs from the workspace root through npm).
 
 ## Configuration
 
@@ -61,12 +63,12 @@ Server-only environment variables (never `VITE_` prefixed):
 
 ## Layout
 
-- `src/lib/store.ts`: desk state and the tick loop. Queues intent only.
-- `src/lib/live-auto.ts`: the one place that signs. Exits, snipes, copies, limits, ladders, DCA in that order.
-- `src/lib/solana-pulse.ts`, `dex-stats.ts`, `mint-audit.ts`, `sol-price.ts`: data sources.
-- `src/routes/api/*`: pulse, holders, quote, swap, send, wallet bag.
-- `src/lib/hot-wallet.ts`: vault and signer.
-- `src/lib/desk-audit.test.ts`: tests for guards, vault, ladders, exits, fraud, sieve, flow.
+npm workspaces, one lockfile at the root:
+
+- `packages/core`: chain-agnostic contracts and the pure logic both apps share. Sources (`solana-pulse.ts`, `dex-stats.ts`, `mint-audit.ts`, `sol-price.ts`, `rpc.ts`), risk and exits, entry ladders, guards, the vault and signer (`hot-wallet.ts`), Jupiter, fraud and tape heuristics, copy rules. Imported as `@wick/core/<module>`. Tests in `src/core.test.ts`.
+- `apps/desk`: the browser desk (TanStack Start). `src/lib/store.ts` is desk state and the tick loop and queues intent only; `src/lib/live-auto.ts` is the one place in the desk that signs; `src/routes/api/*` are pulse, holders, quote, swap, send and wallet bag. Tests in `src/lib/desk.test.ts`.
+- `apps/engine`: the autonomous engine (see `docs/ENGINE.md`). Being built in roadmap Phase 1.
+- `scripts/`: the test loader shared by the workspaces and the Playwright smoke.
 
 ## Known limits
 

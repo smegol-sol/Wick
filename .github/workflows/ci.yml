@@ -54,7 +54,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: serve the built output and smoke it
         run: |
-          node .output/server/index.mjs > server.log 2>&1 &
+          node apps/desk/.output/server/index.mjs > server.log 2>&1 &
           for i in $(seq 1 40); do
             curl -sf -o /dev/null http://127.0.0.1:3000/ && break
             sleep 1

@@ -12,7 +12,7 @@
     "test": "node --experimental-strip-types --import ../../scripts/test-loader.mjs --test src/*.test.ts"
   },
   "dependencies": {
-    "@noble/curves": "^1.9.7"
+    "@noble/curves": "^2.4.0"
   },
   "devDependencies": {
     "@solana/web3.js": "^1.98.4"

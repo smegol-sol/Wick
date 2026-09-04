@@ -21,18 +21,20 @@
 ## المرحلة 1: الخادم والبيانات (أسبوعان)
 
 - [x] تقسيم monorepo مع `packages/core` (npm workspaces، المنطق النقي في core، والمكتب يستورده كـ `@wick/core`).
-- [ ] واجهة `ChainAdapter` ومحوّل Solana في `apps/engine` (ADR-0006).
-- [ ] VPS بـ Docker Compose: engine، Postgres+Timescale، Redis، Prometheus، Grafana، نسخ احتياطي يومي.
-- [ ] مخطط قاعدة البيانات من ENGINE.md §14 مع migrations، وسياسة الاحتفاظ من ADR-0007.
-- [ ] `ingest`: pump.fun وDexScreener وتدقيق mint (نقل الكود الحالي)، فحص Token-2022 (الامتدادات) وحالة LP الثلاثية.
+- [x] واجهة `ChainAdapter` في `packages/core` ومحوّل Solana في `apps/engine` (المصادر، التدقيق، الاقتباس؛ التوقيع والإرسال يرميان خطأً حتى المرحلة 2).
+- [x] Docker Compose للخادم: engine، Postgres+Timescale، Redis، Prometheus، Grafana، Alertmanager، exporters، Caddy، نسخ احتياطي يومي (`apps/engine/deploy`). ينتظر التشغيل الفعلي على VPS.
+- [x] مخطط قاعدة البيانات من ENGINE.md §14 مع migrations وسياسة الاحتفاظ من ADR-0007 (0001 جداول، 0002 hypertables وضغط واحتفاظ وتجميع 10 ثوانٍ؛ يُختبر في CI على TimescaleDB).
+- [x] `ingest`: pump.fun وDexScreener وتدقيق mint (نقل الكود الحالي)، فحص Token-2022 (الامتدادات).
+- [ ] حالة LP الثلاثية (burned/locked/deployer) من حساب المسبح.
 - [ ] Helius webhooks لأحداث الإنشاء والهجرة وLP وصفقات المحافظ المتابَعة (بدل الاستطلاع).
 - [ ] تحليل معاملات الإطلاق (`launch_txs`): المنشئ، المشترون في slot الإنشاء والثلاثة التالية، القنّاصون في أول عشرة.
-- [ ] تجميع البيانات كمخرَج صريح: لقطة كل ثانية للعملات النشطة، كل 60 ثانية للخاملة، وكل حدث وكل تدقيق (ADR-0007).
+- [x] تجميع البيانات كمخرَج صريح: لقطة كل ثانية للعملات النشطة، كل 60 ثانية للخاملة، والتدقيق عند التغيّر فقط (ADR-0007). أحداث السلسلة تنتظر webhooks.
 - [ ] `features` كل ثانية لكل mint نشط، مع `uniqueBuyers5m` من الأحداث.
-- [ ] `/metrics` والمقاييس من ENGINE.md §15، لوحتا Operations وQuality.
-- [ ] RPC مخصص مع مزوّد ثانٍ احتياطياً، وفحص صحة على حداثة الـ slot لا على HTTP 200.
-- [ ] مراقبة الخادم: node_exporter وpostgres_exporter وredis_exporter، لوحة Host، Alertmanager إلى Telegram بالعتبات المكتوبة، وdead-man ping لخدمة خارجية (ADR-0009).
-- [ ] الشبكة الخاصة: الخادم داخل Tailscale، لا منافذ عامة سوى SSH بالمفاتيح.
+- [x] `/metrics` ومقاييس الحياة والاستيعاب من ENGINE.md §15، لوحتا Operations وHost.
+- [ ] لوحة Quality (تنتظر طبقة القرار).
+- [x] RPC مخصص مع احتياطي عام، وslot lag يُقاس كل 5 ثوانٍ عبر كل النقاط ويدخل في الصحة.
+- [x] مراقبة الخادم: node_exporter وpostgres_exporter وredis_exporter، لوحة Host، Alertmanager إلى Telegram بالعتبات المكتوبة، dead-man ping لخدمة خارجية، وإيقاف ذاتي عند تدهور الصحة (ADR-0009).
+- [x] الشبكة الخاصة: Caddy مربوط بعنوان Tailscale فقط، لا منافذ عامة سوى SSH بالمفاتيح؛ الخطوات في `docs/OPS.md`.
 
 شرط الإنجاز: 72 ساعة بث بلا انقطاع، لوحة Operations تُظهر عمر كل مصدر، قاعدة البيانات تحتفظ بأسبوع كامل من اللقطات بحجم داخل التقدير، وتنبيه تجريبي واحد على الأقل وصل إلى الهاتف من كل قاعدة تنبيه.
 

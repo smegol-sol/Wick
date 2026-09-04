@@ -43,6 +43,16 @@ npm run build          # the desk; nitro, vercel preset by default
 npm run smoke          # Playwright render check against a running server
 ```
 
+Engine, locally (any Postgres 16; the TimescaleDB migration skips itself when the extension is missing):
+
+```sh
+cd apps/engine
+DATABASE_URL=postgres://wick@127.0.0.1:5432/wick npm run migrate
+DATABASE_URL=postgres://wick@127.0.0.1:5432/wick SOLANA_RPC_URL=https://... npm start
+curl -s http://127.0.0.1:9464/healthz
+TEST_DATABASE_URL=postgres://wick@127.0.0.1:5432/wick npm test   # adds the database integration test
+```
+
 Deploying the desk to Vercel: set the project's Root Directory to `apps/desk` (the build still runs from the workspace root through npm).
 
 ## Configuration
@@ -67,7 +77,7 @@ npm workspaces, one lockfile at the root:
 
 - `packages/core`: chain-agnostic contracts and the pure logic both apps share. Sources (`solana-pulse.ts`, `dex-stats.ts`, `mint-audit.ts`, `sol-price.ts`, `rpc.ts`), risk and exits, entry ladders, guards, the vault and signer (`hot-wallet.ts`), Jupiter, fraud and tape heuristics, copy rules. Imported as `@wick/core/<module>`. Tests in `src/core.test.ts`.
 - `apps/desk`: the browser desk (TanStack Start). `src/lib/store.ts` is desk state and the tick loop and queues intent only; `src/lib/live-auto.ts` is the one place in the desk that signs; `src/routes/api/*` are pulse, holders, quote, swap, send and wallet bag. Tests in `src/lib/desk.test.ts`.
-- `apps/engine`: the autonomous engine (see `docs/ENGINE.md`). Being built in roadmap Phase 1.
+- `apps/engine`: the autonomous engine (see `docs/ENGINE.md`). Phase 1 so far: config with the capital ladder check, ingest into Postgres/TimescaleDB (tokens, second-resolution snapshots, mint audits with Token-2022 extensions), health and `/metrics`, and the host stack under `deploy/` (compose, Prometheus alerts, Alertmanager to Telegram, Grafana boards, Caddy on the tailnet, nightly backups). `docs/OPS.md` is the runbook.
 - `scripts/`: the test loader shared by the workspaces and the Playwright smoke.
 
 ## Known limits

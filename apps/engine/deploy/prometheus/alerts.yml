@@ -1,0 +1,76 @@
+# ADR-0009 §1. Every rule has a written threshold; the brakes are in code,
+# these only tell a human.
+groups:
+  - name: wick-liveness
+    rules:
+      - alert: EngineDown
+        expr: absent(wick_up == 1) or wick_up == 0
+        for: 60s
+        labels: { severity: critical }
+        annotations: { summary: "engine down for 60s" }
+      - alert: SourceStale
+        expr: wick_source_heartbeat_age_seconds{source=~"pump.fun|rpc"} > 30
+        for: 30s
+        labels: { severity: critical }
+        annotations: { summary: 'source {{ $labels.source }} stale {{ $value | printf "%.0f" }}s' }
+      - alert: DexScreenerStale
+        expr: wick_source_heartbeat_age_seconds{source="dexscreener"} > 120
+        for: 2m
+        labels: { severity: warning }
+        annotations: { summary: 'DexScreener stats stale {{ $value | printf "%.0f" }}s' }
+      - alert: SlotLag
+        expr: wick_slot_lag > 20
+        for: 30s
+        labels: { severity: critical }
+        annotations: { summary: "primary RPC {{ $value }} slots behind" }
+      - alert: DecisionSlow
+        expr: histogram_quantile(0.99, sum(rate(wick_decision_duration_seconds_bucket[5m])) by (le)) > 0.05
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "decision p99 over 50 ms for 5m" }
+      - alert: EventLoopLag
+        expr: wick_event_loop_lag_seconds > 0.1
+        for: 30s
+        labels: { severity: warning }
+        annotations: { summary: 'event loop lag {{ $value | printf "%.3f" }}s' }
+      - alert: DbErrors
+        expr: increase(wick_db_errors_total[10m]) > 0
+        labels: { severity: critical }
+        annotations: { summary: "database statements failing ({{ $labels.op }})" }
+      - alert: UnconfirmedTransaction
+        expr: increase(wick_rejections_total{reason="EXEC_UNCONFIRMED"}[1h]) > 0
+        labels: { severity: critical }
+        annotations: { summary: "a transaction went unconfirmed in the last hour" }
+
+  - name: wick-host
+    rules:
+      - alert: DiskFull
+        expr: (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}) > 0.8
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "root disk over 80%" }
+      - alert: DiskWillFill
+        expr: predict_linear(node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}[6h], 7 * 24 * 3600) < 0
+        for: 30m
+        labels: { severity: warning }
+        annotations: { summary: "root disk full within 7 days at current growth" }
+      - alert: MemoryHigh
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.85
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "memory over 85% for 5m" }
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 60s
+        labels: { severity: critical }
+        annotations: { summary: "postgres exporter cannot reach the database" }
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 60s
+        labels: { severity: warning }
+        annotations: { summary: "redis down" }
+      - alert: ScrapeMissing
+        expr: up == 0
+        for: 2m
+        labels: { severity: warning }
+        annotations: { summary: "scrape target {{ $labels.job }} down" }

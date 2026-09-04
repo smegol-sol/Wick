@@ -37,6 +37,46 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: printf '%s\n' "$PR_TITLE" | npx commitlint --verbose
 
+  engine-db:
+    name: engine · migrations on TimescaleDB
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      db:
+        image: timescale/timescaledb:2.17.2-pg16
+        env:
+          POSTGRES_DB: wick
+          POSTGRES_USER: wick
+          POSTGRES_PASSWORD: wick
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U wick -d wick"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm -w @wick/engine run migrate
+        env:
+          DATABASE_URL: postgres://wick:wick@127.0.0.1:5432/wick
+      - run: npm -w @wick/engine test
+        env:
+          TEST_DATABASE_URL: postgres://wick:wick@127.0.0.1:5432/wick
+      - name: compose file renders
+        run: docker compose -f apps/engine/deploy/docker-compose.yml config -q
+        env:
+          POSTGRES_PASSWORD: x
+          TELEGRAM_BOT_TOKEN: t
+          TELEGRAM_CHAT_ID: "1"
+          GRAFANA_PASSWORD: g
+          TAILSCALE_IP: 100.64.0.1
+          DASHBOARD_TOKEN: d
+
   build-and-smoke:
     name: build · render smoke
     runs-on: ubuntu-latest

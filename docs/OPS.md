@@ -60,7 +60,11 @@ Nothing listens on a public interface. The only public port on the host is SSH, 
 
 ## 5. Backups and restore
 
-Dumps land in the `backups` volume as `wick-<timestamp>.dump`, custom format, 14 kept. Copy them off the host from your laptop over the tailnet (`docker compose cp backup:/backups ./`), or add an rclone job to object storage. Restore drill, quarterly:
+Dumps land in the `backups` volume as `wick-<timestamp>.dump`, custom format, 14 kept. A copy that lives only on the host dies with the host, so an off-host copy is part of the setup, not an option: an rclone job to object storage with client-side encryption (`rclone crypt`), or at minimum a nightly `docker compose cp backup:/backups ./` from the laptop over the tailnet into an encrypted volume.
+
+Targets: RPO 24 hours (one nightly dump; the 1-second snapshots lost in between are re-collectable, intents and executions are not, so the executor's rows are also written to the `events` stream), RTO 2 hours from a bare host to a running engine following section 2. A restore drill that misses either number is a failed drill.
+
+Restore drill, quarterly:
 
 ```sh
 docker compose exec db createdb -U wick wick_restore
@@ -68,7 +72,11 @@ docker compose exec db pg_restore -U wick -d wick_restore /backups/wick-<timesta
 docker compose exec db psql -U wick -d wick_restore -c "select count(*) from token_snapshots"
 ```
 
-## 6. Failure drills (Phase 5 rehearses these; Phase 1 documents them)
+## 6. Time
+
+Everything time-based (copy gap, blockhash expiry, the 5/30/120-minute outcomes, slot lag) trusts the host clock. `timedatectl` must show `System clock synchronized: yes` (systemd-timesyncd is on by default on the Hetzner images); the Host board shows node_exporter's `node_timex_offset_seconds`, and an offset over 100 ms is an alert.
+
+## 7. Failure drills (run in Phase 2 before the first real SOL, then after every custody change)
 
 - **RPC cut:** block the RPC host in `ufw`; expect SourceStale rpc, slot lag null, self-halt reasons on `/healthz`, no crash.
 - **Postgres stopped:** `docker compose stop db`; expect DbErrors, `dbOk=false` on `/healthz`, engine keeps polling and resumes writes when the database returns.

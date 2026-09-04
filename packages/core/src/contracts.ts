@@ -26,6 +26,19 @@ export type LpState = "burned" | "locked" | "deployer" | "curve";
 
 export type LpEvent = { kind: "add" | "remove" | "burn" | "lock"; pct: number; ts: number };
 
+/** What the LP reader saw in the pool account and the LP mint (ENGINE §7, pool share row). */
+export type LpRead = {
+  state: LpState | null;
+  pool: string;
+  dex: string;
+  lpMint: string | null;
+  /** LP ever minted by the pool program minus what still exists, percent; null without the program's count. */
+  burnedPct: number | null;
+  /** Largest remaining LP holder (the token account's owner) and its share of what exists. */
+  topHolder: string | null;
+  topHolderPct: number | null;
+};
+
 /** Who holds the supply and where it came from (ENGINE §7). */
 export type SupplyMap = {
   at: number;
@@ -266,4 +279,6 @@ export type Audit = {
   decimals: number | null;
   supply: number | null;
   lp: LpState | null;
+  /** The reading behind `lp`, when a pool was read; absent in API views. */
+  lpRead?: LpRead | null;
 };

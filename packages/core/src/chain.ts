@@ -13,8 +13,13 @@ export type SourceToken = {
   creator: string | null;
   createdAt: number;
   stage: Stage;
+  /** Pool address from the venue when it has indexed one. */
+  pair: string | null;
   snapshot: Snapshot;
 };
+
+/** What an audit needs besides the mint: the stage tells curve from pool, the pair says which pool. */
+export type AuditRef = { mint: string; stage: Stage; pair: string | null };
 
 export type SourceBatch = {
   source: string;
@@ -24,12 +29,30 @@ export type SourceBatch = {
   solUsd: number | null;
 };
 
+/** Whoever received the mint in the first ten slots after creation (ENGINE §7). */
+export type LaunchBuyer = {
+  wallet: string;
+  slot: number;
+  /** SOL the wallet paid in that transaction; null when it was not the payer. */
+  sol: number | null;
+  /** Share of total supply received, percent. */
+  pct: number;
+};
+
 export type LaunchTx = {
   mint: string;
   slot: number;
+  sig: string;
+  /** Block time of the create transaction, ms; null when the node had none. */
+  ts: number | null;
   creator: string;
-  /** Buyers in the create slot and the next three, with the amount bought. */
-  buyers: { wallet: string; slot: number; sol: number; tokens: number }[];
+  buyers: LaunchBuyer[];
+  /** Bought in the create slot and the next three, by any wallet, percent of supply. */
+  bundlePct: number;
+  /** Bought in the create slot and the next ten, percent of supply. */
+  sniperPct: number;
+  /** Transactions in those slots were cut at the parser's cap; the shares are a floor. */
+  truncated: boolean;
 };
 
 export type QuoteRequest = {
@@ -71,7 +94,7 @@ export interface ChainAdapter {
   poll(signal: AbortSignal): Promise<SourceBatch[]>;
   /** Refresh venue stats for mints that are cooling (ADR-0007), 60 s cadence. */
   stats(mints: string[], signal: AbortSignal): Promise<Snapshot[]>;
-  audit(mint: string, signal: AbortSignal): Promise<Audit | null>;
+  audit(ref: AuditRef, signal: AbortSignal): Promise<Audit | null>;
   launchTx(mint: string, signal: AbortSignal): Promise<LaunchTx | null>;
   quote(req: QuoteRequest, signal: AbortSignal): Promise<Quote | null>;
   buildTx(quote: Quote, wallet: string, signal: AbortSignal): Promise<UnsignedTx>;

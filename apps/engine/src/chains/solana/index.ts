@@ -24,6 +24,8 @@ import type { Token } from "@wick/core/market";
 import { rpcAny, rpcCall, rpcUrls } from "@wick/core/rpc";
 import { loadSolanaPulse } from "@wick/core/solana-pulse";
 import { readMint, type ParsedMintAccount } from "./extensions.ts";
+import { fetchLaunch } from "./launch.ts";
+import { readLp } from "./lp.ts";
 
 const NOT_YET = "not implemented until Phase 2 (executor)";
 
@@ -59,6 +61,7 @@ export function makeSolanaAdapter(): ChainAdapter {
         creator: null,
         createdAt: tk.createdAt,
         stage: tk.stage,
+        pair: tk.pair,
         snapshot: tokenToSnapshot(tk, pulse.at),
       }));
       return [{ source: "pump.fun", at: pulse.at, tokens, solUsd: pulse.solUsd }];
@@ -88,7 +91,8 @@ export function makeSolanaAdapter(): ChainAdapter {
       return out;
     },
 
-    async audit(mint, signal): Promise<Audit | null> {
+    async audit(ref, signal): Promise<Audit | null> {
+      const { mint } = ref;
       const res = await rpcAny<{ value?: ParsedMintAccount | null }>(
         "getAccountInfo",
         [mint, { encoding: "jsonParsed", commitment: "confirmed" }],
@@ -96,6 +100,10 @@ export function makeSolanaAdapter(): ChainAdapter {
       );
       const read = readMint(res?.value ?? null);
       if (!read) return null;
+      // On the bonding curve the program holds the liquidity and there is no LP token.
+      // After migration the pool account says who holds the LP; without a known pool, unknown.
+      const lpRead =
+        ref.stage === "migrated" && ref.pair ? await readLp(mint, ref.pair, signal) : null;
       return {
         mint,
         at: Date.now(),
@@ -103,14 +111,13 @@ export function makeSolanaAdapter(): ChainAdapter {
         extensions: read.extensions,
         decimals: read.decimals,
         supply: read.supply,
-        // LP ownership needs the pool account; lands with the LP reader (roadmap Phase 1).
-        lp: null,
+        lp: ref.stage === "migrated" ? (lpRead?.state ?? null) : "curve",
+        lpRead,
       };
     },
 
-    async launchTx(): Promise<LaunchTx | null> {
-      // Lands with launch-transaction parsing (roadmap Phase 1).
-      return null;
+    async launchTx(mint, signal): Promise<LaunchTx | null> {
+      return fetchLaunch(mint, signal);
     },
 
     async quote(req, signal): Promise<Quote | null> {

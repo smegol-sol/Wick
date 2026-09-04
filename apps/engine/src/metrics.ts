@@ -60,6 +60,19 @@ export const auditsWritten = new client.Counter({
   registers: [registry],
 });
 
+export const launchTxsParsed = new client.Counter({
+  name: "wick_launch_txs_parsed_total",
+  help: "launch_txs rows written",
+  registers: [registry],
+});
+
+export const chainEvents = new client.Counter({
+  name: "wick_chain_events_total",
+  help: "chain_events rows written, by kind",
+  labelNames: ["kind"] as const,
+  registers: [registry],
+});
+
 export const ingestCycle = new client.Histogram({
   name: "wick_ingest_cycle_duration_seconds",
   help: "One ingest tick, poll to commit",

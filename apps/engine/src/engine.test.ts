@@ -7,7 +7,10 @@ import { evaluateHealth, slotLagOf } from "./health.ts";
 import { Sampler } from "./ingest/sampler.ts";
 import { readMint } from "./chains/solana/extensions.ts";
 import { Collector } from "./ingest/collector.ts";
-import type { ChainAdapter } from "@wick/core/chain";
+import type { ChainAdapter, LaunchTx } from "@wick/core/chain";
+import type { Audit, Stage } from "@wick/core/contracts";
+import { classifyLp, keyBytes, parsePool } from "./chains/solana/lp.ts";
+import { parseLaunch, type ParsedTx, type SigInfo } from "./chains/solana/launch.ts";
 import type { Db } from "./db/pool.ts";
 import { REASON_CODES, REASON_CODE_CAP, GATES } from "@wick/core/contracts";
 
@@ -267,10 +270,22 @@ test("reason codes stay inside the ADR-0008 budget", () => {
   assert.equal(new Set(REASON_CODES).size, REASON_CODES.length);
 });
 
-function fakeChain(): ChainAdapter & { audits: number } {
+type FakeChain = ChainAdapter & {
+  audits: number;
+  launches: number;
+  lp: Audit["lp"];
+  launch: Omit<LaunchTx, "mint"> | null;
+  stage: Stage;
+};
+
+function fakeChain(): FakeChain {
   const chain = {
     chain: "solana" as const,
     audits: 0,
+    launches: 0,
+    lp: null as Audit["lp"],
+    launch: null as Omit<LaunchTx, "mint"> | null,
+    stage: "bonding" as Stage,
     async poll() {
       const at = Date.now();
       return [
@@ -285,7 +300,9 @@ function fakeChain(): ChainAdapter & { audits: number } {
               name: "Wrapped SOL",
               creator: null,
               createdAt: at - 60_000,
-              stage: "bonding" as const,
+              stage: chain.stage,
+              pair:
+                chain.stage === "migrated" ? "Poo1111111111111111111111111111111111111111" : null,
               snapshot: {
                 ts: at,
                 mint: "So11111111111111111111111111111111111111112",
@@ -310,7 +327,7 @@ function fakeChain(): ChainAdapter & { audits: number } {
     async stats() {
       return [];
     },
-    async audit(mint: string) {
+    async audit({ mint }: { mint: string }) {
       chain.audits++;
       return {
         mint,
@@ -324,11 +341,14 @@ function fakeChain(): ChainAdapter & { audits: number } {
         },
         decimals: 9,
         supply: 1e9,
-        lp: null,
+        lp: chain.lp,
+        lpRead: null,
       };
     },
-    async launchTx() {
-      return null;
+    async launchTx(mint: string) {
+      chain.launches++;
+      if (!chain.launch) return null;
+      return { ...chain.launch, mint };
     },
     async quote() {
       return null;
@@ -377,6 +397,8 @@ test("collector writes tokens, snapshots and one audit per change, and feeds hea
     coolingWindowMs: 86_400_000,
     auditEveryMs: 600_000,
     slotPollMs: 5000,
+    launchPerTick: 2,
+    launchRetryMs: 60_000,
   });
   await c.tick();
   await c.pollSlots();
@@ -396,4 +418,248 @@ test("collector writes tokens, snapshots and one audit per change, and feeds hea
   assert.ok(c.state.lastOk["jupiter-price"]);
   assert.ok(c.state.lastOk.rpc);
   assert.deepEqual(c.sampler.counts(Date.now()), { active: 1, cooling: 0 });
+});
+
+const MINT = "So11111111111111111111111111111111111111112";
+const LP_MINT = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const CREATOR = "Dev1111111111111111111111111111111111111111";
+const CURVE = "Curve11111111111111111111111111111111111111";
+
+function raydiumPool(minted: number): Uint8Array {
+  const b = new Uint8Array(752);
+  b.set(keyBytes(MINT), 400);
+  b.set(keyBytes("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"), 432);
+  b.set(keyBytes(LP_MINT), 464);
+  new DataView(b.buffer).setBigUint64(720, BigInt(minted), true);
+  return b;
+}
+
+function pumpswapPool(minted: number): Uint8Array {
+  const b = new Uint8Array(243);
+  b.set(keyBytes(MINT), 43);
+  b.set(keyBytes(LP_MINT), 107);
+  new DataView(b.buffer).setBigUint64(203, BigInt(minted), true);
+  return b;
+}
+
+test("pool layouts parse and a wrong offset or program yields null", () => {
+  const ray = parsePool(
+    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+    raydiumPool(1_000_000),
+    MINT,
+  );
+  assert.equal(ray?.dex, "raydium-v4");
+  assert.equal(ray?.lpMint, LP_MINT);
+  assert.equal(ray?.lpMinted, 1_000_000);
+  const ps = parsePool("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA", pumpswapPool(5_000), MINT);
+  assert.equal(ps?.dex, "pumpswap");
+  assert.equal(ps?.lpMinted, 5_000);
+  assert.equal(
+    parsePool("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA", raydiumPool(1), MINT),
+    null,
+  );
+  assert.equal(
+    parsePool("SomeOtherProgram1111111111111111111111111111", raydiumPool(1), MINT),
+    null,
+  );
+  assert.equal(
+    parsePool("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", raydiumPool(1), "OtherMint"),
+    null,
+  );
+});
+
+test("LP state: burned, locked, deployer, and unknown without holders", () => {
+  const pool = parsePool("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", raydiumPool(1000), MINT)!;
+  assert.equal(classifyLp(pool, 40, [{ owner: CREATOR, amount: 40 }]).state, "burned");
+  assert.equal(classifyLp(pool, 40, null).state, "burned");
+  const locked = classifyLp(pool, 1000, [
+    { owner: "LockrWmn6K5twhz3y9w1PDDgVWPqHqk5ApM4Xv5T6Pa", amount: 990 },
+    { owner: CREATOR, amount: 10 },
+  ]);
+  assert.equal(locked.state, "locked");
+  assert.equal(locked.topHolderPct, 99);
+  assert.equal(classifyLp(pool, 1000, [{ owner: CREATOR, amount: 600 }]).state, "deployer");
+  assert.equal(
+    classifyLp(pool, 1000, [{ owner: "LockrWmn6K5twhz3y9w1PDDgVWPqHqk5ApM4Xv5T6Pa", amount: 600 }])
+      .state,
+    "deployer",
+  );
+  const unknown = classifyLp(pool, 1000, null);
+  assert.equal(unknown.state, null);
+  assert.equal(unknown.burnedPct, 0);
+});
+
+function tx(
+  slot: number,
+  keys: string[],
+  balances: { account: string; owner: string; pre: number; post: number }[],
+  lamports: Record<string, [number, number]> = {},
+): ParsedTx {
+  const accountKeys = keys.map((pubkey, i) => ({ pubkey, signer: i === 0 }));
+  const tb = (which: "pre" | "post") =>
+    balances.map((b) => ({
+      accountIndex: keys.indexOf(b.account),
+      mint: MINT,
+      owner: b.owner,
+      uiTokenAmount: { amount: String(b[which]), decimals: 6 },
+    }));
+  return {
+    slot,
+    blockTime: 1_700_000_000 + slot,
+    transaction: { message: { accountKeys } },
+    meta: {
+      err: null,
+      preBalances: keys.map((k) => lamports[k]?.[0] ?? 0),
+      postBalances: keys.map((k) => lamports[k]?.[1] ?? 0),
+      preTokenBalances: tb("pre").filter((b) => b.uiTokenAmount.amount !== "0"),
+      postTokenBalances: tb("post"),
+    },
+  };
+}
+
+test("launch parse: creator, supply, pools excluded, bundle and sniper shares by slot", () => {
+  const S = 100;
+  const txs = new Map<string, ParsedTx>([
+    [
+      "create",
+      tx(
+        S,
+        [CREATOR, MINT, "curveAta", "devAta"],
+        [
+          { account: "curveAta", owner: CURVE, pre: 0, post: 800 },
+          { account: "devAta", owner: CREATOR, pre: 0, post: 200 },
+        ],
+        { [CREATOR]: [10e9, 8e9] },
+      ),
+    ],
+    [
+      "b1",
+      tx(
+        S + 1,
+        ["B1", "b1Ata", "curveAta"],
+        [
+          { account: "curveAta", owner: CURVE, pre: 800, post: 750 },
+          { account: "b1Ata", owner: "B1", pre: 0, post: 50 },
+        ],
+        { B1: [5e9, 4.5e9] },
+      ),
+    ],
+    [
+      "sell",
+      tx(
+        S + 2,
+        ["B1", "b1Ata", "curveAta"],
+        [
+          { account: "b1Ata", owner: "B1", pre: 50, post: 30 },
+          { account: "curveAta", owner: CURVE, pre: 750, post: 770 },
+        ],
+      ),
+    ],
+    [
+      "b2",
+      tx(
+        S + 5,
+        ["B2", "b2Ata", "curveAta"],
+        [
+          { account: "curveAta", owner: CURVE, pre: 770, post: 760 },
+          { account: "b2Ata", owner: "B2", pre: 0, post: 10 },
+        ],
+      ),
+    ],
+    [
+      "late",
+      tx(
+        S + 11,
+        ["B3", "b3Ata", "curveAta"],
+        [
+          { account: "curveAta", owner: CURVE, pre: 760, post: 700 },
+          { account: "b3Ata", owner: "B3", pre: 0, post: 60 },
+        ],
+      ),
+    ],
+  ]);
+  const sigs: SigInfo[] = [
+    { signature: "create", slot: S, err: null },
+    { signature: "b1", slot: S + 1, err: null },
+    { signature: "sell", slot: S + 2, err: null },
+    { signature: "b2", slot: S + 5, err: null },
+    { signature: "late", slot: S + 11, err: null },
+  ];
+  const l = parseLaunch(MINT, sigs, txs, false)!;
+  assert.equal(l.creator, CREATOR);
+  assert.equal(l.slot, S);
+  assert.equal(l.ts, (1_700_000_000 + S) * 1000);
+  assert.deepEqual(
+    l.buyers.map((b) => [b.wallet, b.slot, b.pct, b.sol]),
+    [
+      [CREATOR, S, 20, 2],
+      ["B1", S + 1, 5, 0.5],
+      ["B2", S + 5, 1, null],
+    ],
+  );
+  assert.equal(l.bundlePct, 25);
+  assert.equal(l.sniperPct, 26);
+  assert.equal(parseLaunch(MINT, [], txs, false), null);
+});
+
+test("collector parses each launch once, and writes migrate and lp_state events on change", async () => {
+  const queries: { sql: string; values: unknown[] }[] = [];
+  const db = {
+    query: async (sql: string, values: unknown[] = []) => {
+      queries.push({ sql, values });
+      return { rows: [] };
+    },
+  } as unknown as Db;
+  const chain = fakeChain();
+  chain.lp = "curve";
+  chain.launch = {
+    slot: 5,
+    sig: "createSig",
+    ts: 1_700_000_000_000,
+    creator: CREATOR,
+    buyers: [],
+    bundlePct: 12.5,
+    sniperPct: 20,
+    truncated: false,
+  };
+  const c = new Collector(db, chain, {
+    activeSampleMs: 5,
+    coolingSampleMs: 60_000,
+    activeWindowMs: 7_200_000,
+    coolingWindowMs: 86_400_000,
+    auditEveryMs: 0,
+    slotPollMs: 5000,
+    launchPerTick: 2,
+    launchRetryMs: 0,
+  });
+  const tick = async () => {
+    await new Promise((r) => setTimeout(r, 8));
+    await c.tick();
+  };
+  await tick();
+  const launch = queries.find((q) => q.sql.includes("insert into launch_txs"));
+  assert.ok(launch);
+  assert.deepEqual(launch.values.slice(1), [5, CREATOR, "[]", 12.5, 20]);
+  const events = () =>
+    queries.filter((q) => q.sql.includes("insert into chain_events")).map((q) => q.values[2]);
+  assert.deepEqual(events(), ["create"]);
+  await tick();
+  assert.equal(chain.launches, 1, "a parsed launch is not parsed again");
+  assert.equal(chain.audits, 2, "the mint was sampled and audited again");
+
+  chain.stage = "migrated";
+  chain.lp = "burned";
+  await tick();
+  assert.deepEqual(events(), ["create", "migrate", "lp_state"]);
+  const lp = queries.filter((q) => q.sql.includes("insert into chain_events")).at(-1)!;
+  assert.deepEqual(JSON.parse(lp.values[4] as string), {
+    source: "poll",
+    from: "curve",
+    to: "burned",
+  });
+  assert.equal(
+    queries.filter((q) => q.sql.includes("insert into audits")).length,
+    2,
+    "an LP change is an audit change",
+  );
 });

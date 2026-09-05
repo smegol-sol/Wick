@@ -5,9 +5,16 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ChainAdapter } from "@wick/core/chain";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ChainAdapter, SealedKeyHandle } from "@wick/core/chain";
+import { createHot, fromB58, lockHotMem, signTxBytes } from "@wick/core/hot-wallet";
+import { base32Decode, totp } from "@wick/core/totp";
+import { Executor } from "../executor/executor.ts";
+import { Vault } from "../executor/vault.ts";
 import type { Snapshot } from "@wick/core/contracts";
-import { funnelView, listIntents } from "../api/queries.ts";
+import { funnelView, listIntents, realizedPnl } from "../api/queries.ts";
 import { loadRisk, loadRules } from "../config.ts";
 import { DecisionLoop } from "../decision/loop.ts";
 import { FeatureBook } from "../ingest/features.ts";
@@ -16,6 +23,8 @@ import { makePool } from "./pool.ts";
 import { Collector } from "../ingest/collector.ts";
 
 const url = process.env.TEST_DATABASE_URL;
+const PASS = "correct horse battery";
+const TOTP_B32 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
 
 test(
   "migrations apply twice without change and the collector round-trips rows",
@@ -142,6 +151,9 @@ test(
         },
         async balances(): Promise<never> {
           throw new Error("no");
+        },
+        async blockHeight() {
+          return null;
         },
         async slots() {
           return [{ url: "a", slot: 1, ms: 1 }];
@@ -282,6 +294,268 @@ test(
       const funnel = await funnelView(db, [], at - 60_000);
       assert.deepEqual(funnel.rejections, []);
     } finally {
+      await db.end();
+    }
+  },
+);
+
+test(
+  "executor: buys, sells down to a close, fails a bad simulation, waits under a halt",
+  { skip: !url },
+  async () => {
+    const db = makePool(url!);
+    const dir = mkdtempSync(join(tmpdir(), "wick-exec-"));
+    try {
+      await migrate(db);
+      const { vault: hot } = await createHot(PASS);
+      lockHotMem();
+      writeFileSync(join(dir, "vault.json"), JSON.stringify(hot));
+      const vault = new Vault(join(dir, "vault.json"), base32Decode(TOTP_B32));
+      await vault.unseal(PASS, await totp(base32Decode(TOTP_B32), Date.now()));
+      const wallet = vault.wallet!;
+      const mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+      for (const sql of [
+        "delete from fills where execution_id in (select id from executions where intent_id like 'exec-%')",
+        "delete from executions where intent_id like 'exec-%'",
+        "delete from positions where intent_id like 'exec-%'",
+        "delete from gate_results where intent_id like 'exec-%'",
+        "delete from quotes where intent_id like 'exec-%'",
+        "delete from intents where id like 'exec-%'",
+      ])
+        await db.query(sql);
+
+      // A chain whose balances move when a transaction is sent: 1,000 tokens per 0.2 SOL, sells at 0.19.
+      const chain = {
+        native: 5_000_000_000n,
+        token: 0n,
+        simOk: true,
+        lastReq: null as { side: "buy" | "sell"; amountRaw: string } | null,
+        sends: 0,
+        async quote(req: { side: "buy" | "sell"; amountRaw: string }) {
+          this.lastReq = req;
+          const out =
+            req.side === "buy"
+              ? (BigInt(req.amountRaw) * 5n).toString()
+              : ((BigInt(req.amountRaw) * 190_000_000n) / 1_000_000_000n).toString();
+          return {
+            id: `q-${Date.now()}-${this.sends}`,
+            at: Date.now(),
+            inAmount: req.amountRaw,
+            outAmount: out,
+            impactPct: 1.2,
+            route: { fake: true },
+          };
+        },
+        async buildTx() {
+          const pub = fromB58(wallet)!;
+          const bytes = Uint8Array.from([
+            1,
+            ...new Uint8Array(64),
+            1,
+            0,
+            0,
+            1,
+            ...pub,
+            ...new Uint8Array(32).fill(7),
+            0,
+          ]);
+          return { bytes, blockhash: "x", lastValidBlockHeight: 100 };
+        },
+        async simulate() {
+          return this.simOk
+            ? { ok: true, err: null, unitsConsumed: 1 }
+            : { ok: false, err: "custom program error: 0x1771", unitsConsumed: null };
+        },
+        async sign(tx: { bytes: Uint8Array }, key: SealedKeyHandle) {
+          const signed = signTxBytes(tx.bytes, key.sign, fromB58(key.wallet)!);
+          return { bytes: signed, sig: `sig-${++this.sends}` };
+        },
+        async send(tx: { sig: string }) {
+          const r = this.lastReq!;
+          if (r.side === "buy") {
+            this.native -= BigInt(r.amountRaw) + 5000n;
+            this.token += BigInt(r.amountRaw) * 5n;
+          } else {
+            this.token -= BigInt(r.amountRaw);
+            this.native += (BigInt(r.amountRaw) * 190_000_000n) / 1_000_000_000n - 5000n;
+          }
+          return tx.sig;
+        },
+        async confirm() {
+          return { status: "confirmed" as const, slot: 1, err: null };
+        },
+        async blockHeight() {
+          return 50;
+        },
+        async balances(_w: string, m: string) {
+          return { native: this.native, token: m === mint ? this.token : 0n, decimals: 6 };
+        },
+      };
+      let halted = false;
+      const exec = new Executor(
+        {
+          db,
+          chain: chain as unknown as ChainAdapter,
+          vault,
+          risk: loadRisk("config/risk.yaml"),
+          halted: () => ({ halted, reason: halted ? "kill" : null }),
+        },
+        { tickMs: 1000, confirmTimeoutMs: 1000, balanceRefreshMs: 0 },
+      );
+      const features = { mint, priceUsd: 0.001, liqUsd: 8000 };
+      const intent = async (id: string, side: "buy" | "sell", sizeSol: number, decidedAgoMs = 0) =>
+        db.query(
+          `insert into intents (id, chain, ts, kind, strategy, rule_id, mode, mint, side, size_sol, features, why, status, decided_by, decided_at, ttl_ms)
+         values ($1, 'solana', now(), $2, $3, $4, 'suggest', $5, $6, $7, $8, 'test', 'approved', 'owner', now() - make_interval(secs => $9), 90000)`,
+          [
+            id,
+            side === "buy" ? "entry" : "exit",
+            side === "buy" ? "confirmed-entry" : "exit-policy",
+            side === "buy" ? "confirmed-entry" : "exit-policy",
+            mint,
+            side,
+            sizeSol,
+            JSON.stringify(features),
+            decidedAgoMs / 1000,
+          ],
+        );
+
+      await intent("exec-buy", "buy", 0.2);
+      await exec.tick();
+      const buy = await db.query("select status from intents where id = 'exec-buy'");
+      assert.equal(buy.rows[0]?.status, "executed");
+      const ex = await db.query(
+        "select status, sig, quote_id, err from executions where intent_id = 'exec-buy'",
+      );
+      assert.equal(ex.rows[0]?.status, "confirmed");
+      assert.equal(ex.rows[0]?.sig, "sig-1");
+      assert.ok(ex.rows[0]?.quote_id);
+      const fill = await db.query(
+        "select sol_delta, token_delta, realized_slippage_pct from fills f join executions e on e.id = f.execution_id where e.intent_id = 'exec-buy'",
+      );
+      assert.ok(Math.abs(Number(fill.rows[0]?.sol_delta) + 0.200005) < 1e-9);
+      assert.equal(Number(fill.rows[0]?.token_delta), 1000);
+      assert.ok(Number(fill.rows[0]?.realized_slippage_pct) < 0.01, "fees only");
+      const pos = await db.query(
+        "select qty, cost_sol, status, entry_price_usd, entry_liq_usd, intent_id from positions where wallet = $1",
+        [wallet],
+      );
+      assert.equal(pos.rows.length, 1);
+      assert.equal(Number(pos.rows[0]?.qty), 1000);
+      assert.equal(pos.rows[0]?.status, "open");
+      assert.equal(Number(pos.rows[0]?.entry_price_usd), 0.001);
+      assert.equal(Number(pos.rows[0]?.entry_liq_usd), 8000);
+      assert.equal(pos.rows[0]?.intent_id, "exec-buy");
+      const gate = await db.query(
+        "select passed, reason_code from gate_results where intent_id = 'exec-buy' and gate = 'execution'",
+      );
+      assert.deepEqual(gate.rows[0], { passed: true, reason_code: null });
+      assert.ok(Math.abs(exec.state.sentTodaySol - 0.2) < 1e-9);
+      assert.ok(
+        Math.abs(exec.state.walletSol! - 4.799995) < 1e-9,
+        "the wallet read after the fill",
+      );
+
+      await exec.tick();
+      assert.equal(
+        (await db.query("select count(*)::int as n from executions where wallet = $1", [wallet]))
+          .rows[0]?.n,
+        1,
+        "nothing left to claim",
+      );
+
+      await intent("exec-sell-half", "sell", 0.1);
+      await exec.tick();
+      const sold = Number(chain.lastReq?.amountRaw);
+      assert.ok(
+        sold > 499_900_000 && sold <= 500_000_000,
+        `half the cost (fees included) sells half the tokens: ${sold}`,
+      );
+      const half = await db.query(
+        "select qty, cost_sol, status, realized_pnl_sol, exits from positions where wallet = $1",
+        [wallet],
+      );
+      assert.ok(Math.abs(Number(half.rows[0]?.qty) - 500) < 0.1, `${half.rows[0]?.qty}`);
+      assert.equal(half.rows[0]?.status, "open");
+      assert.ok(Number(half.rows[0]?.realized_pnl_sol) < 0, "sold at 0.19 what cost 0.2");
+      assert.equal((half.rows[0]?.exits as unknown[]).length, 1);
+
+      await intent("exec-sell-rest", "sell", 0.5);
+      await exec.tick();
+      const closed = await db.query(
+        "select qty, status, closed_at from positions where wallet = $1",
+        [wallet],
+      );
+      assert.equal(closed.rows[0]?.status, "closed");
+      assert.equal(Number(closed.rows[0]?.qty), 0);
+      assert.ok(closed.rows[0]?.closed_at);
+      const pnl = await realizedPnl(db, Date.now() - 60_000, Date.now() + 60_000);
+      assert.ok(pnl != null && pnl < 0 && pnl > -0.02, `realized ${pnl}`);
+
+      chain.simOk = false;
+      await intent("exec-sim", "buy", 0.2);
+      await exec.tick();
+      assert.equal(
+        (await db.query("select status from intents where id = 'exec-sim'")).rows[0]?.status,
+        "failed",
+      );
+      const simEx = await db.query(
+        "select status, err from executions where intent_id = 'exec-sim'",
+      );
+      assert.equal(simEx.rows[0]?.status, "failed");
+      assert.match(simEx.rows[0]?.err, /0x1771/);
+      assert.deepEqual(
+        (
+          await db.query(
+            "select passed, reason_code from gate_results where intent_id = 'exec-sim' and gate = 'execution'",
+          )
+        ).rows[0],
+        { passed: false, reason_code: "EXEC_SIM" },
+      );
+      chain.simOk = true;
+
+      await intent("exec-cap", "buy", 0.9);
+      await exec.tick();
+      assert.match(
+        (await db.query("select err from executions where intent_id = 'exec-cap'")).rows[0]?.err,
+        /per-transaction cap/,
+      );
+
+      halted = true;
+      await intent("exec-halted", "buy", 0.2);
+      await exec.tick();
+      assert.equal(
+        (await db.query("select status from intents where id = 'exec-halted'")).rows[0]?.status,
+        "approved",
+        "an entry waits under a halt",
+      );
+      await intent("exec-halted-sell", "sell", 0.1);
+      await exec.tick();
+      assert.equal(
+        (await db.query("select status from intents where id = 'exec-halted-sell'")).rows[0]
+          ?.status,
+        "failed",
+        "an exit still runs under a halt (no position left, so it fails honestly)",
+      );
+      await intent("exec-stale", "buy", 0.2, 120_000);
+      await exec.tick();
+      assert.equal(
+        (await db.query("select status from intents where id = 'exec-stale'")).rows[0]?.status,
+        "expired",
+        "an approval older than its TTL expires",
+      );
+      halted = false;
+
+      vault.seal();
+      await intent("exec-sealed", "buy", 0.2);
+      await exec.tick();
+      assert.equal(
+        (await db.query("select status from intents where id = 'exec-sealed'")).rows[0]?.status,
+        "approved",
+        "nothing executes while sealed",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
       await db.end();
     }
   },

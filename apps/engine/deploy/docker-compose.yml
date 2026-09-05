@@ -78,6 +78,9 @@ services:
       RULES_FILE: /repo/apps/engine/config/rules.yaml
       EQUITY_SOL: ${EQUITY_SOL:-}
       WICK_COMMIT: ${WICK_COMMIT:-}
+      VAULT_FILE: /var/lib/wick/vault.json
+      KILL_SWITCH_FILE: /var/lib/wick/KILL
+      TOTP_SECRET: ${TOTP_SECRET:-}
     volumes:
       - ../config/risk.yaml:/repo/apps/engine/config/risk.yaml:ro
       - ../config/rules.yaml:/repo/apps/engine/config/rules.yaml:ro

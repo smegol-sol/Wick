@@ -34,6 +34,7 @@ export const API_ROUTES = {
   halt: "/api/halt",
   haltClear: "/api/halt/clear",
   unseal: "/api/vault/unseal",
+  seal: "/api/vault/seal",
   ws: "/ws",
 } as const;
 

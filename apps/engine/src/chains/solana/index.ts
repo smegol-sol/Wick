@@ -1,10 +1,11 @@
 /**
  * The Solana adapter (ADR-0006). Sources: pump.fun and DexScreener through
- * the core pulse, mint accounts through the RPC, quotes through Jupiter.
- * Signing, sending and confirming land in Phase 2 with the executor; until
- * then they throw so nothing can sign by accident.
+ * the core pulse, mint accounts through the RPC, quotes and swap transactions
+ * through Jupiter. Simulation, sending and confirmation go through the RPC;
+ * signing takes a `SealedKeyHandle` and never sees the key bytes.
  */
 import type {
+  BuildOpts,
   ChainAdapter,
   Confirmation,
   LaunchTx,
@@ -16,10 +17,13 @@ import type {
   SourceBatch,
   SourceToken,
   UnsignedTx,
+  WalletBalances,
 } from "@wick/core/chain";
 import type { Audit, Snapshot } from "@wick/core/contracts";
 import { fetchDexStats } from "@wick/core/dex-stats";
-import { fetchJupQuote, impactPct, jupPair } from "@wick/core/jup";
+import { b64of, b64to, signTxBytes, toB58 } from "@wick/core/hot-wallet";
+import { fromB58 } from "@wick/core/base58";
+import { fetchJupQuote, fetchJupSwap, impactPct, jupPair, type JupQuote } from "@wick/core/jup";
 import type { Token } from "@wick/core/market";
 import { rpcAny, rpcCall, rpcUrls } from "@wick/core/rpc";
 import { loadSolanaPulse } from "@wick/core/solana-pulse";
@@ -28,7 +32,20 @@ import { fetchLaunch } from "./launch.ts";
 import { readLp } from "./lp.ts";
 import { fetchTx, summaryOf, tradesOf } from "./trades.ts";
 
-const NOT_YET = "not implemented until Phase 2 (executor)";
+const CONFIRM_POLL_MS = 1500;
+
+type SigStatus = {
+  slot: number;
+  err: unknown;
+  confirmationStatus?: "processed" | "confirmed" | "finalized";
+} | null;
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => (clearTimeout(t), resolve()), { once: true });
+  });
+}
 
 export function tokenToSnapshot(tk: Token, at: number): Snapshot {
   return {
@@ -143,23 +160,125 @@ export function makeSolanaAdapter(): ChainAdapter {
       };
     },
 
-    async buildTx(): Promise<UnsignedTx> {
-      throw new Error(NOT_YET);
+    async buildTx(quote, wallet, opts: BuildOpts, signal): Promise<UnsignedTx> {
+      const built = await fetchJupSwap(
+        quote.route as JupQuote,
+        wallet,
+        { maxLamports: opts.priorityFeeCapLamports },
+        signal,
+      );
+      if (!built) throw new Error("swap build failed");
+      const bytes = b64to(built.swapTransaction);
+      const blockhash = blockhashOf(bytes);
+      if (built.lastValidBlockHeight == null)
+        throw new Error("swap build lacks lastValidBlockHeight");
+      return { bytes, blockhash, lastValidBlockHeight: built.lastValidBlockHeight };
     },
-    async simulate(): Promise<SimResult> {
-      throw new Error(NOT_YET);
+
+    async simulate(tx, signal): Promise<SimResult> {
+      const res = await rpcAny<{
+        value?: { err?: unknown; unitsConsumed?: number; logs?: string[] | null };
+      }>(
+        "simulateTransaction",
+        [
+          b64of(tx.bytes),
+          {
+            encoding: "base64",
+            sigVerify: false,
+            replaceRecentBlockhash: true,
+            commitment: "confirmed",
+          },
+        ],
+        signal,
+      );
+      if (!res?.value) return { ok: false, err: "simulation unanswered", unitsConsumed: null };
+      const v = res.value;
+      const err = v.err == null ? null : errOf(v.err, v.logs ?? null);
+      return { ok: err == null, err, unitsConsumed: v.unitsConsumed ?? null };
     },
-    async sign(_tx: UnsignedTx, _key: SealedKeyHandle): Promise<SignedTx> {
-      throw new Error(NOT_YET);
+
+    async sign(tx, key: SealedKeyHandle): Promise<SignedTx> {
+      const pub = fromB58(key.wallet);
+      if (!pub) throw new Error("bad wallet");
+      const signed = signTxBytes(tx.bytes, key.sign, pub);
+      return { bytes: signed, sig: toB58(signed.subarray(1, 65)) };
     },
-    async send(): Promise<string> {
-      throw new Error(NOT_YET);
+
+    async send(tx, signal): Promise<string> {
+      const sig = await rpcAny<string>(
+        "sendTransaction",
+        [
+          b64of(tx.bytes),
+          {
+            encoding: "base64",
+            skipPreflight: true,
+            maxRetries: 3,
+            preflightCommitment: "confirmed",
+          },
+        ],
+        signal,
+      );
+      if (typeof sig !== "string") throw new Error("send unanswered");
+      return sig;
     },
-    async confirm(): Promise<Confirmation> {
-      throw new Error(NOT_YET);
+
+    async confirm(sig, timeoutMs, lastValidBlockHeight, signal): Promise<Confirmation> {
+      const deadline = Date.now() + timeoutMs;
+      while (!signal.aborted) {
+        const res = await rpcAny<{ value?: SigStatus[] }>(
+          "getSignatureStatuses",
+          [[sig], { searchTransactionHistory: false }],
+          signal,
+        );
+        const st = res?.value?.[0] ?? null;
+        if (st) {
+          if (st.err != null) return { status: "failed", slot: st.slot, err: errOf(st.err, null) };
+          if (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")
+            return { status: "confirmed", slot: st.slot, err: null };
+        } else if (lastValidBlockHeight != null) {
+          const height = await this.blockHeight(signal);
+          if (height != null && height > lastValidBlockHeight)
+            return { status: "expired", slot: null, err: "blockhash expired" };
+        }
+        if (Date.now() >= deadline)
+          return { status: "expired", slot: null, err: `not confirmed in ${timeoutMs} ms` };
+        await sleep(CONFIRM_POLL_MS, signal);
+      }
+      return { status: "expired", slot: null, err: "aborted" };
     },
-    async balances(): Promise<{ native: bigint; token: bigint }> {
-      throw new Error(NOT_YET);
+
+    async blockHeight(signal): Promise<number | null> {
+      const h = await rpcAny<number>("getBlockHeight", [{ commitment: "confirmed" }], signal);
+      return typeof h === "number" ? h : null;
+    },
+
+    async balances(wallet, mint, signal): Promise<WalletBalances> {
+      const [native, accounts] = await Promise.all([
+        rpcAny<{ value?: number }>("getBalance", [wallet, { commitment: "confirmed" }], signal),
+        rpcAny<{
+          value?: {
+            account?: {
+              data?: {
+                parsed?: { info?: { tokenAmount?: { amount?: string; decimals?: number } } };
+              };
+            };
+          }[];
+        }>(
+          "getTokenAccountsByOwner",
+          [wallet, { mint }, { encoding: "jsonParsed", commitment: "confirmed" }],
+          signal,
+        ),
+      ]);
+      if (native?.value == null) throw new Error("balance unanswered");
+      let token = 0n;
+      let decimals: number | null = null;
+      for (const a of accounts?.value ?? []) {
+        const amt = a.account?.data?.parsed?.info?.tokenAmount;
+        if (!amt?.amount) continue;
+        token += BigInt(amt.amount);
+        if (typeof amt.decimals === "number") decimals = amt.decimals;
+      }
+      return { native: BigInt(native.value), token, decimals };
     },
 
     async slots(signal): Promise<SlotReading[]> {
@@ -186,4 +305,34 @@ export function makeSolanaAdapter(): ChainAdapter {
       );
     },
   };
+}
+
+/** The recent blockhash inside a serialized v0 or legacy transaction, base58. */
+export function blockhashOf(bin: Uint8Array): string {
+  let i = 0;
+  const sigs = compact(bin, i);
+  i = sigs.size + sigs.n * 64;
+  if (bin[i]! & 0x80) i += 1; // v0 prefix
+  i += 3; // header
+  const keys = compact(bin, i);
+  i += keys.size + keys.n * 32;
+  if (i + 32 > bin.length) throw new Error("bad transaction");
+  return toB58(bin.subarray(i, i + 32));
+}
+
+function compact(bytes: Uint8Array, offset: number): { n: number; size: number } {
+  let n = 0;
+  for (let size = 0; size < 3; size++) {
+    const b = bytes[offset + size];
+    if (b == null) break;
+    n |= (b & 0x7f) << (size * 7);
+    if ((b & 0x80) === 0) return { n, size: size + 1 };
+  }
+  throw new Error("bad transaction");
+}
+
+function errOf(err: unknown, logs: string[] | null): string {
+  const text = typeof err === "string" ? err : JSON.stringify(err);
+  const last = logs?.filter((l) => /error|failed/i.test(l)).slice(-1)[0];
+  return last ? `${text}: ${last}`.slice(0, 500) : text.slice(0, 500);
 }

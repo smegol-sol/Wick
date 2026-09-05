@@ -214,6 +214,27 @@ export async function addHalt(db: Db, kind: string, reason: string): Promise<voi
   );
 }
 
+/** Realized P&L, SOL, of positions closed inside [from, to); null when none closed. */
+export async function realizedPnl(db: Db, fromMs: number, toMs: number): Promise<number | null> {
+  const res = await db.query<{ n: string; sum: number | null }>(
+    `select count(*)::text as n, sum(realized_pnl_sol) as sum from positions
+      where status = 'closed' and closed_at >= $1 and closed_at < $2`,
+    [new Date(fromMs), new Date(toMs)],
+  );
+  const r = res.rows[0];
+  if (!r || Number(r.n) === 0 || r.sum == null) return null;
+  return Number(r.sum);
+}
+
+/** Clear every open halt of the given kinds; returns how many. */
+export async function clearHalts(db: Db, kinds: string[], by: string): Promise<number> {
+  const res = await db.query(
+    "update halts set cleared_at = now(), cleared_by = $2 where cleared_at is null and kind = any($1)",
+    [kinds, by],
+  );
+  return res.rowCount ?? 0;
+}
+
 export async function countOpenPositions(db: Db): Promise<number> {
   const res = await db.query<{ n: string }>(
     "select count(*)::text as n from positions where status = 'open'",

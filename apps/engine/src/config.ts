@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { validateRules, type RulesFile } from "@wick/core/rules";
+import { base32Decode } from "@wick/core/totp";
 
 /** The capital ladder (ADR-0005). Tier and wallet cap must agree. */
 export const TIERS = {
@@ -72,6 +73,12 @@ export type EngineConfig = {
   quotesPerMinute: number;
   /** The deployed commit, for the decision fingerprint; the package version when unset. */
   codeVersion: string | null;
+  /** The sealed execution key (ADR-0003); missing file means nothing can execute. */
+  vaultFile: string;
+  /** The kill-switch file (ADR-0003), checked every second. */
+  killSwitchFile: string;
+  /** The second factor's base32 secret (ADR-0009); null leaves the vault permanently sealed. */
+  totpSecret: Uint8Array | null;
 };
 
 /** pump.fun's migration authority on mainnet; override with PUMP_MIGRATION_AUTHORITY when it rotates. */
@@ -180,6 +187,16 @@ export function parseEnv(env: Record<string, string | undefined>): EngineConfig 
   if (hc && !/^https:\/\//.test(hc)) throw new Error("HEALTHCHECK_URL must be https");
   const equity = env.EQUITY_SOL?.trim();
   if (equity && !(Number(equity) > 0)) throw new Error("EQUITY_SOL must be a positive number");
+  let totpSecret: Uint8Array | null = null;
+  const totp = env.TOTP_SECRET?.trim();
+  if (totp) {
+    try {
+      totpSecret = base32Decode(totp);
+    } catch {
+      throw new Error("TOTP_SECRET must be base32");
+    }
+    if (totpSecret.length < 10) throw new Error("TOTP_SECRET is too short (80 bits at least)");
+  }
   return {
     databaseUrl,
     redisUrl: env.REDIS_URL?.trim() || null,
@@ -203,5 +220,8 @@ export function parseEnv(env: Record<string, string | undefined>): EngineConfig 
     decisionTickMs: num(env.DECISION_TICK_MS, 1000),
     quotesPerMinute: num(env.QUOTES_PER_MINUTE, 30),
     codeVersion: env.WICK_COMMIT?.trim() || null,
+    vaultFile: env.VAULT_FILE?.trim() || "vault.json",
+    killSwitchFile: env.KILL_SWITCH_FILE?.trim() || "KILL",
+    totpSecret,
   };
 }

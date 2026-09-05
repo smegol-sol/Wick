@@ -12,6 +12,8 @@ import type { Audit, Snapshot, Stage } from "@wick/core/contracts";
 import { classifyLp, keyBytes, parsePool } from "./chains/solana/lp.ts";
 import { parseLaunch, type ParsedTx, type SigInfo } from "./chains/solana/launch.ts";
 import { summaryOf, tradesOf } from "./chains/solana/trades.ts";
+import { blockhashOf } from "./chains/solana/index.ts";
+import { toB58 } from "@wick/core/base58";
 import { FeatureBook } from "./ingest/features.ts";
 import { LogStream, wsUrlOf, type LogEvent } from "./ingest/stream.ts";
 import type { Db } from "./db/pool.ts";
@@ -295,6 +297,17 @@ test("token-2022 extensions are read from a parsed mint account", () => {
   assert.equal(readMint(null), null);
 });
 
+test("the recent blockhash is read from legacy and v0 transactions", () => {
+  const key = new Uint8Array(32).fill(4);
+  const hash = new Uint8Array(32).fill(9);
+  const legacy = Uint8Array.from([1, ...new Uint8Array(64), 1, 0, 0, 1, ...key, ...hash, 0]);
+  const v0 = Uint8Array.from([1, ...new Uint8Array(64), 0x80, 1, 0, 0, 1, ...key, ...hash, 0, 0]);
+  const b58 = toB58(hash);
+  assert.equal(blockhashOf(legacy), b58);
+  assert.equal(blockhashOf(v0), b58);
+  assert.throws(() => blockhashOf(Uint8Array.from([1, 2])), /bad transaction/);
+});
+
 test("reason codes stay inside the ADR-0008 budget", () => {
   assert.equal(GATES.length, 7);
   assert.ok(
@@ -414,6 +427,9 @@ function fakeChain(): FakeChain {
     },
     async balances(): Promise<never> {
       throw new Error("no");
+    },
+    async blockHeight() {
+      return null;
     },
     async slots() {
       return [

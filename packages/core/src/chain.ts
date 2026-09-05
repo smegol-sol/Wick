@@ -99,6 +99,9 @@ export type Quote = {
 };
 
 export type UnsignedTx = { bytes: Uint8Array; blockhash: string; lastValidBlockHeight: number };
+/** Tier-1 execution knobs (ENGINE §12): a dynamic priority fee under a cap, never a tip above it. */
+export type BuildOpts = { priorityFeeCapLamports: number };
+export type WalletBalances = { native: bigint; token: bigint; decimals: number | null };
 export type SignedTx = { bytes: Uint8Array; sig: string };
 export type SimResult = { ok: boolean; err: string | null; unitsConsumed: number | null };
 export type Confirmation = {
@@ -128,16 +131,20 @@ export interface ChainAdapter {
   /** The mints and signers a confirmed transaction touched; null when not found. */
   txSummary(sig: string, signal: AbortSignal): Promise<TxSummary | null>;
   quote(req: QuoteRequest, signal: AbortSignal): Promise<Quote | null>;
-  buildTx(quote: Quote, wallet: string, signal: AbortSignal): Promise<UnsignedTx>;
+  buildTx(quote: Quote, wallet: string, opts: BuildOpts, signal: AbortSignal): Promise<UnsignedTx>;
   simulate(tx: UnsignedTx, signal: AbortSignal): Promise<SimResult>;
   sign(tx: UnsignedTx, key: SealedKeyHandle): Promise<SignedTx>;
   send(tx: SignedTx, signal: AbortSignal): Promise<string>;
-  confirm(sig: string, timeoutMs: number, signal: AbortSignal): Promise<Confirmation>;
-  balances(
-    wallet: string,
-    mint: string,
+  /** Poll until the signature lands, fails, or its blockhash expires (`lastValidBlockHeight`); "expired" on timeout too. */
+  confirm(
+    sig: string,
+    timeoutMs: number,
+    lastValidBlockHeight: number | null,
     signal: AbortSignal,
-  ): Promise<{ native: bigint; token: bigint }>;
+  ): Promise<Confirmation>;
+  /** Current block height, for the expiry check before a send. */
+  blockHeight(signal: AbortSignal): Promise<number | null>;
+  balances(wallet: string, mint: string, signal: AbortSignal): Promise<WalletBalances>;
   /** Current slot from every configured endpoint; the engine derives slot lag. */
   slots(signal: AbortSignal): Promise<SlotReading[]>;
 }

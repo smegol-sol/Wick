@@ -35,10 +35,15 @@ export async function fetchJupQuote(
   return data as JupQuote;
 }
 
+/**
+ * Build the swap transaction. `priority` is either a fixed lamport tip or a
+ * cap under which Jupiter picks a fee from recent blocks ("high" level); the
+ * engine passes the cap from risk.yaml so the tip is dynamic but bounded.
+ */
 export async function fetchJupSwap(
   quote: JupQuote,
   user: string,
-  priorityLamports: number,
+  priority: number | { maxLamports: number },
   signal: AbortSignal,
 ): Promise<{ swapTransaction: string; lastValidBlockHeight?: number } | null> {
   const res = await fetch(`${JUP}/swap`, {
@@ -51,7 +56,15 @@ export async function fetchJupSwap(
       userPublicKey: user,
       wrapAndUnwrapSol: true,
       dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: Math.round(priorityLamports),
+      prioritizationFeeLamports:
+        typeof priority === "number"
+          ? Math.round(priority)
+          : {
+              priorityLevelWithMaxLamports: {
+                maxLamports: Math.round(priority.maxLamports),
+                priorityLevel: "high",
+              },
+            },
     }),
   });
   if (!res.ok) return null;

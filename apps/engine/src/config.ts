@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
+import { validateRules, type RulesFile } from "@wick/core/rules";
 
 /** The capital ladder (ADR-0005). Tier and wallet cap must agree. */
 export const TIERS = {
@@ -62,6 +64,14 @@ export type EngineConfig = {
   slotPollMs: number;
   /** How often the followed-wallet set is re-read from the database. */
   followRefreshMs: number;
+  rulesFile: string;
+  /** Capital the sizing works with; null means "assume the wallet cap" until the executor reads balances. */
+  equitySol: number | null;
+  decisionTickMs: number;
+  /** Quote budget for the decision loop; the executor re-quotes anyway. */
+  quotesPerMinute: number;
+  /** The deployed commit, for the decision fingerprint; the package version when unset. */
+  codeVersion: string | null;
 };
 
 /** pump.fun's migration authority on mainnet; override with PUMP_MIGRATION_AUTHORITY when it rotates. */
@@ -143,6 +153,18 @@ export function loadRisk(file: string): RiskConfig {
   return parseRisk(readFileSync(file, "utf8"));
 }
 
+export type LoadedRules = { rules: RulesFile; hash: string };
+
+/** Parse and validate a rules file's contents; the hash is the decision fingerprint's first field. */
+export function parseRules(text: string): LoadedRules {
+  const rules = validateRules(parse(text));
+  return { rules, hash: createHash("sha256").update(text).digest("hex").slice(0, 16) };
+}
+
+export function loadRules(file: string): LoadedRules {
+  return parseRules(readFileSync(file, "utf8"));
+}
+
 /** Read the engine's environment. Pure over the given map; throws on a missing must-have. */
 export function parseEnv(env: Record<string, string | undefined>): EngineConfig {
   const databaseUrl = env.DATABASE_URL?.trim();
@@ -156,6 +178,8 @@ export function parseEnv(env: Record<string, string | undefined>): EngineConfig 
   if (ws && !/^wss:\/\//.test(ws)) throw new Error("SOLANA_WS_URL must be wss");
   const hc = env.HEALTHCHECK_URL?.trim();
   if (hc && !/^https:\/\//.test(hc)) throw new Error("HEALTHCHECK_URL must be https");
+  const equity = env.EQUITY_SOL?.trim();
+  if (equity && !(Number(equity) > 0)) throw new Error("EQUITY_SOL must be a positive number");
   return {
     databaseUrl,
     redisUrl: env.REDIS_URL?.trim() || null,
@@ -174,5 +198,10 @@ export function parseEnv(env: Record<string, string | undefined>): EngineConfig 
     auditEveryMs: num(env.AUDIT_EVERY_MS, 10 * 60_000),
     slotPollMs: num(env.SLOT_POLL_MS, 5000),
     followRefreshMs: num(env.FOLLOW_REFRESH_MS, 30_000),
+    rulesFile: env.RULES_FILE?.trim() || "config/rules.yaml",
+    equitySol: equity ? Number(equity) : null,
+    decisionTickMs: num(env.DECISION_TICK_MS, 1000),
+    quotesPerMinute: num(env.QUOTES_PER_MINUTE, 30),
+    codeVersion: env.WICK_COMMIT?.trim() || null,
   };
 }

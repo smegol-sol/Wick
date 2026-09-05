@@ -65,6 +65,13 @@ export class Sampler {
     }
   }
 
+  /** Mints at the active cadence right now, in insertion order. */
+  active(now: number): string[] {
+    const out: string[] = [];
+    for (const mint of this.mints.keys()) if (this.tierOf(mint, now) === "active") out.push(mint);
+    return out;
+  }
+
   counts(now: number): { active: number; cooling: number } {
     let active = 0;
     let cooling = 0;

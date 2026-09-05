@@ -63,7 +63,7 @@ export function passOk(raw: string): boolean {
 export function parseSecret(raw: string): Uint8Array | null {
   const t = raw.trim();
   if (!t || t.length > 400) return null;
-  let bytes: Uint8Array | null = null;
+  let bytes: Uint8Array | null;
   if (t.startsWith("[")) {
     try {
       const arr = JSON.parse(t) as unknown;

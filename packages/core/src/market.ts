@@ -138,26 +138,24 @@ export function mergeLiveToken(prev: Token | undefined, next: Token, now: number
   if (!prev) return next;
   const last = prev.candles[prev.candles.length - 1];
   const px = next.price;
-  let candles = prev.candles;
-  if (!last || now - last.t > 60_000) {
-    candles = [
-      ...prev.candles.slice(-119),
-      {
-        t: now,
-        o: last?.c ?? px,
-        h: Math.max(last?.c ?? px, px),
-        l: Math.min(last?.c ?? px, px),
-        c: px,
-        v: 0,
-      },
-    ];
-  } else {
-    candles = prev.candles.map((c, i) =>
-      i === prev.candles.length - 1
-        ? { ...c, h: Math.max(c.h, px), l: Math.min(c.l, px), c: px }
-        : c,
-    );
-  }
+  const candles =
+    !last || now - last.t > 60_000
+      ? [
+          ...prev.candles.slice(-119),
+          {
+            t: now,
+            o: last?.c ?? px,
+            h: Math.max(last?.c ?? px, px),
+            l: Math.min(last?.c ?? px, px),
+            c: px,
+            v: 0,
+          },
+        ]
+      : prev.candles.map((c, i) =>
+          i === prev.candles.length - 1
+            ? { ...c, h: Math.max(c.h, px), l: Math.min(c.l, px), c: px }
+            : c,
+        );
   const prevPx = prev.price || px;
   const chg = prevPx > 0 ? ((px - prevPx) / prevPx) * 100 : 0;
   const change5m =

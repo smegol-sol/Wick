@@ -6,6 +6,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ChainAdapter } from "@wick/core/chain";
+import type { Snapshot } from "@wick/core/contracts";
+import { funnelView, listIntents } from "../api/queries.ts";
+import { loadRisk, loadRules } from "../config.ts";
+import { DecisionLoop } from "../decision/loop.ts";
+import { FeatureBook } from "../ingest/features.ts";
 import { migrate } from "./migrate.ts";
 import { makePool } from "./pool.ts";
 import { Collector } from "../ingest/collector.ts";
@@ -194,6 +199,88 @@ test(
         [["create", "createSig"]],
       );
       assert.equal(ev.rows[0]?.data?.creator, "Dev1111111111111111111111111111111111111111");
+
+      // The decision loop against the real tables: an intent with its fingerprint and six gate rows.
+      await db.query(
+        "delete from gate_results where intent_id in (select id from intents where mint = $1)",
+        [mint],
+      );
+      await db.query("delete from intents where mint = $1", [mint]);
+      const book = new FeatureBook();
+      book.noteToken(mint, "bonding", at - 600_000);
+      const snapAt = (ts: number, liq: number): Snapshot => ({
+        ts,
+        mint,
+        price: 0.001,
+        mc: 50_000,
+        liq,
+        vol5m: 2000,
+        vol24: null,
+        tx24: null,
+        buys5m: 30,
+        sells5m: 10,
+        holders: 120,
+        top10: 20,
+        source: "pump.fun",
+        statsAt: null,
+      });
+      book.noteSnapshot(snapAt(at - 300_000, 6000), 100);
+      book.noteSnapshot(snapAt(at, 8000), 100);
+      book.noteAudit({
+        mint,
+        at: at - 1000,
+        authorities: { mint: false, freeze: false, program: "token" },
+        extensions: {
+          transferFeeBps: 0,
+          hook: false,
+          permanentDelegate: false,
+          defaultFrozen: false,
+        },
+        decimals: 6,
+        supply: 1e9,
+        lp: "curve",
+        lpRead: null,
+      });
+      const loaded = loadRules("config/rules.yaml");
+      const loop = new DecisionLoop(
+        {
+          db,
+          chain,
+          book,
+          activeMints: () => [mint],
+          rules: loaded.rules,
+          rulesHash: loaded.hash,
+          codeVersion: "test",
+          risk: loadRisk("config/risk.yaml"),
+          solUsd: () => 100,
+          equitySol: () => 15,
+          selfHalt: () => false,
+          now: () => at,
+        },
+        { tickMs: 1000, quotesPerMinute: 30, bookRefreshMs: 5000 },
+      );
+      await loop.tick();
+      assert.equal(loop.state.written, 1);
+      const views = await listIntents(db, "shadow", 10);
+      const view = views.find((v) => v.intent.mint === mint);
+      assert.ok(view, "the shadow intent reads back through the API query");
+      assert.equal(view.symbol, "WSOL");
+      assert.equal(view.intent.ttlMs, loaded.rules.intentTtlMs);
+      assert.equal(view.intent.sizing?.binding, "equity");
+      assert.equal(view.gates.length, 6);
+      assert.equal(view.adjustedMul, 1);
+      const fp = await db.query(
+        "select rules_hash, code_version, price_source, ttl_ms from intents where id = $1",
+        [view.intent.id],
+      );
+      assert.deepEqual(fp.rows[0], {
+        rules_hash: loaded.hash,
+        code_version: "test",
+        price_source: "pump.fun",
+        ttl_ms: loaded.rules.intentTtlMs,
+      });
+      const funnel = await funnelView(db, [], at - 60_000);
+      assert.deepEqual(funnel.rejections, []);
     } finally {
       await db.end();
     }

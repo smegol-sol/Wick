@@ -8,6 +8,7 @@ import { SupplyMapCard } from "@/components/supply-map";
 import { Empty, Kicker, Pill, Stat } from "@/components/ui";
 import { api } from "@/lib/api";
 import { t } from "@/lib/i18n";
+import { useNow } from "@/lib/use-now";
 
 export function TokenScreen() {
   const { mint } = useParams({ from: "/token/$mint" });
@@ -17,7 +18,7 @@ export function TokenScreen() {
     refetchInterval: 10_000,
     retry: 1,
   });
-  const now = Date.now();
+  const now = useNow(10_000);
   const tk = q.data;
 
   return (

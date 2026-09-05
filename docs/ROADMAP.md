@@ -42,9 +42,9 @@ Exit condition: 72 hours of uninterrupted stream, the Operations board showing e
 
 ## Phase 2: decision, gates and execution in suggest mode (three weeks)
 
-- [ ] `decision` with the `confirmed-entry` and `exit-policy` rules and weights from `rules.yaml`.
-- [ ] The seven gates with the reason codes and adjustments from ENGINE.md §4; every rejection and adjustment written. No eighth gate and no code above 25 without an ADR.
-- [ ] Size as the minimum of three terms (equity, pool share, token cap) with the binding term recorded on the intent (ADR-0005).
+- [x] `decision` with the `confirmed-entry`, `migration-snipe` and `exit-policy` rules and weights from `rules.yaml`, validated at boot; a loop every second over the active mints and the open positions, per-mint-and-rule cooldown, intents written in every mode (shadow rows included). Unique buyers and organic volume are noted, not required, until the profiler exists.
+- [x] The six decision-time gates with the reason codes and adjustments from ENGINE.md §4 as a pure function; every rejection and adjustment written to `gate_results`. `execution` and its three codes land with the executor. No eighth gate and no code above 25 without an ADR.
+- [x] Size as the minimum of three terms (equity, pool share, token cap) with the binding term recorded on the intent (ADR-0005); the regime and social multipliers are ×1 until their layers land.
 - [ ] The wallet profiler with the basic behavioural classes; everything after it reads from it (ADR-0008, ENGINE.md §8).
 - [ ] The basic supply map: dev share and dev-funded wallets, bundle, early snipers, fresh wallets, early-holder trend (ENGINE.md §7).
 - [ ] The four microstructure features: net flow, organic volume, depth in both directions, holder divergence (ENGINE.md §10).
@@ -57,7 +57,7 @@ Exit condition: 72 hours of uninterrupted stream, the Operations board showing e
 - [ ] The console in live mode: intents with their reasons, adjustments and regime reason; approve and reject; funnel; halt; unseal with the second factor. The desk retires.
 - [ ] The Telegram bot: alerts, the daily report, `/status` and `/halt`, restricted to the owner's chat id. No `/approve` in v1: approval stays in the console on the tailnet (ADR-0009, amended).
 - [ ] `outcomes` for every intent at 5, 30 and 120 minutes, executed or rejected.
-- [ ] A decision fingerprint on every intent: the rules-file hash, the code version and the price source next to the stored features, so any decision can be reproduced after the rules change.
+- [x] A decision fingerprint on every intent: the rules-file hash, the code version and the price source next to the stored features, so any decision can be reproduced after the rules change (migration 0004).
 - [ ] A resume point for the log stream: after a reconnect, the followed wallets' and the migration authority's signatures since the last seen one are fetched, so a dropped connection loses no print and no migration.
 - [ ] Before the first real SOL, moved up from Phase 5: a short written threat model, secret scanning in CI, and the failure drills in `docs/OPS.md` (RPC cut, Postgres stopped, unattended restart), each ending in a safe stop.
 - [ ] mirror-follow on webhooks with the copy gap measured.

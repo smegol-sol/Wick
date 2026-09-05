@@ -5,7 +5,7 @@
  * migrate, LP state), and feeds source heartbeats and slot lag to health and
  * metrics. It decides nothing.
  */
-import type { ChainAdapter, LaunchTx, SourceToken, Trade } from "@wick/core/chain";
+import type { ChainAdapter, LaunchTx, SourceToken, Trade, TxSummary } from "@wick/core/chain";
 import type { Audit, Snapshot, Stage } from "@wick/core/contracts";
 import type { Db } from "../db/pool.ts";
 import { slotLagOf } from "../health.ts";
@@ -442,7 +442,7 @@ export class Collector {
   private async handlePrint(e: LogEvent): Promise<void> {
     const ctrl = new AbortController();
     const kill = setTimeout(() => ctrl.abort(), 8000);
-    let trades: Trade[] = [];
+    let trades: Trade[];
     try {
       trades = await this.chain.trades(e.signature, ctrl.signal);
     } finally {
@@ -477,7 +477,7 @@ export class Collector {
     }
     const ctrl = new AbortController();
     const kill = setTimeout(() => ctrl.abort(), 8000);
-    let summary = null;
+    let summary: TxSummary | null;
     try {
       summary = await this.chain.txSummary(e.signature, ctrl.signal);
     } finally {

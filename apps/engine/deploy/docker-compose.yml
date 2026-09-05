@@ -67,14 +67,20 @@ services:
       DATABASE_URL: postgres://wick:${POSTGRES_PASSWORD}@db:5432/wick
       REDIS_URL: redis://redis:6379
       SOLANA_RPC_URL: ${SOLANA_RPC_URL:-}
+      SOLANA_WS_URL: ${SOLANA_WS_URL:-}
+      PUMP_MIGRATION_AUTHORITY: ${PUMP_MIGRATION_AUTHORITY:-}
       HEALTHCHECK_URL: ${HEALTHCHECK_URL:-}
       ENGINE_HTTP_HOST: 0.0.0.0
       ENGINE_HTTP_PORT: "9464"
       DASHBOARD_TOKEN: ${DASHBOARD_TOKEN:?set DASHBOARD_TOKEN in .env}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       RISK_FILE: /repo/apps/engine/config/risk.yaml
+      RULES_FILE: /repo/apps/engine/config/rules.yaml
+      EQUITY_SOL: ${EQUITY_SOL:-}
+      WICK_COMMIT: ${WICK_COMMIT:-}
     volumes:
       - ../config/risk.yaml:/repo/apps/engine/config/risk.yaml:ro
+      - ../config/rules.yaml:/repo/apps/engine/config/rules.yaml:ro
       - vault:/var/lib/wick
 
   prometheus:

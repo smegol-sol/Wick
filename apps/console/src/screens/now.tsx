@@ -6,6 +6,7 @@ import { StatusStrip } from "@/components/status-strip";
 import { Empty, Kicker } from "@/components/ui";
 import { api, subscribe } from "@/lib/api";
 import { t } from "@/lib/i18n";
+import { useNow } from "@/lib/use-now";
 
 export function NowScreen() {
   const qc = useQueryClient();
@@ -54,7 +55,7 @@ export function NowScreen() {
   const list = intents.data ?? [];
   const waiting = list.filter((v) => v.status === "proposed");
   const recent = list.filter((v) => v.status !== "proposed").slice(0, 6);
-  const now = Date.now();
+  const now = useNow(5000);
 
   return (
     <div className="flex flex-col gap-4">

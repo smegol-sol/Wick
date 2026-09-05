@@ -135,6 +135,11 @@ export class FeatureBook {
     this.prints = this.prints.filter((p) => (p.ts ?? 0) >= cut);
   }
 
+  /** Which source reported the price the features row carries; null before any snapshot. */
+  priceSource(mint: string): string | null {
+    return this.books.get(mint)?.snapshot?.source ?? null;
+  }
+
   private liqAt(b: MintBook, ts: number): number | null {
     let best: LiqPoint | null = null;
     for (const p of b.liq) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseEnv, parseRisk } from "./config.ts";
+import { loadRules, parseEnv, parseRisk } from "./config.ts";
 import { splitSql } from "./db/sql.ts";
 import { requiredExtension } from "./db/migrate.ts";
 import { evaluateHealth, slotLagOf } from "./health.ts";
@@ -63,6 +63,37 @@ test("env parsing requires the database and refuses plain http", () => {
     /https/,
   );
   assert.throws(() => parseEnv({ DATABASE_URL: "postgres://x", LOG_LEVEL: "loud" }), /LOG_LEVEL/);
+});
+
+test("rules.yaml loads with a stable hash and the decision env has safe defaults", () => {
+  const a = loadRules("config/rules.yaml");
+  const b = loadRules("config/rules.yaml");
+  assert.equal(a.hash, b.hash);
+  assert.equal(a.hash.length, 16);
+  assert.deepEqual(
+    a.rules.rules.map((r) => `${r.id}:${r.strategy}:${r.mode}`),
+    [
+      "confirmed-entry:confirmed-entry:shadow",
+      "migration-snipe:migration-snipe:shadow",
+      "exit-policy:exit-policy:shadow",
+    ],
+  );
+  const cfg = parseEnv({ DATABASE_URL: "postgres://x" });
+  assert.equal(cfg.rulesFile, "config/rules.yaml");
+  assert.equal(cfg.equitySol, null);
+  assert.equal(cfg.decisionTickMs, 1000);
+  assert.equal(cfg.quotesPerMinute, 30);
+  assert.equal(cfg.codeVersion, null);
+  const set = parseEnv({
+    DATABASE_URL: "postgres://x",
+    EQUITY_SOL: "3",
+    WICK_COMMIT: "abc1234",
+    QUOTES_PER_MINUTE: "10",
+  });
+  assert.equal(set.equitySol, 3);
+  assert.equal(set.codeVersion, "abc1234");
+  assert.equal(set.quotesPerMinute, 10);
+  assert.throws(() => parseEnv({ DATABASE_URL: "postgres://x", EQUITY_SOL: "-1" }), /EQUITY_SOL/);
 });
 
 test("sql splitter respects comments, strings and $$ bodies", () => {

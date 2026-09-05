@@ -1,0 +1,58 @@
+# The rules the decision layer runs (ENGINE.md §6). Every number a rule uses
+# lives here, never in code; the engine refuses to start on a missing or
+# out-of-range value. Every rule starts in shadow and climbs the ladder
+# replay → shadow → suggest → auto by its own stats (ADR-0004, ADR-0007);
+# the mode here is changed by hand, with the reason in the commit message.
+version: 1
+# How long a proposed intent waits for the owner before it expires.
+intentTtlMs: 90000
+# Minimum gap between two intents for the same mint and rule, whatever the outcome.
+intentCooldownMs: 300000
+rules:
+  confirmed-entry:
+    strategy: confirmed-entry
+    mode: shadow
+    weight: 1
+    params:
+      ageMinSec: 180
+      ageMaxSec: 5400
+      minLiqUsd: 4000
+      minBuySellRatio: 1.3
+      minTrades5m: 20
+      volLiqMin: 0.05
+      volLiqMax: 2
+      minUniqueBuyers: 15
+      minNetFlowSol5m: 0
+      followBoost: 1.5
+      sizeMul: 1
+  # Same gates as confirmed-entry, half size, only once the token has migrated.
+  migration-snipe:
+    strategy: migration-snipe
+    mode: shadow
+    weight: 1
+    params:
+      ageMinSec: 0
+      ageMaxSec: 1800
+      minLiqUsd: 4000
+      minBuySellRatio: 1.3
+      minTrades5m: 20
+      volLiqMin: 0.05
+      volLiqMax: 2
+      minUniqueBuyers: 15
+      minNetFlowSol5m: 0
+      followBoost: 1.5
+      sizeMul: 0.5
+  exit-policy:
+    strategy: exit-policy
+    mode: shadow
+    weight: 1
+    params:
+      trailingStopPct: 22
+      hardDropPct: 18
+      timeExitSec: 14400
+      liqDropPct: 30
+      # Ladder: at `atPct` gain sell `sellPct` of what remains. The operator's choice, not the handbook's.
+      takeProfit:
+        - { atPct: 50, sellPct: 30 }
+        - { atPct: 100, sellPct: 40 }
+        - { atPct: 200, sellPct: 50 }

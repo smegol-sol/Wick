@@ -2,18 +2,18 @@
 
 Read this file first in every session and update it last before pushing. It answers four questions: where we are, what was decided, what is open, and how to verify. Long detail lives in `ROADMAP.md`, `ENGINE.md` and `adr/`, not here.
 
-Last updated: 2026-09-04 · branch `claude/new-project-review-h5rmic`
+Last updated: 2026-09-05 · branch `claude/new-project-review-h5rmic`
 
 ## Where we are
 
-| Phase (from ROADMAP)                | Status      | Note                                                                                                                                                                                          |
-| ----------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pre-0: turn WICK into a real desk   | done        | no fabricated data, no paper mode, configurable RPC, a confirm step before every trade                                                                                                        |
-| 0: governance and quality gates     | done        | except `main` protection (a manual GitHub setting)                                                                                                                                            |
-| 1: host and data                    | in progress | everything on the software side is in (ingest, LP state, launch parsing, the log stream, the features row, deploy stack, API, console); left: the VPS bring-up and the 72-hour exit condition |
-| 2: decision, gates and suggest mode | not started |                                                                                                                                                                                               |
-| 3: level-2 learning and auto mode   | not started |                                                                                                                                                                                               |
-| 4 to 7                              | not started |                                                                                                                                                                                               |
+| Phase (from ROADMAP)                | Status      | Note                                                                                                                                                                                                                                                  |
+| ----------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pre-0: turn WICK into a real desk   | done        | no fabricated data, no paper mode, configurable RPC, a confirm step before every trade                                                                                                                                                                |
+| 0: governance and quality gates     | done        | except `main` protection (a manual GitHub setting)                                                                                                                                                                                                    |
+| 1: host and data                    | in progress | everything on the software side is in (ingest, LP state, launch parsing, the log stream, the features row, deploy stack, API, console); left: the VPS bring-up and the 72-hour exit condition                                                         |
+| 2: decision, gates and suggest mode | in progress | slice 1 in: the rules file, the decision loop, six gates as a pure function, three-term sizing, the decision fingerprint; every rule in shadow. Next: the executor slice (simulate, sign, send, confirm, fills), then the profiler and the supply map |
+| 3: level-2 learning and auto mode   | not started |                                                                                                                                                                                                                                                       |
+| 4 to 7                              | not started |                                                                                                                                                                                                                                                       |
 
 ## What was decided (summary; details in the ADRs)
 
@@ -32,6 +32,8 @@ Last updated: 2026-09-04 · branch `claude/new-project-review-h5rmic`
 - **Language:** the whole platform is English: code, identifiers, strings, documents, the state ledger and the roadmap. No second language in the UI.
 - **Numbers:** any number without a source is `null` and renders n/a; filters reject unknown (ADR-0001).
 - **From the external review (2026-09-04):** seven items adopted: failure drills, a threat model and secret scanning move from Phase 5 to Phase 2 before the first real SOL; a resume point for the log stream; a decision fingerprint on every intent; an encrypted off-host backup with RPO 24 h and RTO 2 h; clock sync monitoring; and the Telegram bot loses `/approve` in v1 (ADR-0009 amended). Everything else the review asked for already existed in ENGINE.md, risk.yaml and the ADRs.
+- **Decision layer (Phase 2, slice 1):** the rules file is validated at boot and every number a rule uses lives there; the six decision-time gates are one pure function in core, `execution` belongs to the executor; `*_UNKNOWN` rows fire only in auto; the supply map the engine has is the launch-time map, so auto mode rejects `SUPPLY_UNKNOWN` until a live holder refresh exists (the safe default); an exit passes through the quote gate only; a quote is fetched only after the four cheap gates pass, never in shadow, within `QUOTES_PER_MINUTE`; sizing assumes the wallet cap as equity until `EQUITY_SOL` is set or the executor reads balances, and the assumption is logged at boot.
+- **Tooling:** ESLint 10 with `typescript-eslint` 8.69 and `eslint-plugin-react-hooks` 7 (the React Compiler rules); the frozen desk is exempt from `set-state-in-effect` and `only-export-components`. Node is pinned to 22 in `engines`; Dependabot does not raise `typescript` or `@types/node` majors.
 - **Merging:** squash to `main`; the PR title is checked by commitlint. Standing rule (owner, 2026-09-04): the assistant performs the merge, only after the owner's explicit permission for that specific merge; a PR is opened without asking (standing permission, 2026-09-04) and is never merged unasked. Merge plan adopted the same day (`CONTRIBUTING.md`): one foundation PR, then one PR per verifiable slice, a tag on `main` at the end of each phase, deploys from tags only.
 
 ## Open
@@ -47,6 +49,9 @@ Last updated: 2026-09-04 · branch `claude/new-project-review-h5rmic`
 - [ ] Google Fonts is blocked in the test sandbox; the one console error in the desk's render smoke is expected.
 - [ ] **Owner, outside the code:** the legal and tax side of running an automated trading engine in the owner's country, trade-record keeping, and the RPC and data providers' terms. The engine keeps every fill and outcome; what the records must look like is a question for an accountant.
 - [ ] The desk (`apps/desk`) still carries its Arabic dictionary; it is frozen to bug fixes and retires with Phase 2, so it is left as is.
+- [ ] **Owner:** the take-profit ladder in `rules.yaml` (30% at +50%, 40% at +100%, 50% at +200%) is the operator's choice, not the handbook's; confirm or change it before the exit rule leaves shadow.
+- [ ] P&L halts, the post-loss-day multiplier, `RISK_CASH` and the entry-price exits (take profit, liquidity drop from entry) read null until the executor records fills; the risk gate passes them until then, and `RISK_CASH` rejects in auto mode only.
+- [ ] `MANIP_CIRCULAR`, `RISK_CLUSTER` and the 30-minute price adjustment have no data source yet (profiler and narrative clusters, Phase 4); they are wired and pass.
 
 ## How to verify
 
@@ -56,14 +61,16 @@ NITRO_PRESET=node-server npm run build && PORT=3000 node apps/desk/.output/serve
 npm run smoke -- http://127.0.0.1:3000/ screenshots
 VITE_MOCK=1 npm run build -w @wick/console && (cd apps/console && npx vite preview --port 8091 &) && npm run smoke -- http://127.0.0.1:8091/ screenshots/console
 # with a local Postgres: TEST_DATABASE_URL=postgres://wick@127.0.0.1:5432/wick npm -w @wick/engine test
+# the rules file alone: node --experimental-strip-types -e 'import("./apps/engine/src/config.ts").then(m => console.log(m.loadRules("apps/engine/config/rules.yaml").hash))'
 ```
 
-State at last update: everything above green, 44 tests (17 core, 3 desk, 3 console, 21 engine including a Postgres integration test), 0 vulnerabilities, 0 lint warnings.
+State at last update: everything above green, 60 tests (26 core, 3 desk, 3 console, 28 engine including a Postgres integration test that runs the decision loop), 0 vulnerabilities, 0 lint warnings.
 
 ## Session log
 
 | Date       | Done                                                                                                                                                                                                                                                                                                                                                                         |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-05 | Phase 2 slice 1: `rules.yaml` with validation, the decision loop, six gates as a pure function with adjustments, three-term sizing with the binding term, the decision fingerprint (migration 0004), `/api/rules` and mode counts from the rules; ESLint 10 group by hand, Node 22 in `engines`, Dependabot ignores for TypeScript and Node types majors; 60 tests           |
 | 2026-09-04 | External review checked against the repository; seven items adopted into ROADMAP, ADR-0009, OPS and this ledger; Dependabot round closed (five merged, three closed with reasons); `actions/setup-node` moved to v7 by hand                                                                                                                                                  |
 | 2026-09-04 | The log stream (`logsSubscribe` on active mints, followed wallets, the migration authority) with prints into `wallet_prints` and stream-side migrate events; the feature book with the per-second features row, microstructure from reserves and stream counts (migration 0003); Dependabot review: commitlint and audit retries fixed, PRs 7 and 8 closed, config tightened |
 | 2026-09-04 | LP state reader (PumpSwap, Raydium v4, lockers), launch transaction parsing into `launch_txs`, poll-side `chain_events` (create, migrate, lp_state), base58 moved to its own core module; 40 tests                                                                                                                                                                           |

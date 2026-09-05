@@ -40,6 +40,15 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "off",
     },
   },
+  {
+    // The desk is frozen to bug fixes and retires at the end of Phase 2 (ADR-0010); the React
+    // Compiler rules that arrived with eslint-plugin-react-hooks 7 are not applied to it.
+    files: ["apps/desk/**/*.{ts,tsx}"],
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+      "react-refresh/only-export-components": "off",
+    },
+  },
   // Disable rules that conflict with Prettier formatting.
   prettier,
 );

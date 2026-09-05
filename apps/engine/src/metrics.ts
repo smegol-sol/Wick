@@ -132,6 +132,13 @@ export const rejections = new client.Counter({
   registers: [registry],
 });
 
+export const intents = new client.Counter({
+  name: "wick_intents_total",
+  help: "intents rows written, by rule mode and resulting status",
+  labelNames: ["mode", "status"] as const,
+  registers: [registry],
+});
+
 export const halted = new client.Gauge({
   name: "wick_halted",
   help: "1 while a halt of this kind is active",

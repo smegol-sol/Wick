@@ -17,6 +17,13 @@ updates:
       # The desk's signing path is frozen until it retires (ADR-0010); 2.x renames the subpath exports.
       - dependency-name: "@noble/curves"
         update-types: ["version-update:semver-major"]
+      # The engine runs on Node 22 with type stripping (`engines` in package.json); a Node 24 types
+      # bump would lie about the runtime. Raised by hand together with the host.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # A TypeScript major changes what strip-types accepts; taken by hand after a typecheck of every app.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

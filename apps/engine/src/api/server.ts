@@ -6,7 +6,13 @@
  */
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { API_ROUTES, type ApiState, type FunnelView, type WsMessage } from "@wick/core/api";
+import {
+  API_ROUTES,
+  type ApiState,
+  type FunnelView,
+  type RuleView,
+  type WsMessage,
+} from "@wick/core/api";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { Db } from "../db/pool.ts";
 import type { Health } from "../health.ts";
@@ -23,6 +29,8 @@ export type ApiDeps = {
   tier: 1 | 2 | 3;
   walletCapSol: number;
   solUsd: () => number | null;
+  /** The rules the decision layer runs, for `/api/rules` and the mode counts. */
+  rules: () => RuleView[];
   /** Bearer token; when null (local dev) every caller is the owner. */
   token: string | null;
 };
@@ -73,6 +81,12 @@ async function funnelLayers(): Promise<FunnelView["layers"]> {
   return order.map((layer) => ({ layer, ...(by.get(layer) ?? { entered: 0, passed: 0 }) }));
 }
 
+export function modeCounts(rules: RuleView[]): ApiState["modes"] {
+  const modes: ApiState["modes"] = { shadow: 0, suggest: 0, auto: 0 };
+  for (const r of rules) modes[r.mode]++;
+  return modes;
+}
+
 export function createApi(deps: ApiDeps) {
   const sockets = new Set<WebSocket>();
 
@@ -94,7 +108,7 @@ export function createApi(deps: ApiDeps) {
       dayPnlPct: null,
       openPositions,
       pendingIntents,
-      modes: { shadow: 0, suggest: 0, auto: 0 }, // rules land with the decision layer
+      modes: modeCounts(deps.rules()),
       regime: null,
       halts,
       health: deps.health(),
@@ -131,7 +145,7 @@ export function createApi(deps: ApiDeps) {
           const since = Date.now() - 24 * 3600_000;
           return (json(res, 200, await q.funnelView(deps.db, await funnelLayers(), since)), true);
         }
-        if (path === API_ROUTES.rules) return (json(res, 200, []), true);
+        if (path === API_ROUTES.rules) return (json(res, 200, deps.rules()), true);
         if (path === API_ROUTES.replays)
           return (json(res, 200, await q.listReplays(deps.db)), true);
         const tk = path.match(/^\/api\/tokens\/([^/]+)$/);

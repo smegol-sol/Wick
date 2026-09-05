@@ -111,7 +111,7 @@ async function gatesFor(db: Db, ids: string[]): Promise<Map<string, GateResult[]
   return out;
 }
 
-const INTENT_SELECT = `select i.*, t.symbol, null::integer as ttl_ms from intents i left join tokens t on t.mint = i.mint`;
+const INTENT_SELECT = `select i.*, t.symbol from intents i left join tokens t on t.mint = i.mint`;
 
 export async function listIntents(
   db: Db,
@@ -148,7 +148,7 @@ export async function decideIntent(
 ): Promise<IntentView | null> {
   const res = await db.query(
     `update intents set status = $2, decided_by = $3, decided_at = now()
-     where id = $1 and status = 'proposed' and ts + make_interval(secs => ${DEFAULT_TTL / 1000}) > now()`,
+     where id = $1 and status = 'proposed' and ts + make_interval(secs => coalesce(ttl_ms, ${DEFAULT_TTL}) / 1000.0) > now()`,
     [id, decision, decidedBy],
   );
   if (res.rowCount === 0) return null;
@@ -223,7 +223,7 @@ export async function countOpenPositions(db: Db): Promise<number> {
 
 export async function countPending(db: Db): Promise<number> {
   const res = await db.query<{ n: string }>(
-    `select count(*)::text as n from intents where status = 'proposed' and ts + make_interval(secs => ${DEFAULT_TTL / 1000}) > now()`,
+    `select count(*)::text as n from intents where status = 'proposed' and ts + make_interval(secs => coalesce(ttl_ms, ${DEFAULT_TTL}) / 1000.0) > now()`,
   );
   return Number(res.rows[0]?.n ?? 0);
 }

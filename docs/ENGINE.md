@@ -280,6 +280,8 @@ A gate has three outputs, not two: pass, reject with a code, or **adjust** (pass
 
 Twenty-four reason codes; the cap is 25. Human approval in suggest mode does not skip a gate; the only practical difference between suggest and auto inside the gates is the `*_UNKNOWN` rows.
 
+The first six gates run in the decision loop as one pure function over the features row and the engine's own book (`@wick/core/gates`); `execution` is the executor's, since its three codes come from simulating, sending and confirming. An exit goes through the quote gate only: nothing in the book may keep the engine from leaving a position. The loop pays for a quote only after the four cheap gates have passed, never in shadow mode, and within a per-minute budget (`QUOTES_PER_MINUTE`).
+
 ## 5. Sizing and tier-1 risk numbers
 
 Size is the minimum of three terms (ADR-0005), then multiplied by the regime and social multipliers, and the binding term is recorded on the intent:
@@ -428,7 +430,7 @@ wallets(pk pk, label, kind, tracked_since, status, stats jsonb)               --
 wallet_profiles(wallet pk, class, confidence, stats jsonb, profiled_at)
 wallet_prints(sig pk, wallet, ts, seen_at, mint, side, sol, amount)           -- copy gap = seen_at - ts
 wallet_scores(wallet, window_days, n, hit_rate_30m, med_ret_120m, med_hold_sec, copied_pnl_sol, class, scored_at)
-intents(id pk, chain, ts, kind, strategy, rule_id, mode, mint, side, size_sol, sizing jsonb, features jsonb, why, status, decided_by, decided_at, replay_run_id)
+intents(id pk, chain, ts, kind, strategy, rule_id, mode, mint, side, size_sol, sizing jsonb, features jsonb, why, status, decided_by, decided_at, replay_run_id, rules_hash, code_version, price_source, ttl_ms)  -- the last four are the decision fingerprint
 gate_results(intent_id, gate, passed, reason_code, adjustment jsonb, ms)
 quotes(id pk, intent_id, ts, in_amount, out_amount, impact_pct, slippage_bps, route jsonb)
 executions(id pk, intent_id, quote_id, wallet, sig, sent_at, landed_at, status, err, fee_lamports, tip_lamports, route)

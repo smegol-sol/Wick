@@ -1,20 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { type IntentView, ttlLeftMs } from "@wick/core/api";
 import { formatSol, formatUsd } from "@wick/core/format";
-import { useEffect, useState } from "react";
 import { GateList } from "./gate-list";
 import { TokenMark } from "./mark";
 import { Button, Pill } from "./ui";
 import { t } from "@/lib/i18n";
-
-function useNow(everyMs: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), everyMs);
-    return () => clearInterval(t);
-  }, [everyMs]);
-  return now;
-}
+import { useNow } from "@/lib/use-now";
 
 export function IntentCard({
   view,

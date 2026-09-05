@@ -87,7 +87,7 @@ export async function fetchDexStats(
   for (let i = 0; i < need.length; i += BATCH) {
     if (signal.aborted) break;
     const slice = need.slice(i, i + BATCH);
-    let rows: DexPair[] = [];
+    let rows: DexPair[];
     try {
       rows = await fetchBatch(slice, signal);
     } catch {

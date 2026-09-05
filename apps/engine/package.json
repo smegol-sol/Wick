@@ -8,9 +8,11 @@
     "start": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/main.ts",
     "migrate": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/db/migrate.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --import ../../scripts/test-loader.mjs --test src/**/*.test.ts src/*.test.ts"
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --import ../../scripts/test-loader.mjs --test src/**/*.test.ts src/*.test.ts",
+    "vault:init": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/executor/vault-init.ts"
   },
   "dependencies": {
+    "@noble/curves": "^1.9.7",
     "@wick/core": "0.1.0",
     "pg": "^8.23.0",
     "prom-client": "^15.1.3",

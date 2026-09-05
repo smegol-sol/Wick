@@ -406,6 +406,8 @@ Defensive MEV policy by tier:
 - **Tier 2 and up:** `route = "jito"` bundles with a tip cap in `risk.yaml`, so the transaction is not visible before it lands. Entries above 1 SOL are sliced (ADR-0005).
 - **Never:** offensive MEV of any kind.
 
+How the tier-1 executor holds to this: one approved intent at a time, claimed by moving its status to `executing` in the statement that reads it, and one `executions` row per intent (a unique index), so a restart cannot sign twice. A sell's amount is the open position's share that the intent's size stands for. A transaction not seen within 60 s is polled for ten more minutes with the pre-trade balances kept in memory, then written `EXEC_UNCONFIRMED`; a restart in between leaves the row `sent` for the alert. The network fee is not separated from the fill yet (`fee_lamports` stays null), so the realized price on a buy is a shade pessimistic. Entries wait under any halt (manual, P&L, kill switch, health) and expire after their TTL; exits run through every halt. The wallet caps in code (ADR-0003) sit under the tier numbers: 0.5 SOL per transaction, 5 SOL of entries per UTC day, and no entries while the wallet holds more than 15 SOL.
+
 ## 13. Data collection and replay
 
 Collection is a Phase 1 deliverable with a written retention policy, and replay is the production decision and gate code run over stored features (ADR-0007). Shadow mode is replay on the live stream and is the required paper test before a rule enters suggest.
@@ -435,7 +437,7 @@ gate_results(intent_id, gate, passed, reason_code, adjustment jsonb, ms)
 quotes(id pk, intent_id, ts, in_amount, out_amount, impact_pct, slippage_bps, route jsonb)
 executions(id pk, intent_id, quote_id, wallet, sig, sent_at, landed_at, status, err, fee_lamports, tip_lamports, route)
 fills(execution_id pk, chain, mint, side, sol_delta, token_delta, quoted_price, realized_price, realized_slippage_pct)
-positions(mint, wallet, opened_at, closed_at, cost_sol, qty, exits jsonb, realized_pnl_sol, status)
+positions(mint, wallet, opened_at, closed_at, cost_sol, qty, exits jsonb, realized_pnl_sol, status, entry_price_usd, entry_liq_usd, intent_id)
 outcomes(intent_id, horizon_sec, ret_pct, max_ret_pct, min_ret_pct)           -- every intent, executed or rejected
 rule_stats(rule_id, window_days, n, win_rate, expectancy, worst_dd, weight, changed_at, change_reason, replay_run_id)
 replay_runs(id pk, rules_version, window_start, window_end, exec_model jsonb, started_at, finished_at, summary jsonb)

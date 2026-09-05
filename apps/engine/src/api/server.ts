@@ -1,8 +1,9 @@
 /**
- * The engine's HTTP + WebSocket API (ADR-0009 §2). Reads come from Postgres
- * and the collector; the two mutations that exist in Phase 1 (approve or
- * reject an intent, halt) write an `events` row. Unseal and halt-clear
- * answer 501 until the executor and the second factor land.
+ * The engine's HTTP + WebSocket API (ADR-0009 §2). Reads come from Postgres,
+ * the collector and the executor; every mutation (approve or reject an
+ * intent, halt, halt-clear, unseal, seal) writes an `events` row. Halt-clear
+ * and unseal need the second factor (TOTP); halt and seal never do, since
+ * stopping money is always allowed.
  */
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { timingSafeEqual } from "node:crypto";
@@ -11,6 +12,7 @@ import {
   type ApiState,
   type FunnelView,
   type RuleView,
+  type VaultState,
   type WsMessage,
 } from "@wick/core/api";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -33,6 +35,21 @@ export type ApiDeps = {
   rules: () => RuleView[];
   /** Bearer token; when null (local dev) every caller is the owner. */
   token: string | null;
+  /** The executor's side: vault state, wallet reads and the second factor. */
+  exec: ExecDeps;
+};
+
+export type ExecDeps = {
+  vault: () => VaultState;
+  wallet: () => string | null;
+  /** Free SOL from the last wallet read; null while sealed. */
+  cashSol: () => number | null;
+  /** Cost of the open positions, so equity = cash + deployed. */
+  deployedSol: () => Promise<number>;
+  unseal: (passphrase: string, code: string) => Promise<void>;
+  seal: () => void;
+  /** True when `code` is a valid second factor right now. */
+  secondFactor: (code: string) => Promise<boolean>;
 };
 
 export function authorized(header: string | undefined, token: string | null): boolean {
@@ -91,29 +108,46 @@ export function createApi(deps: ApiDeps) {
   const sockets = new Set<WebSocket>();
 
   async function state(): Promise<ApiState> {
-    const [openPositions, pendingIntents, halts] = await Promise.all([
+    const now = Date.now();
+    const dayStart = new Date(now);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const [openPositions, pendingIntents, halts, deployed, dayPnlSol] = await Promise.all([
       q.countOpenPositions(deps.db),
       q.countPending(deps.db),
       q.activeHalts(deps.db),
+      deps.exec.deployedSol(),
+      q.realizedPnl(deps.db, dayStart.getTime(), now),
     ]);
+    const cash = deps.exec.cashSol();
+    const equitySol = cash == null ? null : cash + deployed;
     return {
       version: deps.version,
-      now: Date.now(),
+      now,
       chain: "solana",
       tier: deps.tier,
       walletCapSol: deps.walletCapSol,
-      equitySol: null, // the executor's wallet balance (Phase 2)
+      equitySol,
       solUsd: deps.solUsd(),
-      dayPnlSol: null,
-      dayPnlPct: null,
+      dayPnlSol,
+      dayPnlPct:
+        dayPnlSol == null || equitySol == null || equitySol <= 0
+          ? null
+          : (dayPnlSol / equitySol) * 100,
       openPositions,
       pendingIntents,
       modes: modeCounts(deps.rules()),
       regime: null,
       halts,
       health: deps.health(),
-      vault: "none",
+      vault: deps.exec.vault(),
     };
+  }
+
+  async function audit(msg: string, data: Record<string, unknown>): Promise<void> {
+    await deps.db.query(
+      "insert into events (ts, level, component, msg, data) values (now(), 'info', 'api', $1, $2)",
+      [msg, JSON.stringify(data)],
+    );
   }
 
   function broadcast(msg: WsMessage): void {
@@ -193,11 +227,41 @@ export function createApi(deps: ApiDeps) {
           broadcast({ type: "state", state: await state() });
           return (json(res, 200, { ok: true }), true);
         }
-        if (path === API_ROUTES.haltClear || path === API_ROUTES.unseal) {
-          return (
-            json(res, 501, { error: "needs the second factor; lands in Phase 2", status: 501 }),
-            true
-          );
+        if (path === API_ROUTES.haltClear) {
+          const body = await readJson(req);
+          const code = typeof body.code === "string" ? body.code : "";
+          if (!(await deps.exec.secondFactor(code)))
+            return (json(res, 403, { error: "second factor rejected", status: 403 }), true);
+          const n = await q.clearHalts(deps.db, ["manual", "pnl"], "owner");
+          m.halted.set({ kind: "manual" }, 0);
+          await audit("halt cleared", { cleared: n });
+          broadcast({ type: "alert", level: "info", msg: `halt cleared (${n})`, ts: Date.now() });
+          broadcast({ type: "state", state: await state() });
+          return (json(res, 200, { ok: true, cleared: n }), true);
+        }
+        if (path === API_ROUTES.unseal) {
+          const body = await readJson(req);
+          const passphrase = typeof body.passphrase === "string" ? body.passphrase : "";
+          const code = typeof body.code === "string" ? body.code : "";
+          try {
+            await deps.exec.unseal(passphrase, code);
+          } catch (e) {
+            const kind = (e as { kind?: string }).kind ?? "error";
+            const status = kind === "no-vault" || kind === "second-factor-unset" ? 409 : 403;
+            await audit("unseal refused", { kind });
+            return (json(res, status, { error: errText(e), status }), true);
+          }
+          await audit("vault unsealed", { wallet: deps.exec.wallet() });
+          broadcast({ type: "alert", level: "info", msg: "vault unsealed", ts: Date.now() });
+          broadcast({ type: "state", state: await state() });
+          return (json(res, 200, { ok: true, wallet: deps.exec.wallet() }), true);
+        }
+        if (path === API_ROUTES.seal) {
+          deps.exec.seal();
+          await audit("vault sealed", {});
+          broadcast({ type: "alert", level: "warn", msg: "vault sealed", ts: Date.now() });
+          broadcast({ type: "state", state: await state() });
+          return (json(res, 200, { ok: true }), true);
         }
       }
       json(res, 404, { error: "not found", status: 404 });

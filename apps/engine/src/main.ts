@@ -1,6 +1,7 @@
 /**
- * Engine entry point: ingest, the decision loop, health, metrics and the
- * API. Nothing that can sign runs here yet; the executor is a later slice.
+ * Engine entry point: ingest, the decision loop, the executor behind the
+ * sealed vault and the kill switch, health, metrics and the API. The engine
+ * boots sealed: nothing signs until the owner unseals from the console.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -11,6 +12,11 @@ import { loadRisk, loadRules, parseEnv } from "./config.ts";
 import { migrate } from "./db/migrate.ts";
 import { makePool, ping } from "./db/pool.ts";
 import { DecisionLoop } from "./decision/loop.ts";
+import { Executor } from "./executor/executor.ts";
+import { KillSwitch } from "./executor/killswitch.ts";
+import { Vault } from "./executor/vault.ts";
+import { addHalt, clearHalts } from "./api/queries.ts";
+import { verifyTotp } from "@wick/core/totp";
 import { evaluateHealth, type Health } from "./health.ts";
 import { startHttp } from "./http.ts";
 import { Collector } from "./ingest/collector.ts";
@@ -49,7 +55,13 @@ async function main(): Promise<void> {
     rulesHash: loaded.hash,
   });
   if (cfg.equitySol == null)
-    log.warn("EQUITY_SOL unset; sizing assumes the wallet cap until the executor reads balances");
+    log.warn("EQUITY_SOL unset; sizing assumes the wallet cap until the vault is unsealed");
+  const vault = new Vault(cfg.vaultFile, cfg.totpSecret);
+  if (vault.state === "none")
+    log.warn("no vault file; nothing can execute", { file: cfg.vaultFile });
+  else log.info("vault sealed", { wallet: vault.wallet });
+  if (!cfg.totpSecret)
+    log.warn("TOTP_SECRET unset; the vault cannot be unsealed and halts cannot be cleared");
   if (cfg.solanaRpcUrl) process.env.SOLANA_RPC_URL = cfg.solanaRpcUrl;
   else log.warn("SOLANA_RPC_URL unset; public RPCs only, unfit for anything but a smoke run");
 
@@ -93,6 +105,22 @@ async function main(): Promise<void> {
       { ...risk.health, requiredSources: REQUIRED_SOURCES },
     );
 
+  const kill = new KillSwitch(cfg.killSwitchFile, (k) => {
+    if (k.active) {
+      log.error("kill switch set", { reason: k.reason });
+      m.halted.set({ kind: "kill" }, 1);
+      void addHalt(db, "kill", k.reason ?? "kill file present").catch((e) =>
+        log.error("kill halt write failed", { err: errText(e) }),
+      );
+    } else {
+      log.warn("kill switch removed");
+      m.halted.set({ kind: "kill" }, 0);
+      void clearHalts(db, ["kill"], "kill file removed").catch((e) =>
+        log.error("kill halt clear failed", { err: errText(e) }),
+      );
+    }
+  });
+
   const rulesView = (): RuleView[] =>
     loaded.rules.rules.map((r) => ({
       id: r.id,
@@ -106,6 +134,12 @@ async function main(): Promise<void> {
   const token = process.env.DASHBOARD_TOKEN?.trim() || null;
   if (!token)
     log.warn("DASHBOARD_TOKEN unset; the API accepts every caller (local development only)");
+  const deployedSol = async (): Promise<number> => {
+    const r = await db.query<{ sum: number | null }>(
+      "select sum(cost_sol) as sum from positions where status = 'open'",
+    );
+    return Number(r.rows[0]?.sum ?? 0);
+  };
   const api = createApi({
     db,
     health,
@@ -115,7 +149,45 @@ async function main(): Promise<void> {
     solUsd: () => collector.state.solUsd,
     rules: rulesView,
     token,
+    exec: {
+      vault: () => vault.state,
+      wallet: () => vault.wallet,
+      cashSol: () => executor.state.walletSol,
+      deployedSol,
+      unseal: async (passphrase, code) => {
+        await vault.unseal(passphrase, code);
+        m.vaultUnsealed.set(1);
+        log.info("vault unsealed", { wallet: vault.wallet });
+        await executor
+          .refreshBalance(Date.now(), true)
+          .catch((e) => log.warn("balance read after unseal failed", { err: errText(e) }));
+      },
+      seal: () => {
+        vault.seal();
+        m.vaultUnsealed.set(0);
+        log.warn("vault sealed by the owner");
+      },
+      secondFactor: (code) =>
+        cfg.totpSecret ? verifyTotp(cfg.totpSecret, code, Date.now()) : Promise.resolve(false),
+    },
   });
+  const executor = new Executor(
+    {
+      db,
+      chain,
+      vault,
+      risk,
+      halted: () => {
+        const h = health();
+        if (kill.state.active) return { halted: true, reason: kill.state.reason ?? "kill" };
+        if (h.selfHalt) return { halted: true, reason: "health" };
+        return { halted: false, reason: null };
+      },
+      onIntent: (view) => api.broadcast({ type: "intent", intent: view }),
+      onPosition: (view) => api.broadcast({ type: "position", position: view }),
+    },
+    { tickMs: 1000, confirmTimeoutMs: 60_000, balanceRefreshMs: 30_000 },
+  );
   const decision = new DecisionLoop(
     {
       db,
@@ -128,7 +200,8 @@ async function main(): Promise<void> {
       risk,
       solUsd: () => collector.state.solUsd,
       equitySol: () => cfg.equitySol ?? risk.executionWalletCapSol,
-      selfHalt: () => health().selfHalt,
+      cashSol: () => executor.state.walletSol,
+      selfHalt: () => health().selfHalt || kill.state.active,
       pin: (mint) => collector.sampler.pin(mint, true, Date.now()),
       onIntent: (view) => api.broadcast({ type: "intent", intent: view }),
     },
@@ -139,6 +212,8 @@ async function main(): Promise<void> {
   stream.start();
   collector.start();
   decision.start();
+  kill.start();
+  executor.start();
   log.info("listening", { host: cfg.httpHost, port: cfg.httpPort });
 
   let deadman: NodeJS.Timeout | null = null;
@@ -164,6 +239,9 @@ async function main(): Promise<void> {
   const shutdown = (sig: string) => {
     log.info("stopping", { sig });
     m.up.set(0);
+    executor.stop();
+    kill.stop();
+    vault.seal();
     decision.stop();
     collector.stop();
     stream.stop();

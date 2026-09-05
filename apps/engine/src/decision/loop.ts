@@ -25,7 +25,7 @@ import { runGates, type GateBook, type GateLimits, type GateQuote } from "@wick/
 import { entryRules, exitRule, type RulesFile } from "@wick/core/rules";
 import { sizeEntry } from "@wick/core/sizing";
 import type { IntentView } from "@wick/core/api";
-import { getIntent } from "../api/queries.ts";
+import { getIntent, realizedPnl } from "../api/queries.ts";
 import type { RiskConfig } from "../config.ts";
 import type { Db } from "../db/pool.ts";
 import type { FeatureBook } from "../ingest/features.ts";
@@ -46,8 +46,10 @@ export type LoopDeps = {
   codeVersion: string;
   risk: RiskConfig;
   solUsd: () => number | null;
-  /** Capital the sizing works with. */
+  /** Capital the sizing works with when the wallet has not been read (the wallet cap, by default). */
   equitySol: () => number;
+  /** Free SOL in the execution wallet from the executor's last read; null while sealed. */
+  cashSol?: () => number | null;
   /** The engine's health self-halt (RISK_HALT reason "health"). */
   selfHalt: () => boolean;
   /** Keep a mint at the active cadence while it has an intent out. */
@@ -80,12 +82,19 @@ type OpenPosition = {
   openedAt: number;
   costSol: number;
   createdAt: number | null;
+  entryPriceUsd: number | null;
+  entryLiqUsd: number | null;
+  /** Partial exits already taken, which is how many take-profit rungs were sold. */
+  exits: number;
 };
 
 type BookState = {
   at: number;
   positions: OpenPosition[];
   halt: { kind: string; reason: string } | null;
+  /** Realized P&L of positions closed today and yesterday (UTC), SOL; null before any fill. */
+  dayPnlSol: number | null;
+  yesterdayPnlSol: number | null;
 };
 
 export class DecisionLoop {
@@ -103,7 +112,13 @@ export class DecisionLoop {
   private readonly entries: EntryRule[];
   private readonly cooldown = new Map<string, number>();
   private readonly positionStates = new Map<string, PositionState>();
-  private bookState: BookState = { at: 0, positions: [], halt: null };
+  private bookState: BookState = {
+    at: 0,
+    positions: [],
+    halt: null,
+    dayPnlSol: null,
+    yesterdayPnlSol: null,
+  };
   private timer: NodeJS.Timeout | null = null;
   private ticking = false;
 
@@ -187,6 +202,18 @@ export class DecisionLoop {
     };
   }
 
+  private deployedSol(): number {
+    let sum = 0;
+    for (const p of this.bookState.positions) sum += p.costSol;
+    return sum;
+  }
+
+  /** Cash plus what is deployed when the wallet has been read; the configured assumption otherwise. */
+  private equity(): number {
+    const cash = this.deps.cashSol?.() ?? null;
+    return cash == null ? this.deps.equitySol() : cash + this.deployedSol();
+  }
+
   private gateBook(mint: string, equity: number, now: number): GateBook {
     const b = this.bookState;
     let openExposureSol = 0;
@@ -199,19 +226,20 @@ export class DecisionLoop {
       if (p.createdAt == null || now - p.createdAt < YOUNG_MS) youngExposureSol += p.costSol;
     }
     const selfHalt = this.deps.selfHalt();
+    const dayPnlPct = b.dayPnlSol == null || equity <= 0 ? null : (b.dayPnlSol / equity) * 100;
     return {
       halted: b.halt != null || selfHalt,
       haltReason: b.halt ? `${b.halt.kind}: ${b.halt.reason}` : selfHalt ? "health" : null,
-      dayPnlPct: null, // P&L needs fills (executor slice)
-      weekPnlPct: null,
+      dayPnlPct,
+      weekPnlPct: null, // a week of fills is the evaluator's (later slice)
       openPositions: b.positions.length,
       openExposureSol,
       youngExposureSol,
       equitySol: equity,
       deployedSol,
-      cashSol: null, // the executor reads balances
+      cashSol: this.deps.cashSol?.() ?? null,
       clusterOpen: 0, // narrative clusters are phase 4 data
-      lostYesterday: false, // needs fills
+      lostYesterday: b.yesterdayPnlSol != null && b.yesterdayPnlSol < 0,
     };
   }
 
@@ -227,7 +255,7 @@ export class DecisionLoop {
       this.state.skippedNoSolUsd++;
       return;
     }
-    const equity = this.deps.equitySol();
+    const equity = this.equity();
     const r = this.deps.risk;
     const book = this.gateBook(f.mint, equity, now);
     const sized = sizeEntry({
@@ -322,11 +350,11 @@ export class DecisionLoop {
       if (!st) {
         st = {
           openedAt: p.openedAt,
-          entryPriceUsd: null, // fills land with the executor
-          entryLiqUsd: null,
-          peakPriceUsd: f.priceUsd,
+          entryPriceUsd: p.entryPriceUsd,
+          entryLiqUsd: p.entryLiqUsd,
+          peakPriceUsd: Math.max(p.entryPriceUsd ?? 0, f.priceUsd),
           lastPriceUsd: null,
-          tpTaken: 0,
+          tpTaken: p.exits,
         };
         this.positionStates.set(key, st);
       }
@@ -337,7 +365,7 @@ export class DecisionLoop {
       st.lastPriceUsd = f.priceUsd;
       if (!verdict) continue;
       const sizeSol = round((p.costSol * verdict.sellPct) / 100);
-      const equity = this.deps.equitySol();
+      const equity = this.equity();
       const base = {
         features: f,
         mode: rule.mode,
@@ -462,20 +490,28 @@ export class DecisionLoop {
 
   private async refreshBook(now: number): Promise<void> {
     if (now - this.bookState.at < this.cfg.bookRefreshMs) return;
-    const [pos, halt] = await Promise.all([
+    const dayStart = new Date(now);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const yesterdayStart = new Date(dayStart.getTime() - 86_400_000);
+    const [pos, halt, today, yesterday] = await Promise.all([
       this.deps.db.query<{
         mint: string;
         wallet: string;
         opened_at: Date;
         cost_sol: number;
         created_at: Date | null;
+        entry_price_usd: number | null;
+        entry_liq_usd: number | null;
+        exits: unknown[] | null;
       }>(
-        `select p.mint, p.wallet, p.opened_at, p.cost_sol, t.created_at
+        `select p.mint, p.wallet, p.opened_at, p.cost_sol, t.created_at, p.entry_price_usd, p.entry_liq_usd, p.exits
            from positions p left join tokens t on t.mint = p.mint where p.status = 'open'`,
       ),
       this.deps.db.query<{ kind: string; reason: string }>(
         "select kind, reason from halts where cleared_at is null order by ts desc limit 1",
       ),
+      realizedPnl(this.deps.db, dayStart.getTime(), now),
+      realizedPnl(this.deps.db, yesterdayStart.getTime(), dayStart.getTime()),
     ]);
     this.bookState = {
       at: now,
@@ -485,8 +521,13 @@ export class DecisionLoop {
         openedAt: new Date(r.opened_at).getTime(),
         costSol: Number(r.cost_sol),
         createdAt: r.created_at == null ? null : new Date(r.created_at).getTime(),
+        entryPriceUsd: r.entry_price_usd == null ? null : Number(r.entry_price_usd),
+        entryLiqUsd: r.entry_liq_usd == null ? null : Number(r.entry_liq_usd),
+        exits: Array.isArray(r.exits) ? r.exits.length : 0,
       })),
       halt: halt.rows[0] ?? null,
+      dayPnlSol: today,
+      yesterdayPnlSol: yesterday,
     };
   }
 }

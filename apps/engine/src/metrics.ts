@@ -139,6 +139,38 @@ export const intents = new client.Counter({
   registers: [registry],
 });
 
+export const executions = new client.Counter({
+  name: "wick_executions_total",
+  help: "executions rows by final status",
+  labelNames: ["status"] as const,
+  registers: [registry],
+});
+
+export const fillSlippage = new client.Histogram({
+  name: "wick_fill_slippage_pct",
+  help: "Realized minus quoted price per fill, percent, positive is worse",
+  buckets: [-2, -1, -0.5, 0, 0.5, 1, 2, 3, 5, 10],
+  registers: [registry],
+});
+
+export const unconfirmed = new client.Gauge({
+  name: "wick_unconfirmed_transactions",
+  help: "Sent transactions the engine has not seen land",
+  registers: [registry],
+});
+
+export const vaultUnsealed = new client.Gauge({
+  name: "wick_vault_unsealed",
+  help: "1 while the execution key is in memory",
+  registers: [registry],
+});
+
+export const walletSol = new client.Gauge({
+  name: "wick_wallet_sol",
+  help: "Execution wallet balance in SOL from the last read",
+  registers: [registry],
+});
+
 export const halted = new client.Gauge({
   name: "wick_halted",
   help: "1 while a halt of this kind is active",

@@ -31,6 +31,7 @@ Nothing listens on a public interface. The only public port on the host is SSH, 
 5. **Secrets.** `cp .env.example .env`, fill every value. `EQUITY_SOL` is what the execution wallet holds (empty means the wallet cap from `risk.yaml` is assumed for sizing); `WICK_COMMIT` is `git rev-parse --short HEAD` of what is deployed, stamped on every intent. `POSTGRES_PASSWORD`, `GRAFANA_PASSWORD` and `DASHBOARD_TOKEN` from `openssl rand -hex 32`. `TAILSCALE_IP` from step 3. The Telegram bot token from BotFather; the chat id from `https://api.telegram.org/bot<token>/getUpdates` after messaging the bot once.
 6. **Dead-man checks.** Create two checks on healthchecks.io (free tier): `engine` with a 2-minute period and `backup` with a 26-hour period. Paste their ping URLs into `HEALTHCHECK_URL` and `HEALTHCHECK_BACKUP_URL`. Point their notifications at the same Telegram chat.
 7. **Risk file.** Review `apps/engine/config/risk.yaml`. The engine refuses to start if the tier and the wallet cap disagree with ADR-0005.
+   7a. **Vault and second factor.** On the host, `docker compose run --rm engine npm run vault:init -- /var/lib/wick/vault.json --totp`. It asks for a passphrase twice, writes the sealed key, prints the execution wallet address and a `TOTP_SECRET` with its `otpauth://` URI. Put the secret in `.env`, scan the URI in an authenticator app, and fund the printed address by hand up to the tier cap. The key never leaves the container; the passphrase is typed only at unseal.
 8. **Console.** From the repository root, `npm ci && npm run build -w @wick/console`; Caddy serves `apps/console/dist`. Rebuild after every `git pull` that touches the console.
 9. **Start.** `docker compose up -d --build`. The engine applies migrations on boot. `docker compose logs -f engine` should show `listening` and then `snapshots` counters moving on `http://<tailscale-ip>/metrics` (send `Authorization: Bearer <DASHBOARD_TOKEN>`).
 10. **Prove the alerts.** Stop the engine for two minutes (`docker compose stop engine`) and confirm `EngineDown` arrives on Telegram and the healthchecks.io check goes red, then start it again. Phase 1's exit condition requires one test alert per rule to have reached the phone.
@@ -42,7 +43,10 @@ Nothing listens on a public interface. The only public port on the host is SSH, 
 - **Health:** `http://<tailscale-name>/healthz` returns the same object the risk gate reads: source ages, slot lag, database, and the reasons for a self-halt if any.
 - **Logs:** JSON lines. `docker compose logs --since 1h engine | jq`. A token address or wallet appears only under `data`, never in `msg`.
 - **Migrations:** applied on boot; to run by hand, `docker compose run --rm engine node --experimental-strip-types src/db/migrate.ts`.
-- **Upgrade:** `git pull && docker compose up -d --build engine`. The engine starts halted-on-unseal in Phase 2 and later; in Phase 1 there is nothing to unseal.
+- **Upgrade:** `git pull && docker compose up -d --build engine`. The engine boots sealed: the decision layer runs and writes intents, but nothing executes until the vault is unsealed.
+- **Unseal:** `POST /api/vault/unseal` with `{"passphrase": "...", "code": "<TOTP>"}` (the console's Engine screen once its form lands; `curl` with the bearer token until then). `POST /api/vault/seal` locks it again with no factor, since stopping is always allowed. Five wrong attempts lock the vault for a minute.
+- **Kill switch:** `touch /var/lib/wick/KILL` on the host (`docker compose exec engine touch /var/lib/wick/KILL` works too; the file's content is the reason shown). The engine sees it within a second, halts entries and keeps exits running. Remove the file to clear; that is the only way.
+- **Clear a halt:** `POST /api/halt/clear` with `{"code": "<TOTP>"}` clears manual and P&L halts. A health self-halt clears itself when the reason goes; a kill-switch halt clears when the file goes.
 
 ## 4. Alerts and what to do
 

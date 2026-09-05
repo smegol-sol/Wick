@@ -305,22 +305,43 @@ export function lockHotMem(): void {
   holdSecret(null);
 }
 
+/** The message a serialized transaction's fee payer signs: everything after the signature table. */
+export function messageOf(bin: Uint8Array): Uint8Array {
+  const { n, size } = compactU16(bin, 0);
+  if (n < 1 || size + n * 64 >= bin.length) throw new Error("bad");
+  return bin.subarray(size + n * 64);
+}
+
+/** A copy of the transaction with `sig` in the fee payer's slot (the first). */
+export function placeSignature(bin: Uint8Array, sig: Uint8Array): Uint8Array {
+  const { n, size } = compactU16(bin, 0);
+  if (n < 1 || sig.length !== 64 || size + n * 64 >= bin.length) throw new Error("bad");
+  const out = new Uint8Array(bin);
+  out.set(sig, size);
+  return out;
+}
+
+/** Sign a serialized transaction whose fee payer is `pub`; throws "payer" when it is not. */
+export function signTxBytes(
+  bin: Uint8Array,
+  sign: (msg: Uint8Array) => Uint8Array,
+  pub: Uint8Array,
+): Uint8Array {
+  const payer = feePayerOf(bin);
+  if (!payer || payer.length !== 32 || pub.length !== 32) throw new Error("bad");
+  for (let i = 0; i < 32; i++) if (payer[i] !== pub[i]) throw new Error("payer");
+  return placeSignature(bin, sign(messageOf(bin)));
+}
+
 export async function signHotTx(unsignedB64: string): Promise<string> {
   const secret = peekSecret();
   if (!secret || secret.length < 32) throw new Error("locked");
-  const bin = b64to(unsignedB64);
-  const { n, size } = compactU16(bin, 0);
-  if (n < 1 || size + n * 64 >= bin.length) throw new Error("bad");
-  const payer = feePayerOf(bin);
-  const pub = secret.subarray(32, 64);
-  if (!payer || payer.length !== 32) throw new Error("bad");
-  for (let i = 0; i < 32; i++) {
-    if (payer[i] !== pub[i]) throw new Error("payer");
-  }
-  const msg = bin.subarray(size + n * 64);
-  const sig = ed25519.sign(msg, secret.subarray(0, 32));
-  const out = new Uint8Array(bin);
-  out.set(sig, size);
+  const seed = secret.subarray(0, 32);
+  const out = signTxBytes(
+    b64to(unsignedB64),
+    (msg) => ed25519.sign(msg, seed),
+    secret.subarray(32, 64),
+  );
   return b64of(out);
 }
 

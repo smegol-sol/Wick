@@ -41,10 +41,10 @@ Last updated: 2026-09-05 · branch `claude/new-project-review-h5rmic`
 
 - [ ] **Manual:** enable `main` branch protection in GitHub settings (steps in `CONTRIBUTING.md`).
 - [ ] **Manual, Vercel:** set the desk project's Root Directory to `apps/desk` after the merge, or its deploy fails. (The desk retires at the end of Phase 2; the console is served from the VPS.)
-- [ ] **Bring the engine up on a VPS:** steps in `docs/OPS.md`; needs a Hetzner account, Tailscale, a Telegram bot, healthchecks.io and an RPC key from the owner.
+- [ ] **Bring the engine up on a VPS:** steps in `docs/OPS.md`; needs the Vultr account, Tailscale, a Telegram bot, healthchecks.io and an RPC key from the owner. The monthly infrastructure total (VPS plus RPC plan) must stay under the 70 USD hurdle of ENGINE §5; confirm the two prices before ordering.
 - [ ] `uniqueBuyers5m` and organic volume stay null: per-trade wallets need pump.fun event decoding (its events travel as self-CPI instruction data, not logs) or a provider stream that carries full transactions; decide at VPS time with the RPC plan.
 - [ ] The migration authority id and the `Instruction: Buy|Sell` log names are written from memory; confirm both on the first VPS run before the migration-snipe rule reads them.
-- [ ] Provider choices at VPS time: RPC and webhooks (Helius by default), VPS (Hetzner by default), dead-man service (healthchecks.io by default).
+- [ ] Provider choices at VPS time: RPC (Helius by default), dead-man service (healthchecks.io by default). VPS decided (owner, 2026-09-07): Vultr `vx1-g-4c-16g-240s`; nothing in the repository depends on the provider.
 - [ ] The holder count and the LP holder read work only with a private RPC; public ones refuse `getTokenLargestAccounts`. Without it LP is `burned` or `null`, never `locked` or `deployer`.
 - [ ] The PumpSwap pool layout and the locker program ids were written from memory and are validated by the base/quote-mint check, not against a live pool yet; the first VPS run must confirm them on a migrated token before the safety gate reads `lp`.
 - [ ] Google Fonts is blocked in the test sandbox; the one console error in the desk's render smoke is expected.

@@ -24,7 +24,7 @@ Nothing listens on a public interface. The only public port on the host is SSH, 
 
 ## 2. First-time setup
 
-1. **VPS.** Hetzner CPX31 or equivalent (4 vCPU, 8 GB, 160 GB). Debian 12. Create a non-root user with sudo, SSH keys only, `ufw` allowing 22 only, unattended upgrades on.
+1. **VPS.** The owner chose Vultr `vx1-g-4c-16g-240s` (4 vCPU, 16 GB, 240 GB NVMe; 2026-09-07), which is above the ADR-0003 floor (4 vCPU, 8 GB, 160 GB); any equivalent works. Pick the region closest to the RPC provider (Frankfurt or Amsterdam for a European RPC, New Jersey for a US one). Debian 12. Create a non-root user with sudo, SSH keys only, `ufw` allowing 22 only, unattended upgrades on.
 2. **Docker.** Install Docker Engine and the compose plugin from Docker's repository.
 3. **Tailscale.** Install Tailscale on the VPS, your phone and your laptop, and log them into the same tailnet. Note the VPS's address (`tailscale ip -4`) and MagicDNS name. Turn on MagicDNS in the admin console. Optionally enable Tailscale SSH and close port 22 to the public entirely.
 4. **Checkout.** Clone the repository to `/opt/wick` and `cd apps/engine/deploy`.

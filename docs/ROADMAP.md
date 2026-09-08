@@ -56,7 +56,7 @@ Exit condition: 72 hours of uninterrupted stream, the Operations board showing e
 - [x] Every mutating API call writes an `events` row; approve, halt, halt-clear (second factor), unseal (second factor) and seal wired to the executor (ADR-0009).
 - [x] The console in live mode: intents with their reasons, adjustments and regime reason; approve and reject; funnel; halt; unseal and halt-clear with the second factor; fills on executed intents.
 - [ ] The desk retires (end of Phase 2, ADR-0010).
-- [ ] The Telegram bot: alerts, the daily report, `/status` and `/halt`, restricted to the owner's chat id. No `/approve` in v1: approval stays in the console on the tailnet (ADR-0009, amended).
+- [x] The Telegram bot: alerts (Alertmanager), the daily report, `/status` and `/halt`, restricted to the owner's chat id, plus pushes for suggest intents, executions, halts, self-halt, the vault and rule changes. No `/approve` in v1: approval stays in the console on the tailnet (ADR-0009, amended).
 - [x] `outcomes` for every intent at 5, 30 and 120 minutes, executed or rejected.
 - [x] A decision fingerprint on every intent: the rules-file hash, the code version and the price source next to the stored features, so any decision can be reproduced after the rules change (migration 0004).
 - [x] A resume point for the log stream: after a reconnect, the followed wallets' and the migration authority's signatures since the last seen one are fetched, so a dropped connection loses no print and no migration (seeded from `wallet_prints` and `chain_events` at boot, so a restart resumes too).

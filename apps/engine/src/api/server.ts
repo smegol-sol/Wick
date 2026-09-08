@@ -38,6 +38,8 @@ export type ApiDeps = {
   regime: () => Regime | null;
   /** The operator re-enables a rule the evaluator disabled; false when it was not disabled. */
   enableRule: (id: string, by: string) => Promise<boolean>;
+  /** One line to the owner's phone for what changed (the Telegram bot); optional. */
+  notify?: (text: string) => void;
   /** Bearer token; when null (local dev) every caller is the owner. */
   token: string | null;
   /** The executor's side: vault state, wallet reads and the second factor. */
@@ -232,6 +234,7 @@ export function createApi(deps: ApiDeps) {
           const ok = await deps.enableRule(id, "owner");
           if (!ok) return (json(res, 409, { error: "rule is not disabled", status: 409 }), true);
           await audit("rule re-enabled", { rule: id });
+          deps.notify?.(`rule ${id} re-enabled`);
           broadcast({ type: "alert", level: "warn", msg: `rule ${id} re-enabled`, ts: Date.now() });
           broadcast({ type: "state", state: await state() });
           return (json(res, 200, { ok: true }), true);
@@ -242,6 +245,7 @@ export function createApi(deps: ApiDeps) {
             typeof body.reason === "string" && body.reason ? body.reason.slice(0, 200) : "manual";
           await q.addHalt(deps.db, "manual", reason);
           m.halted.set({ kind: "manual" }, 1);
+          deps.notify?.(`halt from the console: ${reason}`);
           broadcast({ type: "alert", level: "warn", msg: `halt: ${reason}`, ts: Date.now() });
           broadcast({ type: "state", state: await state() });
           return (json(res, 200, { ok: true }), true);
@@ -254,6 +258,7 @@ export function createApi(deps: ApiDeps) {
           const n = await q.clearHalts(deps.db, ["manual", "pnl"], "owner");
           m.halted.set({ kind: "manual" }, 0);
           await audit("halt cleared", { cleared: n });
+          deps.notify?.(`halt cleared from the console (${n})`);
           broadcast({ type: "alert", level: "info", msg: `halt cleared (${n})`, ts: Date.now() });
           broadcast({ type: "state", state: await state() });
           return (json(res, 200, { ok: true, cleared: n }), true);
@@ -271,6 +276,7 @@ export function createApi(deps: ApiDeps) {
             return (json(res, status, { error: errText(e), status }), true);
           }
           await audit("vault unsealed", { wallet: deps.exec.wallet() });
+          deps.notify?.(`vault unsealed: ${deps.exec.wallet() ?? ""}`);
           broadcast({ type: "alert", level: "info", msg: "vault unsealed", ts: Date.now() });
           broadcast({ type: "state", state: await state() });
           return (json(res, 200, { ok: true, wallet: deps.exec.wallet() }), true);
@@ -278,6 +284,7 @@ export function createApi(deps: ApiDeps) {
         if (path === API_ROUTES.seal) {
           deps.exec.seal();
           await audit("vault sealed", {});
+          deps.notify?.("vault sealed");
           broadcast({ type: "alert", level: "warn", msg: "vault sealed", ts: Date.now() });
           broadcast({ type: "state", state: await state() });
           return (json(res, 200, { ok: true }), true);

@@ -49,7 +49,13 @@ function dayKey(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-export type EvaluatorDeps = { db: Db; rules: RulesFile; now?: () => number };
+export type EvaluatorDeps = {
+  db: Db;
+  rules: RulesFile;
+  now?: () => number;
+  /** A line for the owner when a rule is disabled or its weight moves. */
+  onChange?: (text: string) => void;
+};
 export type EvaluatorConfig = { outcomesEveryMs: number; statsEveryMs: number };
 
 export class Evaluator {
@@ -230,9 +236,13 @@ export class Evaluator {
         }
         reason += distributionNote(stats);
         await this.write(rule.id, stats, weight, disabled, reason, now);
-        if (disabled && !st.disabled) log.error("rule disabled", { rule: rule.id, reason });
-        else if (weight !== st.weight) log.warn("rule weight moved", { rule: rule.id, reason });
-        else
+        if (disabled && !st.disabled) {
+          log.error("rule disabled", { rule: rule.id, reason });
+          this.deps.onChange?.(`rule ${rule.id} disabled: ${reason}`);
+        } else if (weight !== st.weight) {
+          log.warn("rule weight moved", { rule: rule.id, reason });
+          this.deps.onChange?.(`rule ${rule.id}: ${reason}`);
+        } else
           log.info("rule evaluated", { rule: rule.id, n: stats.n, expectancy: stats.expectancy });
       } catch (e) {
         m.dbErrors.inc({ op: "rule_stats" });

@@ -20,12 +20,14 @@ drill_rpc_cut() {
   echo "== RPC cut: block the RPC host for 90 s; expect a self-halt on 'source rpc stale', no crash"
   host=$(python3 -c "from urllib.parse import urlparse; print(urlparse('${SOLANA_RPC_URL}').hostname)")
   ips=$(getent ahostsv4 "$host" | awk '{print $1}' | sort -u)
-  for ip in $ips; do sudo ufw insert 1 deny out to "$ip" >/dev/null; done
-  echo "   blocked $host ($(echo $ips | wc -w) addresses)"
+  # The engine is a container: its traffic is forwarded, not sent by the host, so a ufw
+  # "deny out" never sees it. Docker's DOCKER-USER chain is the one place a rule holds.
+  for ip in $ips; do sudo iptables -I DOCKER-USER -d "$ip" -j REJECT; done
+  echo "   blocked $host ($(echo $ips | wc -w) addresses) in DOCKER-USER"
   sleep 90
   if [ "$(field selfHalt)" = "True" ] && healthz | grep -q "source rpc stale"; then pass "self-halt on rpc stale"; else fail "no self-halt: $(healthz)"; fi
   [ "$(docker compose ps --format '{{.Name}} {{.Status}}' | grep engine | grep -c Up)" = "1" ] && pass "engine still up" || fail "engine not up"
-  for ip in $ips; do sudo ufw delete deny out to "$ip" >/dev/null; done
+  for ip in $ips; do sudo iptables -D DOCKER-USER -d "$ip" -j REJECT; done
   sleep 45
   [ "$(field selfHalt)" = "False" ] && pass "self-halt cleared after the RPC returned" || fail "still halted: $(healthz)"
 }

@@ -91,7 +91,7 @@ Everything time-based (copy gap, blockhash expiry, the 5/30/120-minute outcomes,
 
 `apps/engine/deploy/drill.sh` runs each drill, checks the expectation and restores; run it on the host with the stack up and the vault sealed, and paste its PASS/FAIL lines into `docs/STATE.md`.
 
-- **RPC cut** (`./drill.sh rpc-cut`): the RPC host is blocked in `ufw` for 90 s; expect a self-halt on `source rpc stale`, the engine still up, and the halt cleared within a minute of the block lifting.
+- **RPC cut** (`./drill.sh rpc-cut`): the RPC host's addresses are rejected in Docker's `DOCKER-USER` iptables chain for 90 s (a `ufw deny out` never sees a container's forwarded traffic; the first run on 2026-09-08 proved that with the RPC answering through the block); expect a self-halt on `source rpc stale`, the engine still up, and the halt cleared within a minute of the block lifting.
 - **Postgres stopped** (`./drill.sh db-stop`): `docker compose stop db` for 60 s; expect `dbOk=false` and a self-halt on `/healthz`, DbErrors counted, and `dbOk=true` with `self-halt cleared` in the log once it is back.
 - **Unattended restart** (`./drill.sh restart`, then `./drill.sh restart-check` after logging back in): `reboot`; expect every service back through `restart: unless-stopped`, migrations a no-op, and the vault sealed with entries halted until the owner unseals it.
 

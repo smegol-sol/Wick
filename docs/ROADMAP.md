@@ -60,7 +60,7 @@ Exit condition: 72 hours of uninterrupted stream, the Operations board showing e
 - [x] `outcomes` for every intent at 5, 30 and 120 minutes, executed or rejected.
 - [x] A decision fingerprint on every intent: the rules-file hash, the code version and the price source next to the stored features, so any decision can be reproduced after the rules change (migration 0004).
 - [x] A resume point for the log stream: after a reconnect, the followed wallets' and the migration authority's signatures since the last seen one are fetched, so a dropped connection loses no print and no migration (seeded from `wallet_prints` and `chain_events` at boot, so a restart resumes too).
-- [ ] Before the first real SOL, moved up from Phase 5: a short written threat model, secret scanning in CI, and the failure drills in `docs/OPS.md` (RPC cut, Postgres stopped, unattended restart), each ending in a safe stop.
+- [x] Before the first real SOL, moved up from Phase 5: a short written threat model (`docs/THREAT-MODEL.md`), secret scanning in CI (gitleaks over the tree and the history), and the failure drills as a script (`apps/engine/deploy/drill.sh`: RPC cut, Postgres stopped, unattended restart), each ending in a safe stop. The drills' first run on the host is recorded in `docs/STATE.md`.
 - [ ] mirror-follow on webhooks with the copy gap measured.
 - [ ] Integration tests for the full path on devnet.
 

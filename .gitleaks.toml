@@ -1,0 +1,21 @@
+# Secret scanning (docs/THREAT-MODEL.md §3). The default rules plus what this repository knowingly contains.
+title = "WICK"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known non-secrets"
+regexes = [
+  # The RFC 6238 test vector secret, in the TOTP tests and the vault test.
+  '''GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ''',
+  # Placeholders the compose file substitutes at container start.
+  '''__TELEGRAM_BOT_TOKEN__''',
+]
+paths = [
+  '''package-lock\.json''',
+  '''screenshots/''',
+]
+# The import of the desk from the Grok App Builder scaffold carried the platform's shared,
+# sandbox-only preview OAuth client secret (not ours, not rotatable by us); stripped in the next commit.
+commits = ["4bc4ac5fdc7fd7fcbf96f1f61ec1a77eeb0c8c6c"]

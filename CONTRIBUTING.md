@@ -2,7 +2,7 @@
 
 ## Branches and merging
 
-- `main` is protected: no direct pushes, one review, green CI, squash merge.
+- `main` is protected (ruleset active since 2026-09-08): no direct pushes, green CI on four checks, squash merge, zero required approvals while there is one maintainer.
 - **Who merges (standing rule):** the assistant performs merges to `main`, and only after the owner's explicit permission for that specific merge, given in the chat. Permission for one merge never carries over to the next. Opening a pull request is covered by a standing permission: the assistant opens one whenever a slice is ready, without asking.
 - Work on a branch named `feat/...`, `fix/...`, `chore/...` or `docs/...`.
 - Open a PR early. The PR template asks whether the change touches the money path; answer it honestly.
@@ -11,8 +11,9 @@
 Branch protection is a repository setting, not code. GitHub → the repository → Settings → Rules → Rulesets → New ruleset → New branch ruleset:
 
 - Name `main`, Enforcement status `Active`, Target branches → Add target → `Include default branch`.
-- Rules: `Restrict deletions`, `Block force pushes`, `Require linear history`, `Require a pull request before merging` (required approvals `0` while there is one maintainer; `1` once a second one exists), `Require status checks to pass` with `Require branches to be up to date before merging` and these three checks, typed exactly as the workflow names them:
+- Rules: `Restrict deletions`, `Block force pushes`, `Require linear history`, `Require a pull request before merging` (required approvals `0` while there is one maintainer; `1` once a second one exists), `Require status checks to pass` with `Require branches to be up to date before merging` and these four checks, typed exactly as the workflow names them:
   - `typecheck · lint · format · test · audit`
+  - `secrets · gitleaks`
   - `engine · migrations on TimescaleDB`
   - `build · render smoke`
 - Leave the bypass list empty. With one maintainer and zero required approvals a PR can be merged once the checks are green; nothing can be pushed to `main` directly. The standing rule above still applies: no merge without the owner's go-ahead.

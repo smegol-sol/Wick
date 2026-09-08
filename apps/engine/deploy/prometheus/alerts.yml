@@ -8,6 +8,23 @@ groups:
         for: 60s
         labels: { severity: critical }
         annotations: { summary: "engine down for 60s" }
+      - alert: IngestStalled
+        # The tick that feeds every source age ran to the end more than a minute ago (or never).
+        expr: absent(wick_ingest_last_tick_timestamp_seconds) or (time() - wick_ingest_last_tick_timestamp_seconds) > 60
+        for: 30s
+        labels: { severity: critical }
+        annotations: { summary: 'ingest tick has not completed for {{ $value | printf "%.0f" }}s' }
+      - alert: IngestSlow
+        expr: histogram_quantile(0.5, sum(rate(wick_ingest_cycle_duration_seconds_bucket[5m])) by (le)) > 3
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          { summary: 'median ingest tick {{ $value | printf "%.1f" }}s against a 1s budget' }
+      - alert: SelfHalt
+        expr: wick_halted{kind="health"} == 1
+        for: 2m
+        labels: { severity: warning }
+        annotations: { summary: "entries halted on health for 2m; /healthz names the reasons" }
       - alert: SourceStale
         expr: wick_source_heartbeat_age_seconds{source=~"pump.fun|rpc"} > 30
         for: 30s

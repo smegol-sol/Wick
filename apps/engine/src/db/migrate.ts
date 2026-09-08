@@ -34,6 +34,8 @@ export async function migrate(db: Db, dir = migrationsDir()): Promise<string[]> 
   const applied: string[] = [];
   const client = await db.connect();
   try {
+    // A migration may legitimately run long (a backfill, an index); the pool's cap is for the engine.
+    await client.query("set statement_timeout = 0");
     await client.query("select pg_advisory_lock($1)", [LOCK_KEY]);
     await client.query(
       "create table if not exists schema_migrations (name text primary key, applied_at timestamptz not null default now())",
@@ -65,6 +67,8 @@ export async function migrate(db: Db, dir = migrationsDir()): Promise<string[]> 
     }
     await client.query("select pg_advisory_unlock($1)", [LOCK_KEY]);
   } finally {
+    // The connection goes back to the pool; give it the engine's cap again.
+    await client.query("reset statement_timeout").catch(() => {});
     client.release();
   }
   return applied;

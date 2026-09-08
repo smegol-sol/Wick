@@ -3,7 +3,7 @@ import test from "node:test";
 import { loadRules, parseEnv, parseRisk } from "./config.ts";
 import { splitSql } from "./db/sql.ts";
 import { requiredExtension } from "./db/migrate.ts";
-import { evaluateHealth, slotLagOf } from "./health.ts";
+import { evaluateHealth, healthTransition, slotLagOf } from "./health.ts";
 import { Sampler } from "./ingest/sampler.ts";
 import { readMint } from "./chains/solana/extensions.ts";
 import { Collector } from "./ingest/collector.ts";
@@ -17,6 +17,7 @@ import { toB58 } from "@wick/core/base58";
 import { FeatureBook } from "./ingest/features.ts";
 import { LogStream, wsUrlOf, type LogEvent } from "./ingest/stream.ts";
 import type { Db } from "./db/pool.ts";
+import { registry } from "./metrics.ts";
 import { REASON_CODES, REASON_CODE_CAP, GATES } from "@wick/core/contracts";
 
 const RISK = `
@@ -141,6 +142,19 @@ test("sampler moves mints from active to cooling to dropped and paces samples", 
   assert.equal(s.tierOf("A", t2), "dropped");
   s.due(t2);
   assert.equal(s.mints.size, 0);
+});
+
+test("health transitions: halt once, changed reasons once, clear once with the duration", () => {
+  const base = { ok: true, selfHalt: false, reasons: [], sourceAges: {}, slotLag: 0, dbOk: true };
+  const halted = { ...base, ok: false, selfHalt: true, reasons: ["source pump.fun stale 40s"] };
+  assert.equal(healthTransition(null, base, 1000), null, "healthy from the start says nothing");
+  const t1 = healthTransition({ selfHalt: false, reasons: [], since: 0 }, halted, 1000);
+  assert.deepEqual(t1, { kind: "halt", reasons: ["source pump.fun stale 40s"] });
+  const prev = { selfHalt: true, reasons: halted.reasons, since: 1000 };
+  assert.equal(healthTransition(prev, halted, 2000), null, "the same halt is not repeated");
+  const more = { ...halted, reasons: ["source pump.fun stale 70s", "slot lag 30"] };
+  assert.deepEqual(healthTransition(prev, more, 3000), { kind: "changed", reasons: more.reasons });
+  assert.deepEqual(healthTransition(prev, base, 61_000), { kind: "clear", sinceMs: 60_000 });
 });
 
 test("slot lag and health self-halt", () => {
@@ -480,6 +494,50 @@ test("collector writes tokens, snapshots and one audit per change, and feeds hea
   assert.ok(c.state.lastOk["jupiter-price"]);
   assert.ok(c.state.lastOk.rpc);
   assert.deepEqual(c.sampler.counts(Date.now()), { active: 1, cooling: 0 });
+  assert.ok(c.state.lastTickAt, "a completed tick stamps the liveness gauge");
+  const scraped = await registry.getSingleMetricAsString("wick_source_heartbeat_age_seconds");
+  assert.match(scraped, /source="pump.fun"\} 0(\.\d+)?\n/, "age computed at scrape time");
+});
+
+test("collector: the watchdog names a stalled phase, abandons the tick and lets the next one run", async () => {
+  const db = { query: async () => ({ rows: [] }) } as unknown as Db;
+  const chain = fakeChain();
+  let hang = true;
+  const realPoll = chain.poll.bind(chain);
+  chain.poll = (signal: AbortSignal) =>
+    hang
+      ? new Promise((_, rej) => signal.addEventListener("abort", () => rej(new Error("aborted"))))
+      : realPoll(signal);
+  const c = new Collector(db, chain, {
+    activeSampleMs: 5,
+    coolingSampleMs: 60_000,
+    activeWindowMs: 7_200_000,
+    coolingWindowMs: 86_400_000,
+    auditEveryMs: 600_000,
+    slotPollMs: 5000,
+    launchPerTick: 2,
+    launchRetryMs: 60_000,
+    followRefreshMs: 30_000,
+    migrationAuthority: MIGRATOR,
+    tickStallMs: 30,
+  });
+  const stuck = c.tick();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(c.currentPhase, "poll");
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(c.state.stalls, 1, "the watchdog counted the stall");
+  assert.equal(c.currentPhase, "idle", "and released the collector");
+  assert.equal(c.state.lastTickAt, null, "an abandoned tick never counts as completed");
+  hang = false;
+  await c.tick();
+  assert.ok(c.state.lastTickAt, "the next tick runs to the end");
+  assert.ok(c.state.lastOk["pump.fun"]);
+  await stuck;
+  assert.equal(c.state.stalls, 1, "the abandoned tick's own ending changes nothing");
+  assert.match(
+    await registry.getSingleMetricAsString("wick_ingest_stalls_total"),
+    /phase="poll"\} 1/,
+  );
 });
 
 const MINT = "So11111111111111111111111111111111111111112";

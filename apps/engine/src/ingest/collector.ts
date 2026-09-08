@@ -26,6 +26,12 @@ export type CollectorConfig = SamplerConfig & {
   /** How often the followed-wallet set is re-read, and whose transactions count as migrations. */
   followRefreshMs: number;
   migrationAuthority: string;
+  /**
+   * How long a tick may run before the watchdog gives up on it: logs the phase it is in,
+   * counts a stall, and lets the next tick start. Default 30 sample periods. The first
+   * night on the VPS a tick hung forever with no error and nothing said so.
+   */
+  tickStallMs?: number;
 };
 
 const LAUNCH_TRIES = 3;
@@ -35,6 +41,9 @@ const SEEN_SIGS_CAP = 5000;
 
 export type CollectorState = {
   lastOk: Record<string, number>;
+  /** When the last tick ran to the end, and how many the watchdog abandoned. */
+  lastTickAt: number | null;
+  stalls: number;
   solUsd: number | null;
   slotLag: number | null;
   lastSlotReadings: { url: string; slot: number | null; ms: number }[];
@@ -51,6 +60,8 @@ function auditKey(a: Audit): string {
 export class Collector {
   readonly state: CollectorState = {
     lastOk: {},
+    lastTickAt: null,
+    stalls: 0,
     solUsd: null,
     slotLag: null,
     lastSlotReadings: [],
@@ -68,6 +79,8 @@ export class Collector {
   private timers: NodeJS.Timeout[] = [];
   private stopped = false;
   private ticking = false;
+  private tickSeq = 0;
+  private phase = "idle";
 
   private readonly db: Db;
   private readonly chain: ChainAdapter;
@@ -80,6 +93,22 @@ export class Collector {
     this.cfg = cfg;
     this.stream = stream;
     this.sampler = new Sampler(cfg);
+    m.bindSourceLastOk(() => this.state.lastOk);
+  }
+
+  /** The phase the running tick is in, for the watchdog and the stall log. Public for tests. */
+  get currentPhase(): string {
+    return this.phase;
+  }
+
+  private async step<T>(phase: string, run: () => Promise<T>): Promise<T> {
+    this.phase = phase;
+    const end = m.ingestPhase.startTimer({ phase });
+    try {
+      return await run();
+    } finally {
+      end();
+    }
   }
 
   start(): void {
@@ -101,13 +130,17 @@ export class Collector {
   async tick(): Promise<void> {
     if (this.stopped || this.ticking) return;
     this.ticking = true;
+    const id = ++this.tickSeq;
+    const started = Date.now();
     const end = m.ingestCycle.startTimer();
-    const now = Date.now();
+    const now = started;
     const ctrl = new AbortController();
     const kill = setTimeout(() => ctrl.abort(), this.cfg.activeSampleMs * 8);
+    const stallMs = this.cfg.tickStallMs ?? this.cfg.activeSampleMs * 30;
+    const dog = setTimeout(() => this.stalled(id, started), stallMs);
     try {
       const t0 = performance.now();
-      const batches = await this.chain.poll(ctrl.signal);
+      const batches = await this.step("poll", () => this.chain.poll(ctrl.signal));
       for (const b of batches) {
         m.sourceCallDuration.observe({ source: b.source }, (performance.now() - t0) / 1000);
         if (b.tokens.length) this.mark(b.source, b.at);
@@ -116,6 +149,7 @@ export class Collector {
           this.state.solUsd = b.solUsd;
         }
         let dexFresh = 0;
+        this.phase = "stage";
         for (const tk of b.tokens) {
           this.latest.set(tk.mint, tk);
           this.sampler.seen(tk.mint, now);
@@ -134,7 +168,9 @@ export class Collector {
       }
       if (due.cooling.length) {
         try {
-          const cooled = await this.chain.stats(due.cooling, ctrl.signal);
+          const cooled = await this.step("cooling", () =>
+            this.chain.stats(due.cooling, ctrl.signal),
+          );
           if (cooled.length) this.mark("dexscreener", now);
           for (const s of cooled) rows.push({ ...s, ts: now });
         } catch (e) {
@@ -143,28 +179,52 @@ export class Collector {
       }
 
       for (const r of rows) this.book.noteSnapshot(r, this.state.solUsd);
-      await this.upsertTokens([...this.latest.values()].filter((t) => due.active.includes(t.mint)));
-      await this.writeSnapshots(rows);
+      await this.step("tokens", () =>
+        this.upsertTokens([...this.latest.values()].filter((t) => due.active.includes(t.mint))),
+      );
+      await this.step("snapshots", () => this.writeSnapshots(rows));
       this.sampler.sampled([...due.active, ...due.cooling], now);
-      await this.auditDue(due.active, now, ctrl.signal);
-      await this.launchDue(due.active, now, ctrl.signal);
-      await this.refreshFollowed(now);
+      await this.step("audits", () => this.auditDue(due.active, now, ctrl.signal));
+      await this.step("launches", () => this.launchDue(due.active, now, ctrl.signal));
+      await this.step("followed", () => this.refreshFollowed(now));
+      this.phase = "stream";
       this.syncStream(due.active);
-      await this.writeMicro(due.active, now);
+      await this.step("micro", () => this.writeMicro(due.active, now));
 
       const counts = this.sampler.counts(now);
       m.activeTokens.set({ state: "active" }, counts.active);
       m.activeTokens.set({ state: "cooling" }, counts.cooling);
-      for (const [source, at] of Object.entries(this.state.lastOk)) {
-        m.sourceHeartbeatAge.set({ source }, (Date.now() - at) / 1000);
-      }
+      this.state.lastTickAt = Date.now();
+      m.ingestLastTick.set(this.state.lastTickAt / 1000);
     } catch (e) {
-      log.error("tick failed", { err: errText(e) });
+      if (this.tickSeq === id) log.error("tick failed", { err: errText(e), phase: this.phase });
     } finally {
       clearTimeout(kill);
+      clearTimeout(dog);
       end();
-      this.ticking = false;
+      // A tick the watchdog abandoned must not release the one that replaced it.
+      if (this.tickSeq === id) {
+        this.phase = "idle";
+        this.ticking = false;
+      }
     }
+  }
+
+  /** The watchdog: the tick is still running after `tickStallMs`. Say where, count it, move on. */
+  private stalled(id: number, started: number): void {
+    if (this.tickSeq !== id || !this.ticking) return;
+    const phase = this.phase;
+    this.state.stalls++;
+    m.ingestStalls.inc({ phase });
+    log.error("tick stalled; abandoning it", {
+      phase,
+      ms: Date.now() - started,
+      stalls: this.state.stalls,
+    });
+    // Let the next tick start; the abandoned one finishes (or never does) on its own.
+    this.tickSeq++;
+    this.phase = "idle";
+    this.ticking = false;
   }
 
   private async upsertTokens(tokens: SourceToken[]): Promise<void> {

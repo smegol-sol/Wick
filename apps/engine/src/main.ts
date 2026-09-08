@@ -12,6 +12,7 @@ import { loadRisk, loadRules, parseEnv } from "./config.ts";
 import { migrate } from "./db/migrate.ts";
 import { makePool, ping } from "./db/pool.ts";
 import { DecisionLoop } from "./decision/loop.ts";
+import { Evaluator } from "./evaluator/evaluator.ts";
 import { Executor } from "./executor/executor.ts";
 import { KillSwitch } from "./executor/killswitch.ts";
 import { Vault } from "./executor/vault.ts";
@@ -138,15 +139,11 @@ async function main(): Promise<void> {
     }
   });
 
-  const rulesView = (): RuleView[] =>
-    loaded.rules.rules.map((r) => ({
-      id: r.id,
-      strategy: r.strategy,
-      mode: r.mode,
-      weight: r.weight,
-      stats: null, // the evaluator (later slice) fills these
-      eligibleForAuto: false,
-    }));
+  const evaluator = new Evaluator(
+    { db, rules: loaded.rules },
+    { outcomesEveryMs: 60_000, statsEveryMs: 3_600_000 },
+  );
+  const rulesView = (): RuleView[] => evaluator.view();
   const stopLoop = m.watchEventLoop();
   const token = process.env.DASHBOARD_TOKEN?.trim() || null;
   if (!token)
@@ -165,6 +162,7 @@ async function main(): Promise<void> {
     walletCapSol: risk.executionWalletCapSol,
     solUsd: () => collector.state.solUsd,
     rules: rulesView,
+    enableRule: (id, by) => evaluator.enable(id, by),
     token,
     exec: {
       vault: () => vault.state,
@@ -219,6 +217,7 @@ async function main(): Promise<void> {
       equitySol: () => cfg.equitySol ?? risk.executionWalletCapSol,
       cashSol: () => executor.state.walletSol,
       selfHalt: () => health().selfHalt || kill.state.active,
+      ruleState: (id) => evaluator.state(id),
       pin: (mint) => collector.sampler.pin(mint, true, Date.now()),
       onIntent: (view) => api.broadcast({ type: "intent", intent: view }),
     },
@@ -229,6 +228,7 @@ async function main(): Promise<void> {
   stream.start();
   collector.start();
   decision.start();
+  evaluator.start();
   kill.start();
   executor.start();
   log.info("listening", { host: cfg.httpHost, port: cfg.httpPort });
@@ -260,6 +260,7 @@ async function main(): Promise<void> {
     kill.stop();
     vault.seal();
     decision.stop();
+    evaluator.stop();
     collector.stop();
     stream.stop();
     stopLoop();

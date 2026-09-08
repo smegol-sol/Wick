@@ -214,6 +214,20 @@ export const halted = new client.Gauge({
   registers: [registry],
 });
 
+export const outcomes = new client.Counter({
+  name: "wick_outcomes_total",
+  help: "Outcome rows written, by horizon and whether a price was measured",
+  labelNames: ["horizon", "measured"] as const,
+  registers: [registry],
+});
+
+export const ruleWeight = new client.Gauge({
+  name: "wick_rule_weight",
+  help: "Effective weight per rule after the evaluator's moves; 0 while disabled",
+  labelNames: ["rule"] as const,
+  registers: [registry],
+});
+
 export const dbErrors = new client.Counter({
   name: "wick_db_errors_total",
   help: "Failed database statements",

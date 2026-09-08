@@ -268,3 +268,29 @@ test("decision loop: no SOL price means no sizing and nothing written", async ()
   assert.equal(loop.state.skippedNoSolUsd, 1);
   assert.equal(loop.state.evaluated, 1);
 });
+
+test("decision loop: a rule the evaluator disabled is skipped, and its weight scales the equity term", async () => {
+  const offDb = fakeDb();
+  const off = deps({
+    db: offDb.db,
+    ruleState: (id) => ({ weight: 1, disabled: id === "confirmed-entry" }),
+  });
+  await new DecisionLoop(off, CFG).tick();
+  assert.equal(intentRows(offDb.queries).length, 0, "no intent from a disabled rule");
+
+  const fake = fakeDb();
+  const heavy = deps({
+    db: fake.db,
+    ruleState: (id) => (id === "confirmed-entry" ? { weight: 1.21, disabled: false } : null),
+  });
+  await new DecisionLoop(heavy, CFG).tick();
+  const rows = intentRows(fake.queries);
+  assert.equal(rows.length, 1);
+  const sizing = JSON.parse(String(rows[0]!.values[9])) as {
+    weightMul: number;
+    equityTerm: number;
+  };
+  assert.equal(sizing.weightMul, 1.21);
+  assert.ok(Math.abs(sizing.equityTerm - 15 * 0.015 * 1.21) < 1e-9, "equity term × weight");
+  assert.match(String(rows[0]!.values[11]), /weight ×1.21/);
+});

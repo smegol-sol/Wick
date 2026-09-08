@@ -356,6 +356,8 @@ export function mockRules(now: number): RuleView[] {
         changeReason: "daily evaluation: expectancy +0.06, weight unchanged",
       },
       eligibleForAuto: true,
+      disabled: false,
+      disabledReason: null,
     },
     {
       id: "migration-snipe.v1",
@@ -372,6 +374,8 @@ export function mockRules(now: number): RuleView[] {
         changeReason: "n < 20, no change",
       },
       eligibleForAuto: false,
+      disabled: false,
+      disabledReason: null,
     },
     {
       id: "exit-policy.v1",
@@ -380,6 +384,8 @@ export function mockRules(now: number): RuleView[] {
       weight: 1,
       stats: null,
       eligibleForAuto: true,
+      disabled: false,
+      disabledReason: null,
     },
   ];
 }

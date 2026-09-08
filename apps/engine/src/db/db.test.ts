@@ -214,6 +214,10 @@ test(
 
       // The decision loop against the real tables: an intent with its fingerprint and six gate rows.
       await db.query(
+        "delete from outcomes where intent_id in (select id from intents where mint = $1)",
+        [mint],
+      );
+      await db.query(
         "delete from gate_results where intent_id in (select id from intents where mint = $1)",
         [mint],
       );
@@ -316,6 +320,7 @@ test(
       const mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
       for (const sql of [
         "delete from fills where execution_id in (select id from executions where intent_id like 'exec-%')",
+        "delete from outcomes where intent_id like 'exec-%'",
         "delete from executions where intent_id like 'exec-%'",
         "delete from positions where intent_id like 'exec-%'",
         "delete from gate_results where intent_id like 'exec-%'",
@@ -556,6 +561,92 @@ test(
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });
+      await db.end();
+    }
+  },
+);
+
+test(
+  "evaluator on Postgres: outcomes from snapshots, a daily rule_stats row, and the operator's re-enable",
+  { skip: !url },
+  async () => {
+    const { writeOutcomes } = await import("../evaluator/outcomes.ts");
+    const { Evaluator } = await import("../evaluator/evaluator.ts");
+    const db = makePool(url!);
+    const mint = "EvALuat0r11111111111111111111111111111111111";
+    const T0 = Date.UTC(2031, 0, 1, 12, 0, 0);
+    const rulesFile = loadRules("config/rules.yaml");
+    try {
+      await migrate(db);
+      await db.query("delete from outcomes where intent_id like 'eval-%'");
+      await db.query("delete from intents where id like 'eval-%'");
+      await db.query("delete from token_snapshots where mint = $1", [mint]);
+      await db.query("delete from rule_stats where changed_at >= $1", [new Date(T0)]);
+      // 25 buy intents at price 1, each followed by a +10% snapshot inside every horizon.
+      for (let i = 0; i < 25; i++) {
+        const ts = new Date(T0 + i * 1000);
+        await db.query(
+          `insert into intents (id, ts, kind, strategy, rule_id, mode, mint, side, size_sol, features, why, status)
+           values ($1, $2, 'entry', 'confirmed-entry', 'confirmed-entry', 'shadow', $3, 'buy', 0.1, $4, 'test', 'shadow')`,
+          [`eval-${i}`, ts, mint, JSON.stringify({ priceUsd: 1 })],
+        );
+      }
+      for (const [off, price] of [
+        [60_000, 1.2],
+        [200_000, 0.9],
+        [290_000, 1.1],
+        [1_700_000, 1.1],
+        [7_100_000, 1.1],
+      ] as const)
+        await db.query(
+          "insert into token_snapshots (ts, mint, price, source) values ($1, $2, $3, 'test')",
+          [new Date(T0 + off), mint, price],
+        );
+      const later = T0 + 8_000_000;
+      const o = await writeOutcomes(db, later, 100);
+      assert.ok(o.measured >= 75, "25 intents × 3 horizons (other tests' intents may join)");
+      const mine = async () =>
+        Number(
+          (
+            await db.query<{ n: string }>(
+              "select count(*)::text as n from outcomes where intent_id like 'eval-%'",
+            )
+          ).rows[0]!.n,
+        );
+      assert.equal(await mine(), 75);
+      const row = await db.query<{ ret_pct: number; max_ret_pct: number; min_ret_pct: number }>(
+        "select ret_pct, max_ret_pct, min_ret_pct from outcomes where intent_id = 'eval-0' and horizon_sec = 300",
+      );
+      assert.deepEqual(row.rows[0], { ret_pct: 10, max_ret_pct: 20, min_ret_pct: -10 });
+      assert.deepEqual(
+        await writeOutcomes(db, later, 100),
+        { measured: 0, empty: 0 },
+        "idempotent",
+      );
+
+      const ev = new Evaluator(
+        { db, rules: rulesFile.rules, now: () => later },
+        { outcomesEveryMs: 60_000, statsEveryMs: 3_600_000 },
+      );
+      await ev.evaluate(later);
+      const st = ev.state("confirmed-entry")!;
+      assert.equal(st.stats?.n, 25);
+      assert.equal(st.stats?.expectancy, 0.1, "a fraction: +10%");
+      assert.equal(st.stats?.winRate, 1);
+      assert.equal(st.weight, 1.1, "one step up on the first day");
+      assert.equal(st.disabled, false);
+      await ev.evaluate(later + 60_000);
+      assert.equal(st.weight, 1.1, "no second move the same day");
+      const view = ev.view().find((r) => r.id === "confirmed-entry")!;
+      assert.match(view.stats!.changeReason, /weight 1 → 1.1/);
+      assert.equal(await ev.enable("confirmed-entry", "owner"), false, "not disabled");
+    } finally {
+      await db.query("delete from outcomes where intent_id like 'eval-%'").catch(() => {});
+      await db.query("delete from intents where id like 'eval-%'").catch(() => {});
+      await db.query("delete from token_snapshots where mint = $1", [mint]).catch(() => {});
+      await db
+        .query("delete from rule_stats where changed_at >= $1", [new Date(T0)])
+        .catch(() => {});
       await db.end();
     }
   },

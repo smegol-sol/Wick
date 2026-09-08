@@ -145,6 +145,8 @@ export type Sizing = {
   binding: "equity" | "pool" | "cap";
   regimeMul: number;
   socialMul: number;
+  /** The rule's effective weight applied to the equity term (ADR-0004 level 2). */
+  weightMul?: number;
 };
 
 export type Intent = {

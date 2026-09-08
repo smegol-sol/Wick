@@ -21,6 +21,7 @@ import type {
   Microstructure,
   Snapshot,
   Stage,
+  SupplyMap,
 } from "@wick/core/contracts";
 
 /** The bonding curve carries a 30 SOL virtual offset over its real reserves. */
@@ -43,6 +44,8 @@ type MintBook = {
   launch: LaunchTx | null;
   lastLpEvent: LpEvent | null;
   holders: { ts: number; n: number }[];
+  /** The supply writer's latest row (ENGINE §7); the launch map stands in until it exists. */
+  supply: SupplyMap | null;
 };
 
 function prune<T extends { ts: number }>(arr: T[], now: number, keepMs = RING_MS): void {
@@ -70,6 +73,7 @@ export class FeatureBook {
         launch: null,
         lastLpEvent: null,
         holders: [],
+        supply: null,
       };
       this.books.set(mint, b);
     }
@@ -114,6 +118,16 @@ export class FeatureBook {
 
   noteLaunch(l: LaunchTx): void {
     this.book(l.mint).launch = l;
+  }
+
+  noteSupply(mint: string, map: SupplyMap): void {
+    this.book(mint).supply = map;
+  }
+
+  /** What the supply writer needs from the book: the audit's supply and the launch. */
+  supplyInputs(mint: string): { audit: Audit | null; launch: LaunchTx | null } | null {
+    const b = this.books.get(mint);
+    return b ? { audit: b.audit, launch: b.launch } : null;
   }
 
   /** A trade seen on the stream for an active mint: only its side and second are known. */
@@ -220,18 +234,20 @@ export class FeatureBook {
       extensions: b.audit?.extensions ?? null,
       lp: b.audit?.lp ?? null,
       lastLpEvent: b.lastLpEvent,
-      supply: b.launch
-        ? {
-            at: b.launch.ts ?? now,
-            devPct: b.launch.buyers.find((x) => x.wallet === b.launch!.creator)?.pct ?? 0,
-            bundlePct: b.launch.bundlePct,
-            sniperPct: b.launch.sniperPct,
-            freshWalletPct: null,
-            lpPct: null,
-            clusterPct: null,
-            earlyHoldersTrend: null,
-          }
-        : null,
+      supply:
+        b.supply ??
+        (b.launch
+          ? {
+              at: b.launch.ts ?? now,
+              devPct: b.launch.buyers.find((x) => x.wallet === b.launch!.creator)?.pct ?? 0,
+              bundlePct: b.launch.bundlePct,
+              sniperPct: b.launch.sniperPct,
+              freshWalletPct: null,
+              lpPct: null,
+              clusterPct: null,
+              earlyHoldersTrend: null,
+            }
+          : null),
       micro: this.micro(mint, now),
       washFlags: [],
       fundingFlags: [],

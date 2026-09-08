@@ -71,6 +71,9 @@ export type EngineConfig = {
   decisionTickMs: number;
   /** Quote budget for the decision loop; the executor re-quotes anyway. */
   quotesPerMinute: number;
+  /** RPC budgets of the supply writer: holder lists per hour, wallet reads per hour (ADR-0008). */
+  holderReadsPerHour: number;
+  walletReadsPerHour: number;
   /** The deployed commit, for the decision fingerprint; the package version when unset. */
   codeVersion: string | null;
   /** The sealed execution key (ADR-0003); missing file means nothing can execute. */
@@ -219,6 +222,8 @@ export function parseEnv(env: Record<string, string | undefined>): EngineConfig 
     equitySol: equity ? Number(equity) : null,
     decisionTickMs: num(env.DECISION_TICK_MS, 1000),
     quotesPerMinute: num(env.QUOTES_PER_MINUTE, 30),
+    holderReadsPerHour: num(env.HOLDER_READS_PER_HOUR, 120),
+    walletReadsPerHour: num(env.WALLET_READS_PER_HOUR, 300),
     codeVersion: env.WICK_COMMIT?.trim() || null,
     vaultFile: env.VAULT_FILE?.trim() || "vault.json",
     killSwitchFile: env.KILL_SWITCH_FILE?.trim() || "KILL",

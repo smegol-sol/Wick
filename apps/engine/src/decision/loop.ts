@@ -35,6 +35,8 @@ import * as m from "../metrics.ts";
 const log = logger("decision");
 const YOUNG_MS = 90 * 60_000;
 const PRE_GATES = ["safety", "supply", "liquidity", "manipulation"] as const;
+/** A supply map older than this is asked to be refreshed; the gate's own limit is 5 minutes. */
+const SUPPLY_FRESH_MS = 4 * 60_000;
 
 export type LoopDeps = {
   db: Db;
@@ -52,6 +54,8 @@ export type LoopDeps = {
   cashSol?: () => number | null;
   /** The engine's health self-halt (RISK_HALT reason "health"). */
   selfHalt: () => boolean;
+  /** Ask the supply writer for a live map of this mint; it serves on its budget. */
+  refreshSupply?: (mint: string) => void;
   /** The regime writer's current row; absent or null means ×1 (ENGINE §11). */
   regime?: () => Regime | null;
   /** The evaluator's effective weight and disable flag per rule; absent means the file's weight. */
@@ -173,6 +177,7 @@ export class DecisionLoop {
           const v = evaluateEntry(rule, f);
           if (!v.ok) continue;
           m.funnel.inc({ layer: "decision", outcome: "out" });
+          if (!f.supply || now - f.supply.at > SUPPLY_FRESH_MS) this.deps.refreshSupply?.(mint);
           await this.proposeEntry(rule, f, v, now);
         }
       }

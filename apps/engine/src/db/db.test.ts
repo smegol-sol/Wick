@@ -59,6 +59,9 @@ test(
         async signaturesSince() {
           return [];
         },
+        async holders() {
+          return [];
+        },
         async poll() {
           return [
             {

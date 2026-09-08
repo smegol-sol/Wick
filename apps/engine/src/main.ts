@@ -14,6 +14,7 @@ import { makePool, ping } from "./db/pool.ts";
 import { DecisionLoop } from "./decision/loop.ts";
 import { Evaluator } from "./evaluator/evaluator.ts";
 import { RegimeWriter } from "./decision/regime.ts";
+import { SupplyWriter } from "./ingest/supply.ts";
 import { Executor } from "./executor/executor.ts";
 import { KillSwitch } from "./executor/killswitch.ts";
 import { Vault } from "./executor/vault.ts";
@@ -149,6 +150,21 @@ async function main(): Promise<void> {
     { outcomesEveryMs: 60_000, statsEveryMs: 3_600_000 },
   );
   const rulesView = (): RuleView[] => evaluator.view();
+  const supply = new SupplyWriter(
+    {
+      db,
+      chain,
+      inputs: (mint) => collector.book.supplyInputs(mint),
+      token: (mint) => collector.tokenInfo(mint),
+      onMap: (mint, map) => collector.book.noteSupply(mint, map),
+    },
+    {
+      holderReadsPerHour: cfg.holderReadsPerHour,
+      walletReadsPerHour: cfg.walletReadsPerHour,
+      minIntervalMs: 4 * 60_000,
+      profilePerMap: 10,
+    },
+  );
   const regime = new RegimeWriter({
     db,
     solUsd: () => collector.state.solUsd,
@@ -230,6 +246,7 @@ async function main(): Promise<void> {
       selfHalt: () => health().selfHalt || kill.state.active,
       ruleState: (id) => evaluator.state(id),
       regime: () => regime.current(),
+      refreshSupply: (mint) => supply.request(mint),
       pin: (mint) => collector.sampler.pin(mint, true, Date.now()),
       onIntent: (view) => api.broadcast({ type: "intent", intent: view }),
     },
@@ -241,6 +258,7 @@ async function main(): Promise<void> {
   stream.start();
   collector.start();
   regime.start();
+  supply.start();
   decision.start();
   evaluator.start();
   kill.start();
@@ -276,6 +294,7 @@ async function main(): Promise<void> {
     decision.stop();
     evaluator.stop();
     regime.stop();
+    supply.stop();
     collector.stop();
     stream.stop();
     stopLoop();

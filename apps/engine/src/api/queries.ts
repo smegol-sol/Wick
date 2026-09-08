@@ -331,6 +331,7 @@ export async function tokenView(db: Db, mint: string): Promise<TokenView | null>
       lp_pct: number | null;
       cluster_pct: number | null;
       trend: "distributing" | "accumulating" | "flat" | null;
+      inputs: unknown;
     }>("select * from supply_maps where mint = $1 order by at desc limit 1", [mint]),
     db.query<{
       at: Date;
@@ -415,11 +416,31 @@ export async function tokenView(db: Db, mint: string): Promise<TokenView | null>
           depthSell2PctUsd: mi.depth_sell_2pct,
         }
       : null,
-    holders: [], // holder shares land with the profiler (Phase 2)
+    holders: holdersOf(sm?.inputs),
     candles: cand.candles,
     candleBucketSec: cand.bucketSec,
     intents: intents.rows.map((r) => toView(r, gates.get(r.id) ?? [])),
   };
+}
+
+/** The supply writer stores the non-pool holders it read, with the class each had at the time. */
+function holdersOf(inputs: unknown): TokenView["holders"] {
+  const list = (inputs as { holders?: unknown } | null | undefined)?.holders;
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(
+      (h): h is { wallet: string; pct: number; class?: string; confidence?: number } =>
+        typeof h === "object" &&
+        h != null &&
+        typeof (h as { wallet?: unknown }).wallet === "string",
+    )
+    .slice(0, 20)
+    .map((h) => ({
+      wallet: h.wallet,
+      pct: h.pct,
+      class: (h.class as TokenView["holders"][number]["class"]) ?? null,
+      confidence: h.confidence ?? null,
+    }));
 }
 
 export async function funnelView(

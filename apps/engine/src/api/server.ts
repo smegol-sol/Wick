@@ -33,6 +33,8 @@ export type ApiDeps = {
   solUsd: () => number | null;
   /** The rules the decision layer runs, for `/api/rules` and the mode counts. */
   rules: () => RuleView[];
+  /** The operator re-enables a rule the evaluator disabled; false when it was not disabled. */
+  enableRule: (id: string, by: string) => Promise<boolean>;
   /** Bearer token; when null (local dev) every caller is the owner. */
   token: string | null;
   /** The executor's side: vault state, wallet reads and the second factor. */
@@ -216,6 +218,20 @@ export function createApi(deps: ApiDeps) {
           if (!view) return (json(res, 409, { error: "intent is not waiting", status: 409 }), true);
           broadcast({ type: "intent", intent: view });
           return (json(res, 200, view), true);
+        }
+        const en = path.match(/^\/api\/rules\/([^/]+)\/enable$/);
+        if (en) {
+          const body = await readJson(req);
+          const code = typeof body.code === "string" ? body.code : "";
+          if (!(await deps.exec.secondFactor(code)))
+            return (json(res, 403, { error: "second factor rejected", status: 403 }), true);
+          const id = decodeURIComponent(en[1]!);
+          const ok = await deps.enableRule(id, "owner");
+          if (!ok) return (json(res, 409, { error: "rule is not disabled", status: 409 }), true);
+          await audit("rule re-enabled", { rule: id });
+          broadcast({ type: "alert", level: "warn", msg: `rule ${id} re-enabled`, ts: Date.now() });
+          broadcast({ type: "state", state: await state() });
+          return (json(res, 200, { ok: true }), true);
         }
         if (path === API_ROUTES.halt) {
           const body = await readJson(req);

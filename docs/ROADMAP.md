@@ -57,7 +57,7 @@ Exit condition: 72 hours of uninterrupted stream, the Operations board showing e
 - [x] The console in live mode: intents with their reasons, adjustments and regime reason; approve and reject; funnel; halt; unseal and halt-clear with the second factor; fills on executed intents.
 - [ ] The desk retires (end of Phase 2, ADR-0010).
 - [ ] The Telegram bot: alerts, the daily report, `/status` and `/halt`, restricted to the owner's chat id. No `/approve` in v1: approval stays in the console on the tailnet (ADR-0009, amended).
-- [ ] `outcomes` for every intent at 5, 30 and 120 minutes, executed or rejected.
+- [x] `outcomes` for every intent at 5, 30 and 120 minutes, executed or rejected.
 - [x] A decision fingerprint on every intent: the rules-file hash, the code version and the price source next to the stored features, so any decision can be reproduced after the rules change (migration 0004).
 - [ ] A resume point for the log stream: after a reconnect, the followed wallets' and the migration authority's signatures since the last seen one are fetched, so a dropped connection loses no print and no migration.
 - [ ] Before the first real SOL, moved up from Phase 5: a short written threat model, secret scanning in CI, and the failure drills in `docs/OPS.md` (RPC cut, Postgres stopped, unattended restart), each ending in a safe stop.
@@ -69,7 +69,7 @@ Exit condition: 30 days in suggest mode with a 3 SOL wallet, 50 executed intents
 ## Phase 3: level-2 learning and auto mode (three weeks)
 
 - [ ] `shadow` mode: a rule runs on the live stream and is evaluated without executing; the precondition before suggest for every new rule.
-- [ ] The daily `evaluator`: 14-day rule stats, bounded weight moves, disabling negative rules, every change with a recorded reason.
+- [x] The daily `evaluator`: 14-day rule stats, bounded weight moves, disabling negative rules, every change with a recorded reason (landed in Phase 2 with the outcomes, since shadow intents are exactly what it consumes).
 - [ ] Followed-wallet evaluation by copy gap and slippage, with demotion.
 - [ ] Promotion to auto per rule under the ADR-0004 conditions, and automatic demotion to suggest.
 - [ ] `migration-snipe` over a webhook in suggest mode.

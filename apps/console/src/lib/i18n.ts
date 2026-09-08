@@ -74,6 +74,7 @@ const STRINGS = {
   worstDd: "Worst DD",
   since: "since",
   eligibleAuto: "eligible for auto",
+  disabled: "disabled by the evaluator",
   notEligible: "not yet eligible",
   noRules: "No rules yet. They arrive with Phase 2.",
   noReplays: "No replay runs yet.",

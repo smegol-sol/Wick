@@ -95,14 +95,34 @@ export function EngineScreen() {
                     <td className="px-4 py-2">
                       <div className="font-mono text-xs">{r.id}</div>
                       <div className="text-2xs text-subtle">
-                        {r.eligibleForAuto ? t("eligibleAuto") : t("notEligible")}
+                        {r.disabled
+                          ? t("disabled")
+                          : r.eligibleForAuto
+                            ? t("eligibleAuto")
+                            : t("notEligible")}
                       </div>
+                      {r.stats?.changeReason ? (
+                        <div
+                          className="max-w-[16rem] truncate text-2xs text-subtle"
+                          title={r.stats.changeReason}
+                        >
+                          {r.stats.changeReason}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-2 py-2">
                       <Pill
-                        tone={r.mode === "auto" ? "up" : r.mode === "suggest" ? "accent" : "muted"}
+                        tone={
+                          r.disabled
+                            ? "down"
+                            : r.mode === "auto"
+                              ? "up"
+                              : r.mode === "suggest"
+                                ? "accent"
+                                : "muted"
+                        }
                       >
-                        {r.mode}
+                        {r.disabled ? "off" : r.mode}
                       </Pill>
                     </td>
                     <td className="px-2 py-2 text-end font-mono text-xs num">{r.weight}</td>

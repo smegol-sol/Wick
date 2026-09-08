@@ -31,6 +31,7 @@ export const API_ROUTES = {
   funnel: "/api/funnel",
   rules: "/api/rules",
   replays: "/api/replays",
+  ruleEnable: (id: string) => `/api/rules/${encodeURIComponent(id)}/enable`,
   halt: "/api/halt",
   haltClear: "/api/halt/clear",
   unseal: "/api/vault/unseal",
@@ -177,6 +178,9 @@ export type RuleView = {
   weight: number;
   stats: RuleStatsView | null;
   eligibleForAuto: boolean;
+  /** Disabled by the evaluator (ADR-0004); only the operator re-enables. */
+  disabled: boolean;
+  disabledReason: string | null;
 };
 
 export type ReplayRunView = {

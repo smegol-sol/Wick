@@ -52,6 +52,8 @@ export type LoopDeps = {
   cashSol?: () => number | null;
   /** The engine's health self-halt (RISK_HALT reason "health"). */
   selfHalt: () => boolean;
+  /** The evaluator's effective weight and disable flag per rule; absent means the file's weight. */
+  ruleState?: (ruleId: string) => { weight: number; disabled: boolean } | null;
   /** Keep a mint at the active cadence while it has an intent out. */
   pin?: (mint: string) => void;
   onIntent?: (view: IntentView) => void;
@@ -162,6 +164,7 @@ export class DecisionLoop {
         m.funnel.inc({ layer: "regime", outcome: "in" });
         m.funnel.inc({ layer: "regime", outcome: "out" });
         for (const rule of this.entries) {
+          if (this.deps.ruleState?.(rule.id)?.disabled) continue;
           if (this.coolingDown(mint, rule.id, now)) continue;
           m.funnel.inc({ layer: "decision", outcome: "in" });
           const v = evaluateEntry(rule, f);
@@ -268,6 +271,7 @@ export class DecisionLoop {
       openExposureSol: book.openExposureSol,
       regimeMul: 1,
       socialMul: 1,
+      weightMul: this.weightMul(rule.id, v.weight),
     });
     const sizeSol = round(sized.sizeSol * rule.params.sizeMul);
     const base = {
@@ -293,6 +297,8 @@ export class DecisionLoop {
     }
     if (!run.rejected) m.funnel.inc({ layer: "gates", outcome: "out" });
     const why = [v.why, ...v.notes];
+    if (sized.sizing.weightMul != null && sized.sizing.weightMul !== 1)
+      why.push(`weight ×${sized.sizing.weightMul}`);
     if (rule.params.sizeMul < 1) why.push(`rule size ×${rule.params.sizeMul}`);
     for (const g of run.results)
       if (g.adjustment) why.push(`${g.gate} ×${g.adjustment.sizeMul}: ${g.adjustment.reason}`);
@@ -486,6 +492,15 @@ export class DecisionLoop {
       const view = await getIntent(this.deps.db, id);
       if (view) this.deps.onIntent(view);
     }
+  }
+
+  /** The file's weight (with the follow boost) times the evaluator's move, rounded for the why line. */
+  private weightMul(ruleId: string, ruleWeight: number): number {
+    const st = this.deps.ruleState?.(ruleId);
+    const file = this.entries.find((r) => r.id === ruleId)?.weight ?? 1;
+    // `ruleWeight` already carries the file weight; the evaluator's is a factor on top of it.
+    const evaluator = st ? st.weight / file : 1;
+    return Math.round(ruleWeight * evaluator * 1000) / 1000;
   }
 
   private async refreshBook(now: number): Promise<void> {

@@ -477,11 +477,19 @@ Never a label with a token address, wallet or signature; details go to `events`.
 | `wick_open_positions`                       | gauge     |
 | `wick_realized_pnl_sol_day`                 | gauge     |
 | `wick_halted{kind}`                         | gauge     |
+| `wick_outcomes_total{horizon,measured}`     | counter   |
+| `wick_rule_weight{rule}`                    | gauge     |
 | `wick_replay_runs_total{status}`            | counter   |
 
 Source ages and the halt gauge are computed when scraped, never cached by the loop they watch: a stalled loop must show as a growing age, not a frozen one (learned on the first night, 2026-09-08).
 
 Host and service metrics come from `node_exporter`, `postgres_exporter` and `redis_exporter` (§16). Three Grafana boards: Operations (is it alive?), Quality (is it working?), Host (is the box healthy?). Alerts are for liveness and infrastructure; the brakes are in code.
+
+### 15a. The evaluator (ADR-0004, level 2)
+
+Every minute the evaluator writes `outcomes` for each intent older than 5, 30 and 120 minutes, executed or rejected: the return from the price the decision saw (`features.priceUsd`) to the last snapshot inside the horizon, with the best and worst snapshot on the way. An intent whose token left the sampled set gets an empty row and counts as unmeasured. The scoring horizon is 30 minutes; 5 and 120 are recorded for replay and the later models. A sell intent scores the other way round.
+
+Once a day per rule (checked hourly, one row per UTC day) it computes the 14-day statistics (count of measured outcomes, win rate, expectancy, worst excursion, p25/p50/p75), moves the weight one step of 10% in the direction of expectancy inside [0.25, 1.5] once the window holds 20 intents, and disables a rule after seven consecutive daily rows with 20+ intents and negative expectancy. Each evaluation is one `rule_stats` row with the reason and the numbers; `expectancy` and `worst_dd` are stored as fractions, as the API contract carries them. The decision loop reads the effective weight and the disable flag from the latest row; the weight scales the equity term of sizing, never the pool or cap ceilings. Only the operator re-enables a rule (`POST /api/rules/:id/enable` with the second factor); it comes back at the floor weight. Auto eligibility follows ADR-0004: 20+ suggestions in the window, 60%+ approved, positive expectancy on the executed ones.
 
 ## 16. Operations: monitoring, alerts, self-halt
 

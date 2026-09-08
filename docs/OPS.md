@@ -46,6 +46,7 @@ Nothing listens on a public interface. The only public port on the host is SSH, 
 - **Upgrade:** `git pull && docker compose up -d --build engine`. The engine boots sealed: the decision layer runs and writes intents, but nothing executes until the vault is unsealed.
 - **Unseal:** Engine → Operations on the console: passphrase and the six-digit code, then Unseal; or `POST /api/vault/unseal` with `{"passphrase": "...", "code": "<TOTP>"}` and the bearer token. `POST /api/vault/seal` locks it again with no factor, since stopping is always allowed. Five wrong attempts lock the vault for a minute.
 - **Kill switch:** `touch /var/lib/wick/KILL` on the host (`docker compose exec engine touch /var/lib/wick/KILL` works too; the file's content is the reason shown). The engine sees it within a second, halts entries and keeps exits running. Remove the file to clear; that is the only way.
+- **Re-enable a rule the evaluator disabled:** `POST /api/rules/<id>/enable` with `{"code": "<TOTP>"}` and the bearer token; the rule comes back at weight 0.25 and the reason is written to `rule_stats`. The Engine screen shows the rule as `off` with the reason until then.
 - **Clear a halt:** the code alone and Clear halt on the same panel, or `POST /api/halt/clear` with `{"code": "<TOTP>"}`; clears manual and P&L halts. A health self-halt clears itself when the reason goes; a kill-switch halt clears when the file goes.
 
 ## 4. Alerts and what to do

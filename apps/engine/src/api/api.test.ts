@@ -33,6 +33,8 @@ test("mode counts come from the rules, every mode present", () => {
     weight: 1,
     stats: null,
     eligibleForAuto: false,
+    disabled: false,
+    disabledReason: null,
   } as const;
   assert.deepEqual(
     modeCounts([

@@ -227,6 +227,20 @@ export const streamResumed = new client.Counter({
   registers: [registry],
 });
 
+export const supplyReads = new client.Counter({
+  name: "wick_supply_reads_total",
+  help: "Holder-list reads by the supply writer, by outcome (written, empty, budget)",
+  labelNames: ["outcome"] as const,
+  registers: [registry],
+});
+
+export const walletReads = new client.Counter({
+  name: "wick_wallet_reads_total",
+  help: "Wallet profile reads, by outcome (profiled, budget)",
+  labelNames: ["outcome"] as const,
+  registers: [registry],
+});
+
 export const outcomes = new client.Counter({
   name: "wick_outcomes_total",
   help: "Outcome rows written, by horizon and whether a price was measured",

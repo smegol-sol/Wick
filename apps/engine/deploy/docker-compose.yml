@@ -81,6 +81,8 @@ services:
       VAULT_FILE: /var/lib/wick/vault.json
       KILL_SWITCH_FILE: /var/lib/wick/KILL
       TOTP_SECRET: ${TOTP_SECRET:-}
+      HOLDER_READS_PER_HOUR: ${HOLDER_READS_PER_HOUR:-}
+      WALLET_READS_PER_HOUR: ${WALLET_READS_PER_HOUR:-}
     volumes:
       - ../config/risk.yaml:/repo/apps/engine/config/risk.yaml:ro
       - ../config/rules.yaml:/repo/apps/engine/config/rules.yaml:ro

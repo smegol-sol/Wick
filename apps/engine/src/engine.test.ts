@@ -422,6 +422,9 @@ function fakeChain(): FakeChain {
     },
     resumeCalls: [] as { address: string; until: string | null }[],
     resumeRefs: [] as { signature: string; slot: number; err: unknown; blockTime: number | null }[],
+    async holders() {
+      return [];
+    },
     async signaturesSince(address: string, until: string | null) {
       chain.resumeCalls.push({ address, until });
       return chain.resumeRefs;

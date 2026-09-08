@@ -317,3 +317,10 @@ test("decision loop: regime ×0.5 halves the size and says so; regime ×0 propos
   await new DecisionLoop(deps({ db: none.db, regime: () => regime(0) }), CFG).tick();
   assert.equal(intentRows(none.queries).length, 0, "no new entries under regime ×0");
 });
+
+test("decision loop: a candidate a rule likes asks for a live supply map when the map is launch-time or stale", async () => {
+  const asked: string[] = [];
+  const d = deps({ refreshSupply: (mint) => asked.push(mint) });
+  await new DecisionLoop(d, CFG).tick();
+  assert.deepEqual(asked, [MINT], "the launch-time map is older than four minutes");
+});

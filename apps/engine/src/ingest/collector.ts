@@ -105,6 +105,12 @@ export class Collector {
     m.bindSourceLastOk(() => this.state.lastOk);
   }
 
+  /** Stage and pool of a mint from the last source read, for the supply writer. */
+  tokenInfo(mint: string): { stage: string; pair: string | null } | null {
+    const tk = this.latest.get(mint);
+    return tk ? { stage: tk.stage, pair: tk.pair } : null;
+  }
+
   /** The phase the running tick is in, for the watchdog and the stall log. Public for tests. */
   get currentPhase(): string {
     return this.phase;

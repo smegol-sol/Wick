@@ -56,6 +56,8 @@ export type LaunchTx = {
 };
 
 /** One wallet's side of one transaction in one mint, from balance deltas. Signers only; pools never sign. */
+export type HolderRead = { account: string; owner: string; amount: number };
+
 export type SigRef = { signature: string; slot: number; err: unknown; blockTime: number | null };
 
 export type Trade = {
@@ -140,6 +142,8 @@ export interface ChainAdapter {
     limit: number,
     signal: AbortSignal,
   ): Promise<SigRef[]>;
+  /** The largest token accounts of a mint with their owners and raw amounts (the supply map's read). */
+  holders(mint: string, signal: AbortSignal): Promise<HolderRead[]>;
   /** The mints and signers a confirmed transaction touched; null when not found. */
   txSummary(sig: string, signal: AbortSignal): Promise<TxSummary | null>;
   quote(req: QuoteRequest, signal: AbortSignal): Promise<Quote | null>;

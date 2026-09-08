@@ -345,6 +345,8 @@ Most fraud in this market is supply control: the dev, a bundle, or a sniper ring
 
 Handling has three levels, not one: reject with a code, adjust size, or wait for distribution. All of it is computed in a background job that writes `supply_maps`; the hot path only reads the latest row and its age. A supply map older than 5 minutes counts as `null`.
 
+As built (Phase 2): the supply writer serves requests from the decision loop (a rule liked a candidate whose map is launch-time or older than four minutes) on two RPC budgets, `HOLDER_READS_PER_HOUR` and `WALLET_READS_PER_HOUR`. One request is one `getTokenLargestAccounts` plus one `getMultipleAccounts` for the owners; the bonding curve (the pump.fun PDA of the mint) and the migrated pool are excluded as `lpPct`; dev and sniper shares are those wallets' current holdings, bundle is the launch-time share; the fresh share counts the profiled holders only and is null when none was profiled; the trend compares dev plus snipers with the row about 30 minutes earlier, two points either way. The common funding cluster stays null until the funding tree (Phase 4).
+
 ## 8. Wallet profiler
 
 One background module classifies every wallet the engine meets (ADR-0008) and writes `wallet_profiles`. Everything that needs to know "what kind of wallet is this" reads it: the supply map, organic volume, the wash flag, smart-copy discovery.
@@ -361,6 +363,8 @@ One background module classifies every wallet the engine meets (ADR-0008) and wr
 | Realized performance | hit rate and median return when buying early (for `early-consistent`) |
 
 Classes and the numbers behind them are stored together. Profiles are recomputed on new activity and expire after 7 days without it. Phase 2 ships the behavioural classes; Phase 4 adds the funding tree and realized-performance classes.
+
+As built (Phase 2): a wallet is profiled when it appears among a candidate's largest holders, at most ten per map, cached in memory and in `wallet_profiles` for seven days. Two signals exist today: create-slot buys counted over our own `launch_txs` (three or more launches is `sniper-bot`), and age with activity from one `getSignaturesForAddress` read capped at five (under five transactions and younger than a day is fresh, stored in `stats.fresh`; five or more is `organic` at 0.5 confidence). Timing regularity, amount repetition, program path and exit behaviour need per-wallet trades the engine does not collect for arbitrary wallets yet; they wait with the funding tree.
 
 ## 9. Copy trading: mirror and smart
 
@@ -473,6 +477,8 @@ Never a label with a token address, wallet or signature; details go to `events`.
 | `wick_rejections_total{gate,reason}`        | counter   |
 | `wick_adjustments_total{gate}`              | counter   |
 | `wick_sizing_binding_total{term}`           | counter   |
+| `wick_supply_reads_total{outcome}`          | counter   |
+| `wick_wallet_reads_total{outcome}`          | counter   |
 | `wick_regime_size_mul`                      | gauge     |
 | `wick_stream_resumed_total{kind}`           | counter   |
 | `wick_realized_slippage_pct`                | histogram |

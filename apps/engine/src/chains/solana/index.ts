@@ -8,6 +8,7 @@ import type {
   BuildOpts,
   ChainAdapter,
   Confirmation,
+  HolderRead,
   LaunchTx,
   Quote,
   SealedKeyHandle,
@@ -140,6 +141,30 @@ export function makeSolanaAdapter(): ChainAdapter {
 
     async trades(sig, signal) {
       return tradesOf(sig, await fetchTx(sig, signal));
+    },
+
+    async holders(mint, signal) {
+      const largest = await rpcAny<{ value?: { address: string; amount: string }[] }>(
+        "getTokenLargestAccounts",
+        [mint, { commitment: "confirmed" }],
+        signal,
+      );
+      const accounts = largest?.value ?? [];
+      if (!accounts.length) return [];
+      const infos = await rpcAny<{
+        value?: ({ data?: { parsed?: { info?: { owner?: string } } } } | null)[];
+      }>(
+        "getMultipleAccounts",
+        [accounts.map((a) => a.address), { encoding: "jsonParsed", commitment: "confirmed" }],
+        signal,
+      );
+      const out: HolderRead[] = [];
+      accounts.forEach((a, i) => {
+        const owner = infos?.value?.[i]?.data?.parsed?.info?.owner;
+        if (!owner) return;
+        out.push({ account: a.address, owner, amount: Number(a.amount) });
+      });
+      return out;
     },
 
     async signaturesSince(address, untilSig, limit, signal) {

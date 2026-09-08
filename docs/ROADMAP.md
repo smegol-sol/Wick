@@ -45,8 +45,8 @@ Exit condition: 72 hours of uninterrupted stream, the Operations board showing e
 - [x] `decision` with the `confirmed-entry`, `migration-snipe` and `exit-policy` rules and weights from `rules.yaml`, validated at boot; a loop every second over the active mints and the open positions, per-mint-and-rule cooldown, intents written in every mode (shadow rows included). Unique buyers and organic volume are noted, not required, until the profiler exists.
 - [x] The six decision-time gates with the reason codes and adjustments from ENGINE.md §4 as a pure function; every rejection and adjustment written to `gate_results`. `execution` and its three codes land with the executor. No eighth gate and no code above 25 without an ADR.
 - [x] Size as the minimum of three terms (equity, pool share, token cap) with the binding term recorded on the intent (ADR-0005); the regime and social multipliers are ×1 until their layers land.
-- [ ] The wallet profiler with the basic behavioural classes; everything after it reads from it (ADR-0008, ENGINE.md §8).
-- [ ] The basic supply map: dev share and dev-funded wallets, bundle, early snipers, fresh wallets, early-holder trend (ENGINE.md §7).
+- [x] The wallet profiler with the basic behavioural classes; everything after it reads from it (ADR-0008, ENGINE.md §8). Phase 2 classes: `sniper-bot` from create-slot buys, fresh from age and activity, `organic`; the rest need per-wallet trades and land with the funding tree.
+- [x] The basic supply map: dev share, bundle, early snipers, fresh wallets, early-holder trend (ENGINE.md §7), live from holder reads on an RPC budget. Dev-funded wallets and the funding cluster wait for the funding tree (Phase 4).
 - [ ] The four microstructure features: net flow, organic volume, depth in both directions, holder divergence (ENGINE.md §10).
 - [x] The regime layer with one size multiplier for the whole engine, and the funnel metric per layer (ENGINE.md §3 and §11).
 - [ ] The defensive MEV policy in the executor for tier 1, and the `mev-suspect` flag on fills worse than the quote (ENGINE.md §12).

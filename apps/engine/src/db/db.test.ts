@@ -566,6 +566,17 @@ test(
         "nothing executes while sealed",
       );
     } finally {
+      // In dependency order, so a second run on the same database starts clean.
+      for (const sql of [
+        "delete from fills where execution_id in (select id from executions where intent_id like 'exec-%')",
+        "delete from outcomes where intent_id like 'exec-%'",
+        "delete from executions where intent_id like 'exec-%'",
+        "delete from positions where intent_id like 'exec-%'",
+        "delete from gate_results where intent_id like 'exec-%'",
+        "delete from quotes where intent_id like 'exec-%'",
+        "delete from intents where id like 'exec-%'",
+      ])
+        await db.query(sql).catch(() => {});
       rmSync(dir, { recursive: true, force: true });
       await db.end();
     }

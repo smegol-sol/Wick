@@ -421,6 +421,7 @@ Collection is a Phase 1 deliverable with a written retention policy, and replay 
 - Sampling: 1 s for active tokens, 60 s for cooling tokens, plus every chain event, every parsed launch transaction, every audit change and every wallet print.
 - Retention: 1 s rows for 30 days; 10 s continuous aggregate for a year; events and launch transactions indefinitely.
 - Replay execution model: constant-product fill on the pool's liquidity at that second, 1.5 s latency assumption, fees and priority tip in force at the time. Results are labelled `replay` and never sit next to live numbers without the label.
+- As built: there is no stored features row, so replay feeds the same `FeatureBook` the live engine uses with the stored snapshots, audits, launch parse, supply maps and prints in time order and asks for the row at every stored second; the SOL price comes from `sol_price` and the regime multiplier from `regime` at that second; the quote gate reads the model's impact instead of a live quote. Version 1 scores entries at the 30-minute horizon and closes a replayed position there; the exit policy is not simulated yet. Every live query excludes rows with a `replay_run_id`.
 - External history (Bitquery, Dune) is optional, enters through its own adapter with `source = "external:<provider>"`, and is kept separate in every statistic.
 
 ## 14. Database schema (Postgres + TimescaleDB)

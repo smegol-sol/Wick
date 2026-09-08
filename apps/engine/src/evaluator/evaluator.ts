@@ -106,7 +106,7 @@ export class Evaluator {
   async load(): Promise<void> {
     const res = await this.deps.db.query<StatsRow>(
       `select distinct on (rule_id) * from rule_stats
-        where window_days = $1 order by rule_id, changed_at desc`,
+        where window_days = $1 and replay_run_id is null order by rule_id, changed_at desc`,
       [WEIGHT_RULES.windowDays],
     );
     for (const row of res.rows) {
@@ -199,7 +199,7 @@ export class Evaluator {
   /** The last `disableDays` daily rows, oldest first. */
   private async recentDays(ruleId: string): Promise<{ n: number; expectancy: number | null }[]> {
     const res = await this.deps.db.query<{ n: number; expectancy: number | null }>(
-      `select n, expectancy from rule_stats where rule_id = $1 and window_days = $2
+      `select n, expectancy from rule_stats where rule_id = $1 and window_days = $2 and replay_run_id is null
         order by changed_at desc limit $3`,
       [ruleId, WEIGHT_RULES.windowDays, WEIGHT_RULES.disableDays - 1],
     );

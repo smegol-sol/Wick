@@ -9,7 +9,8 @@
     "migrate": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/db/migrate.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --import ../../scripts/test-loader.mjs --test src/**/*.test.ts src/*.test.ts",
-    "vault:init": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/executor/vault-init.ts"
+    "vault:init": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/executor/vault-init.ts",
+    "replay": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/replay/cli.ts"
   },
   "dependencies": {
     "@noble/curves": "^1.9.7",

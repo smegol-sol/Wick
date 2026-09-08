@@ -87,6 +87,10 @@ Everything time-based (copy gap, blockhash expiry, the 5/30/120-minute outcomes,
 
 ## 7. Failure drills (run in Phase 2 before the first real SOL, then after every custody change)
 
-- **RPC cut:** block the RPC host in `ufw`; expect SourceStale rpc, slot lag null, self-halt reasons on `/healthz`, no crash.
-- **Postgres stopped:** `docker compose stop db`; expect DbErrors, `dbOk=false` on `/healthz`, engine keeps polling and resumes writes when the database returns.
-- **Unattended restart:** `reboot`; expect every service back through `restart: unless-stopped`, migrations no-op, and (from Phase 2) the vault sealed with trading halted until the owner unseals it.
+`apps/engine/deploy/drill.sh` runs each drill, checks the expectation and restores; run it on the host with the stack up and the vault sealed, and paste its PASS/FAIL lines into `docs/STATE.md`.
+
+- **RPC cut** (`./drill.sh rpc-cut`): the RPC host is blocked in `ufw` for 90 s; expect a self-halt on `source rpc stale`, the engine still up, and the halt cleared within a minute of the block lifting.
+- **Postgres stopped** (`./drill.sh db-stop`): `docker compose stop db` for 60 s; expect `dbOk=false` and a self-halt on `/healthz`, DbErrors counted, and `dbOk=true` with `self-halt cleared` in the log once it is back.
+- **Unattended restart** (`./drill.sh restart`, then `./drill.sh restart-check` after logging back in): `reboot`; expect every service back through `restart: unless-stopped`, migrations a no-op, and the vault sealed with entries halted until the owner unseals it.
+
+Each drill ends in a safe stop: entries halt, exits keep running, nothing signs.

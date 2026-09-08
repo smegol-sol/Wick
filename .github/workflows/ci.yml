@@ -45,6 +45,20 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: printf '%s\n' "$PR_TITLE" | npx commitlint --verbose
 
+  secrets:
+    name: secrets · gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # The working tree and the whole history, with the repository's allowlist (.gitleaks.toml).
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2 \
+            detect --source /repo --config /repo/.gitleaks.toml --redact --exit-code 2 --log-opts="--all"
+
   engine-db:
     name: engine · migrations on TimescaleDB
     runs-on: ubuntu-latest

@@ -241,6 +241,13 @@ export const walletReads = new client.Counter({
   registers: [registry],
 });
 
+export const telegram = new client.Counter({
+  name: "wick_telegram_messages_total",
+  help: "Telegram messages by outcome: sent, failed, handled, ignored (another chat)",
+  labelNames: ["outcome"] as const,
+  registers: [registry],
+});
+
 export const outcomes = new client.Counter({
   name: "wick_outcomes_total",
   help: "Outcome rows written, by horizon and whether a price was measured",

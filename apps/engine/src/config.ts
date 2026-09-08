@@ -74,6 +74,11 @@ export type EngineConfig = {
   /** RPC budgets of the supply writer: holder lists per hour, wallet reads per hour (ADR-0008). */
   holderReadsPerHour: number;
   walletReadsPerHour: number;
+  /** The Telegram bot (ADR-0009 §4); both unset means no bot. */
+  telegramBotToken: string | null;
+  telegramChatId: string | null;
+  /** UTC hour of the daily report. */
+  telegramReportHourUtc: number;
   /** The deployed commit, for the decision fingerprint; the package version when unset. */
   codeVersion: string | null;
   /** The sealed execution key (ADR-0003); missing file means nothing can execute. */
@@ -224,6 +229,9 @@ export function parseEnv(env: Record<string, string | undefined>): EngineConfig 
     quotesPerMinute: num(env.QUOTES_PER_MINUTE, 30),
     holderReadsPerHour: num(env.HOLDER_READS_PER_HOUR, 120),
     walletReadsPerHour: num(env.WALLET_READS_PER_HOUR, 300),
+    telegramBotToken: env.TELEGRAM_BOT_TOKEN?.trim() || null,
+    telegramChatId: env.TELEGRAM_CHAT_ID?.trim() || null,
+    telegramReportHourUtc: num(env.TELEGRAM_REPORT_HOUR_UTC, 0),
     codeVersion: env.WICK_COMMIT?.trim() || null,
     vaultFile: env.VAULT_FILE?.trim() || "vault.json",
     killSwitchFile: env.KILL_SWITCH_FILE?.trim() || "KILL",

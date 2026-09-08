@@ -15,6 +15,8 @@ import { DecisionLoop } from "./decision/loop.ts";
 import { Evaluator } from "./evaluator/evaluator.ts";
 import { RegimeWriter } from "./decision/regime.ts";
 import { SupplyWriter } from "./ingest/supply.ts";
+import { TelegramBot } from "./telegram/bot.ts";
+import { dailyReport, formatReport, formatStatus, yesterdayStart } from "./telegram/report.ts";
 import { Executor } from "./executor/executor.ts";
 import { KillSwitch } from "./executor/killswitch.ts";
 import { Vault } from "./executor/vault.ts";
@@ -68,6 +70,8 @@ async function main(): Promise<void> {
   if (cfg.solanaRpcUrl) process.env.SOLANA_RPC_URL = cfg.solanaRpcUrl;
   else log.warn("SOLANA_RPC_URL unset; public RPCs only, unfit for anything but a smoke run");
 
+  // The Telegram bot is created after the API; until then a notification is a log line.
+  let notify: (text: string) => void = (text) => log.info("notify", { text });
   const db = makePool(cfg.databaseUrl);
   const applied = await migrate(db);
   if (applied.length) log.info("migrations applied", { applied });
@@ -119,9 +123,14 @@ async function main(): Promise<void> {
     const now = Date.now();
     const h = health();
     const t = healthTransition(lastHealth, h, now);
-    if (t?.kind === "halt") log.warn("self-halt", { reasons: t.reasons });
-    else if (t?.kind === "changed") log.warn("self-halt reasons changed", { reasons: t.reasons });
-    else if (t?.kind === "clear") log.info("self-halt cleared", { afterMs: t.sinceMs });
+    if (t?.kind === "halt") {
+      log.warn("self-halt", { reasons: t.reasons });
+      notify(`self-halt: ${t.reasons.join("; ")}`);
+    } else if (t?.kind === "changed") log.warn("self-halt reasons changed", { reasons: t.reasons });
+    else if (t?.kind === "clear") {
+      log.info("self-halt cleared", { afterMs: t.sinceMs });
+      notify(`self-halt cleared after ${Math.round(t.sinceMs / 1000)} s`);
+    }
     m.halted.set({ kind: "health" }, h.selfHalt ? 1 : 0);
     if (t?.kind === "halt" || lastHealth == null)
       lastHealth = { selfHalt: h.selfHalt, reasons: h.reasons, since: now };
@@ -133,12 +142,14 @@ async function main(): Promise<void> {
     if (k.active) {
       log.error("kill switch set", { reason: k.reason });
       m.halted.set({ kind: "kill" }, 1);
+      notify(`KILL SWITCH: ${k.reason ?? "kill file present"}`);
       void addHalt(db, "kill", k.reason ?? "kill file present").catch((e) =>
         log.error("kill halt write failed", { err: errText(e) }),
       );
     } else {
       log.warn("kill switch removed");
       m.halted.set({ kind: "kill" }, 0);
+      notify("kill switch removed");
       void clearHalts(db, ["kill"], "kill file removed").catch((e) =>
         log.error("kill halt clear failed", { err: errText(e) }),
       );
@@ -146,7 +157,7 @@ async function main(): Promise<void> {
   });
 
   const evaluator = new Evaluator(
-    { db, rules: loaded.rules },
+    { db, rules: loaded.rules, onChange: (text) => notify(text) },
     { outcomesEveryMs: 60_000, statsEveryMs: 3_600_000 },
   );
   const rulesView = (): RuleView[] => evaluator.view();
@@ -190,6 +201,7 @@ async function main(): Promise<void> {
     rules: rulesView,
     regime: () => regime.current(),
     enableRule: (id, by) => evaluator.enable(id, by),
+    notify: (text) => notify(text),
     token,
     exec: {
       vault: () => vault.state,
@@ -225,7 +237,15 @@ async function main(): Promise<void> {
         if (h.selfHalt) return { halted: true, reason: "health" };
         return { halted: false, reason: null };
       },
-      onIntent: (view) => api.broadcast({ type: "intent", intent: view }),
+      onIntent: (view) => {
+        api.broadcast({ type: "intent", intent: view });
+        if (view.status === "executed" || view.status === "failed")
+          notify(
+            `${view.status}: ${view.intent.side} ${view.symbol} ${view.intent.sizeSol.toFixed(3)} SOL` +
+              (view.fill ? ` · slippage ${view.fill.realizedSlippagePct.toFixed(2)}%` : "") +
+              (view.execution?.err ? ` · ${view.execution.err}` : ""),
+          );
+      },
       onPosition: (view) => api.broadcast({ type: "position", position: view }),
     },
     { tickMs: 1000, confirmTimeoutMs: 60_000, balanceRefreshMs: 30_000 },
@@ -248,11 +268,50 @@ async function main(): Promise<void> {
       regime: () => regime.current(),
       refreshSupply: (mint) => supply.request(mint),
       pin: (mint) => collector.sampler.pin(mint, true, Date.now()),
-      onIntent: (view) => api.broadcast({ type: "intent", intent: view }),
+      onIntent: (view) => {
+        api.broadcast({ type: "intent", intent: view });
+        if (view.status === "proposed")
+          notify(
+            `waiting for you (${Math.round((view.expiresAt - Date.now()) / 1000)} s): ${view.intent.side} ${view.symbol} ${view.intent.sizeSol.toFixed(3)} SOL · ${view.intent.why}`,
+          );
+      },
     },
     { tickMs: cfg.decisionTickMs, quotesPerMinute: cfg.quotesPerMinute, bookRefreshMs: 5000 },
   );
   const server = startHttp(cfg.httpHost, cfg.httpPort, { health, version: version(), api });
+  let bot: TelegramBot | null = null;
+  let reportTimer: NodeJS.Timeout | null = null;
+  if (cfg.telegramBotToken && cfg.telegramChatId) {
+    bot = new TelegramBot({
+      token: cfg.telegramBotToken,
+      chatId: cfg.telegramChatId,
+      status: async () => formatStatus(await api.state(), rulesView()),
+      halt: async (reason) => {
+        await addHalt(db, "manual", `telegram: ${reason}`);
+        m.halted.set({ kind: "manual" }, 1);
+        api.broadcast({ type: "state", state: await api.state() });
+        return `halted: ${reason}. Clear it from the console with the second factor.`;
+      },
+    });
+    const b = bot;
+    notify = (text) => void b.send(text);
+    let reportedDay = "";
+    reportTimer = setInterval(() => {
+      const now = new Date();
+      const day = now.toISOString().slice(0, 10);
+      if (now.getUTCHours() !== cfg.telegramReportHourUtc || reportedDay === day) return;
+      reportedDay = day;
+      void dailyReport(db, yesterdayStart(now.getTime()))
+        .then((r) => b.send(formatReport(r)))
+        .catch((e) => log.error("daily report failed", { err: errText(e) }));
+    }, 60_000);
+    reportTimer.unref();
+    bot.start();
+    log.info("telegram bot polling", { reportHourUtc: cfg.telegramReportHourUtc });
+  } else
+    log.warn(
+      "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID unset; no bot, alerts still go through Alertmanager",
+    );
   m.up.set(1);
   await collector.seedResume();
   stream.start();
@@ -295,6 +354,8 @@ async function main(): Promise<void> {
     evaluator.stop();
     regime.stop();
     supply.stop();
+    bot?.stop();
+    if (reportTimer) clearInterval(reportTimer);
     collector.stop();
     stream.stop();
     stopLoop();

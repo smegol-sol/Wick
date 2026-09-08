@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { type IntentView, ttlLeftMs } from "@wick/core/api";
-import { formatSol, formatUsd } from "@wick/core/format";
+import { formatPct, formatSol, formatUsd } from "@wick/core/format";
 import { GateList } from "./gate-list";
 import { TokenMark } from "./mark";
 import { Button, Pill } from "./ui";
@@ -75,6 +75,26 @@ export function IntentCard({
       </div>
 
       <GateList gates={view.gates} compact />
+
+      {view.fill ? (
+        <div className="grid grid-cols-3 gap-2 font-mono text-2xs text-muted num">
+          <span>
+            {t("fill")} {formatSol(Math.abs(view.fill.solDelta), 4)}
+          </span>
+          <span>
+            {t("quoted")} {view.fill.quotedPrice.toPrecision(3)} →{" "}
+            {view.fill.realizedPrice.toPrecision(3)}
+          </span>
+          <span className={view.fill.realizedSlippagePct > 1 ? "text-warn" : undefined}>
+            {t("slippage")} {formatPct(view.fill.realizedSlippagePct, 2)}
+          </span>
+        </div>
+      ) : view.execution ? (
+        <div className="font-mono text-2xs text-muted">
+          {t("sent")} · {view.execution.status}
+          {view.execution.err ? ` · ${view.execution.err}` : ""}
+        </div>
+      ) : null}
 
       <footer className="flex items-center justify-between gap-2">
         {waiting ? (

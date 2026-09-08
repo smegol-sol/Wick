@@ -134,6 +134,21 @@ export const api = {
     isMock()
       ? delay(150).then(() => ({ ok: true as const }))
       : request(API_ROUTES.halt, { method: "POST", body: JSON.stringify({ reason }) }),
+  clearHalt: (code: string): Promise<{ ok: true; cleared: number }> =>
+    isMock()
+      ? delay(150).then(() => ({ ok: true as const, cleared: 0 }))
+      : request(API_ROUTES.haltClear, { method: "POST", body: JSON.stringify({ code }) }),
+  unseal: (passphrase: string, code: string): Promise<{ ok: true; wallet: string | null }> =>
+    isMock()
+      ? delay(300).then(() => ({
+          ok: true as const,
+          wallet: "ExAmpLe1111111111111111111111111111111111111",
+        }))
+      : request(API_ROUTES.unseal, { method: "POST", body: JSON.stringify({ passphrase, code }) }),
+  seal: (): Promise<{ ok: true }> =>
+    isMock()
+      ? delay(100).then(() => ({ ok: true as const }))
+      : request(API_ROUTES.seal, { method: "POST", body: "{}" }),
 };
 
 /** WebSocket with reconnect. In mock mode it emits a state tick every 5 s. */

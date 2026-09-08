@@ -3,6 +3,7 @@ import { formatPct } from "@wick/core/format";
 import { useState } from "react";
 import { Button, Empty, Kicker, Pill } from "@/components/ui";
 import { api, isMock, readToken, setMock, writeToken } from "@/lib/api";
+import { failureText, normalizeCode, passphraseOk } from "@/lib/second-factor";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -19,10 +20,50 @@ export function EngineScreen() {
   const [reason, setReason] = useState("");
   const [token, setToken] = useState(readToken());
   const [mock, setMockState] = useState(isMock());
+  const [code, setCode] = useState("");
+  const [passphrase, setPassphrase] = useState("");
+  const [notice, setNotice] = useState<{ tone: "up" | "down"; text: string } | null>(null);
+  const refresh = () => void qc.invalidateQueries({ queryKey: ["state"] });
   const halt = useMutation({
     mutationFn: () => api.halt(reason || "manual"),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["state"] }),
+    onSuccess: () => {
+      setNotice({ tone: "down", text: `${t("halted")} · ${reason || "manual"}` });
+      refresh();
+    },
+    onError: (e) => setNotice({ tone: "down", text: failureText(e) }),
   });
+  const clearHalt = useMutation({
+    mutationFn: (c: string) => api.clearHalt(c),
+    onSuccess: (r) => {
+      setCode("");
+      setNotice({ tone: "up", text: `${t("clearHalt")} · ${r.cleared} ${t("cleared")}` });
+      refresh();
+    },
+    onError: (e) => setNotice({ tone: "down", text: failureText(e) }),
+  });
+  const unseal = useMutation({
+    mutationFn: (v: { passphrase: string; code: string }) => api.unseal(v.passphrase, v.code),
+    onSuccess: (r) => {
+      setNotice({ tone: "up", text: `${t("unsealedAs")} ${r.wallet ?? ""}`.trim() });
+      refresh();
+    },
+    onError: (e) => setNotice({ tone: "down", text: failureText(e) }),
+    // The passphrase leaves the form either way; only the code stays for a retry.
+    onSettled: () => setPassphrase(""),
+  });
+  const seal = useMutation({
+    mutationFn: () => api.seal(),
+    onSuccess: () => {
+      setNotice({ tone: "down", text: t("vaultSealed") });
+      refresh();
+    },
+    onError: (e) => setNotice({ tone: "down", text: failureText(e) }),
+  });
+  const codeOk = normalizeCode(code) != null;
+  const busy = halt.isPending || clearHalt.isPending || unseal.isPending || seal.isPending;
+  const sealed = state.data?.vault === "sealed";
+  const unsealed = state.data?.vault === "unsealed";
+  const openHalts = (state.data?.halts ?? []).filter((h) => h.clearedAt == null);
   const maxEntered = Math.max(1, ...(funnel.data?.layers.map((l) => l.entered) ?? [1]));
   const maxRej = Math.max(1, ...(funnel.data?.rejections.map((r) => r.n) ?? [1]));
 
@@ -224,6 +265,15 @@ export function EngineScreen() {
                 </Pill>
               ))}
           </div>
+          {state.data?.health.selfHalt ? (
+            <div className="flex flex-wrap gap-1">
+              {state.data.health.reasons.map((r) => (
+                <Pill key={r} tone="warn">
+                  {t("selfHalt")} · {r}
+                </Pill>
+              ))}
+            </div>
+          ) : null}
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
               value={reason}
@@ -231,17 +281,54 @@ export function EngineScreen() {
               placeholder={t("haltReason")}
               className="h-10 flex-1 rounded-sm bg-elevated px-3 text-sm outline-none"
             />
-            <Button variant="danger" disabled={halt.isPending} onClick={() => halt.mutate()}>
+            <Button variant="danger" disabled={busy} onClick={() => halt.mutate()}>
               {t("halt")}
             </Button>
-            <Button disabled title={t("needsSecondFactor")}>
+            {unsealed ? (
+              <Button variant="danger" disabled={busy} onClick={() => seal.mutate()}>
+                {t("seal")}
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={passphrase}
+              onChange={(e) => setPassphrase(e.target.value)}
+              placeholder={t("passphrase")}
+              type="password"
+              autoComplete="off"
+              disabled={!sealed}
+              className="h-10 flex-1 rounded-sm bg-elevated px-3 text-sm outline-none disabled:opacity-40"
+            />
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder={t("code")}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={7}
+              className="h-10 w-full rounded-sm bg-elevated px-3 font-mono text-sm outline-none sm:w-36"
+            />
+            <Button
+              disabled={busy || !codeOk || openHalts.length === 0}
+              onClick={() => clearHalt.mutate(normalizeCode(code)!)}
+            >
               {t("clearHalt")}
             </Button>
-            <Button disabled title={t("needsSecondFactor")}>
+            <Button
+              variant="up"
+              disabled={busy || !codeOk || !sealed || !passphraseOk(passphrase)}
+              onClick={() => unseal.mutate({ passphrase, code: normalizeCode(code)! })}
+            >
               {t("unseal")}
             </Button>
           </div>
-          <p className="text-2xs text-subtle">{t("needsSecondFactor")}</p>
+          {notice ? (
+            <p className={cn("font-mono text-2xs", notice.tone === "up" ? "text-up" : "text-down")}>
+              {notice.text}
+            </p>
+          ) : null}
+          <p className="text-2xs text-subtle">{t("secondFactorHint")}</p>
           <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center">
             <input
               value={token}

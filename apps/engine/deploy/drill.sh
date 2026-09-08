@@ -13,11 +13,12 @@ fail() { echo "FAIL  $*"; FAILED=1; }
 FAILED=0
 
 healthz() { curl -s --max-time 5 "${BASE}/healthz" || echo '{}'; }
-field() { healthz | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('$1'))"; }
+field() { healthz | python3 -c "import json,sys; d=json.loads(sys.stdin.read() or '{}'); print(d.get('$1'))"; }
+restarts() { docker inspect --format '{{.RestartCount}}' "$(docker compose ps -q engine)" 2>/dev/null || echo "?"; }
 metric() { curl -s --max-time 5 -H "$AUTH" "${BASE}/metrics" | grep -E "^$1" | head -1 | awk '{print $NF}'; }
 
 drill_rpc_cut() {
-  echo "== RPC cut: block the RPC host for 90 s; expect a self-halt on 'source rpc stale', no crash"
+  echo "== RPC cut: block the RPC host for 90 s; expect a self-halt on 'source rpc-primary stale' (reads continue on the fallbacks), no crash"
   host=$(python3 -c "from urllib.parse import urlparse; print(urlparse('${SOLANA_RPC_URL}').hostname)")
   ips=$(getent ahostsv4 "$host" | awk '{print $1}' | sort -u)
   # The engine is a container: its traffic is forwarded, not sent by the host, so a ufw
@@ -25,7 +26,8 @@ drill_rpc_cut() {
   for ip in $ips; do sudo iptables -I DOCKER-USER -d "$ip" -j REJECT; done
   echo "   blocked $host ($(echo $ips | wc -w) addresses) in DOCKER-USER"
   sleep 90
-  if [ "$(field selfHalt)" = "True" ] && healthz | grep -q "source rpc stale"; then pass "self-halt on rpc stale"; else fail "no self-halt: $(healthz)"; fi
+  if [ "$(field selfHalt)" = "True" ] && healthz | grep -q "source rpc-primary stale"; then pass "self-halt on rpc-primary stale"; else fail "no self-halt: $(healthz)"; fi
+  [ "$(field slotLag)" = "None" ] && pass "slot lag unknown while the primary is cut" || fail "slot lag still read: $(field slotLag)"
   [ "$(docker compose ps --format '{{.Name}} {{.Status}}' | grep engine | grep -c Up)" = "1" ] && pass "engine still up" || fail "engine not up"
   for ip in $ips; do sudo iptables -D DOCKER-USER -d "$ip" -j REJECT; done
   sleep 45
@@ -33,10 +35,12 @@ drill_rpc_cut() {
 }
 
 drill_db_stop() {
-  echo "== Postgres stopped for 60 s; expect dbOk=false, a self-halt, DbErrors, and writes resuming"
+  echo "== Postgres stopped for 60 s; expect dbOk=false, a self-halt, DbErrors, the engine process alive, and writes resuming"
   before=$(metric 'wick_db_errors_total' || echo 0)
+  restarts_before=$(restarts)
   docker compose stop db >/dev/null
   sleep 60
+  [ "$(restarts)" = "$restarts_before" ] && pass "engine did not restart (process survived the lost connection)" || fail "engine restarted $restarts_before -> $(restarts): the process died with the database"
   [ "$(field dbOk)" = "False" ] && pass "dbOk=false on /healthz" || fail "dbOk not false: $(healthz)"
   [ "$(field selfHalt)" = "True" ] && pass "self-halt while the database is down" || fail "no self-halt"
   docker compose start db >/dev/null

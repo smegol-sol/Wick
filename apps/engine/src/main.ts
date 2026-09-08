@@ -33,7 +33,8 @@ import { errText, logger, setLogLevel } from "./log.ts";
 import * as m from "./metrics.ts";
 
 const log = logger("main");
-const REQUIRED_SOURCES = ["pump.fun", "rpc"];
+/** `rpc` stays fresh through the public fallbacks; `rpc-primary` is the configured endpoint alone. */
+const REQUIRED_SOURCES = ["pump.fun", "rpc", "rpc-primary"];
 
 function version(): string {
   try {

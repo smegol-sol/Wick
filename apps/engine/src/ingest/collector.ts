@@ -698,6 +698,9 @@ export class Collector {
       if (lag != null) {
         m.slotLag.set(lag);
         this.mark("rpc");
+        // The fallbacks keep `rpc` fresh when the configured endpoint is down; this source
+        // is the configured endpoint alone, and health halts entries when it goes quiet.
+        this.mark("rpc-primary");
       }
     } catch (e) {
       log.warn("slot poll failed", { err: errText(e) });

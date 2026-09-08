@@ -509,7 +509,7 @@ ADR-0009 §1 in short:
 
 - Exporters for host, Postgres and Redis next to the engine's `/metrics`. Alertmanager routes to Telegram with written thresholds: engine down 60 s, source stale 30 s, slot lag 20, decision p99 over 50 ms, event-loop lag 100 ms, disk 80%, memory 85%, backup older than 26 h, any unconfirmed transaction.
 - A dead-man ping to an external uptime service every minute, so a dead VPS still alerts.
-- **Self-halt:** engine health is a risk-gate input. Slot lag over 20, a stale source over 30 s, or decision p99 over budget for 5 minutes stops new entries with `RISK_HALT` and the reason `health`. Exits keep running.
+- **Self-halt:** engine health is a risk-gate input. Slot lag over 20, a stale source over 30 s, or decision p99 over budget for 5 minutes stops new entries with `RISK_HALT` and the reason `health`. Exits keep running. The configured RPC endpoint is a source of its own (`rpc-primary`, fed by the slot poll): the public fallbacks keep reads alive when it is down, and that is not a state to open positions in.
 
 ## 17. Control plane: API, network, PWA, bot
 

@@ -505,6 +505,7 @@ test("collector writes tokens, snapshots and one audit per change, and feeds hea
   assert.ok(c.state.lastOk["pump.fun"]);
   assert.ok(c.state.lastOk["jupiter-price"]);
   assert.ok(c.state.lastOk.rpc);
+  assert.ok(c.state.lastOk["rpc-primary"], "the configured endpoint answered the slot poll");
   assert.deepEqual(c.sampler.counts(Date.now()), { active: 1, cooling: 0 });
   assert.ok(c.state.lastTickAt, "a completed tick stamps the liveness gauge");
   const scraped = await registry.getSingleMetricAsString("wick_source_heartbeat_age_seconds");
@@ -1148,4 +1149,15 @@ test("collector: after a reconnect the followed wallets and the authority are re
     2,
     "a signature already seen is not replayed twice",
   );
+});
+
+test("the pool survives a lost connection: the error is counted and logged, never thrown", async () => {
+  const { makePool } = await import("./db/pool.ts");
+  const pool = makePool("postgres://nobody@127.0.0.1:1/nowhere");
+  const before = await registry.getSingleMetricAsString("wick_db_errors_total");
+  pool.emit("error", new Error("terminating connection due to administrator command"));
+  const after = await registry.getSingleMetricAsString("wick_db_errors_total");
+  assert.match(after, /op="pool"\} 1/);
+  assert.doesNotMatch(before, /op="pool"\} 1/);
+  await pool.end();
 });

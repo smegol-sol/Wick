@@ -56,6 +56,8 @@ export type LaunchTx = {
 };
 
 /** One wallet's side of one transaction in one mint, from balance deltas. Signers only; pools never sign. */
+export type SigRef = { signature: string; slot: number; err: unknown; blockTime: number | null };
+
 export type Trade = {
   sig: string;
   slot: number;
@@ -128,6 +130,16 @@ export interface ChainAdapter {
   launchTx(mint: string, signal: AbortSignal): Promise<LaunchTx | null>;
   /** Every signer's trades in one confirmed transaction; empty when it is not a trade or not found. */
   trades(sig: string, signal: AbortSignal): Promise<Trade[]>;
+  /**
+   * Signatures mentioning `address` newer than `untilSig` (all recent ones when null),
+   * newest first, at most `limit`. The stream's resume point after a reconnect.
+   */
+  signaturesSince(
+    address: string,
+    untilSig: string | null,
+    limit: number,
+    signal: AbortSignal,
+  ): Promise<SigRef[]>;
   /** The mints and signers a confirmed transaction touched; null when not found. */
   txSummary(sig: string, signal: AbortSignal): Promise<TxSummary | null>;
   quote(req: QuoteRequest, signal: AbortSignal): Promise<Quote | null>;

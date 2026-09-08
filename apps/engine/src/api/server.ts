@@ -16,6 +16,7 @@ import {
   type WsMessage,
 } from "@wick/core/api";
 import { WebSocketServer, type WebSocket } from "ws";
+import type { Regime } from "@wick/core/contracts";
 import type { Db } from "../db/pool.ts";
 import type { Health } from "../health.ts";
 import { errText, logger } from "../log.ts";
@@ -33,6 +34,8 @@ export type ApiDeps = {
   solUsd: () => number | null;
   /** The rules the decision layer runs, for `/api/rules` and the mode counts. */
   rules: () => RuleView[];
+  /** The regime writer's current row, null before its first minute. */
+  regime: () => Regime | null;
   /** The operator re-enables a rule the evaluator disabled; false when it was not disabled. */
   enableRule: (id: string, by: string) => Promise<boolean>;
   /** Bearer token; when null (local dev) every caller is the owner. */
@@ -138,7 +141,7 @@ export function createApi(deps: ApiDeps) {
       openPositions,
       pendingIntents,
       modes: modeCounts(deps.rules()),
-      regime: null,
+      regime: deps.regime(),
       halts,
       health: deps.health(),
       vault: deps.exec.vault(),

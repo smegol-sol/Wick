@@ -48,7 +48,7 @@ Exit condition: 72 hours of uninterrupted stream, the Operations board showing e
 - [ ] The wallet profiler with the basic behavioural classes; everything after it reads from it (ADR-0008, ENGINE.md §8).
 - [ ] The basic supply map: dev share and dev-funded wallets, bundle, early snipers, fresh wallets, early-holder trend (ENGINE.md §7).
 - [ ] The four microstructure features: net flow, organic volume, depth in both directions, holder divergence (ENGINE.md §10).
-- [ ] The regime layer with one size multiplier for the whole engine, and the funnel metric per layer (ENGINE.md §3 and §11).
+- [x] The regime layer with one size multiplier for the whole engine, and the funnel metric per layer (ENGINE.md §3 and §11).
 - [ ] The defensive MEV policy in the executor for tier 1, and the `mev-suspect` flag on fills worse than the quote (ENGINE.md §12).
 - [ ] `replay`: the decision and gates run over stored snapshots with a conservative execution model, results labelled `replay` (ADR-0007).
 - [x] `executor` through `ChainAdapter`: quote, build (Jupiter, priority fee under the risk.yaml cap), simulate, sign with the sealed key, send, confirm, read balances before and after, the fill and the position written, `mev-suspect` flagged; one intent at a time, locked by its status and one execution row per intent; entries wait and expire under a halt, exits keep running. The `execution` gate and its three codes.
@@ -59,7 +59,7 @@ Exit condition: 72 hours of uninterrupted stream, the Operations board showing e
 - [ ] The Telegram bot: alerts, the daily report, `/status` and `/halt`, restricted to the owner's chat id. No `/approve` in v1: approval stays in the console on the tailnet (ADR-0009, amended).
 - [x] `outcomes` for every intent at 5, 30 and 120 minutes, executed or rejected.
 - [x] A decision fingerprint on every intent: the rules-file hash, the code version and the price source next to the stored features, so any decision can be reproduced after the rules change (migration 0004).
-- [ ] A resume point for the log stream: after a reconnect, the followed wallets' and the migration authority's signatures since the last seen one are fetched, so a dropped connection loses no print and no migration.
+- [x] A resume point for the log stream: after a reconnect, the followed wallets' and the migration authority's signatures since the last seen one are fetched, so a dropped connection loses no print and no migration (seeded from `wallet_prints` and `chain_events` at boot, so a restart resumes too).
 - [ ] Before the first real SOL, moved up from Phase 5: a short written threat model, secret scanning in CI, and the failure drills in `docs/OPS.md` (RPC cut, Postgres stopped, unattended restart), each ending in a safe stop.
 - [ ] mirror-follow on webhooks with the copy gap measured.
 - [ ] Integration tests for the full path on devnet.

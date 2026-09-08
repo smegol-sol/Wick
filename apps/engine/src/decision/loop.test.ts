@@ -294,3 +294,26 @@ test("decision loop: a rule the evaluator disabled is skipped, and its weight sc
   assert.ok(Math.abs(sizing.equityTerm - 15 * 0.015 * 1.21) < 1e-9, "equity term × weight");
   assert.match(String(rows[0]!.values[11]), /weight ×1.21/);
 });
+
+test("decision loop: regime ×0.5 halves the size and says so; regime ×0 proposes no entry", async () => {
+  const half = fakeDb();
+  const regime = (sizeMul: 0 | 0.5 | 1) => ({
+    at: NOW,
+    solChange1hPct: -3,
+    breadth5m: 0.5,
+    launchesPerHour: 100,
+    migrationsPerHour: 5,
+    safetyRejectRate1h: 0.1,
+    sizeMul,
+    reason: "test",
+  });
+  await new DecisionLoop(deps({ db: half.db, regime: () => regime(0.5) }), CFG).tick();
+  const rows = intentRows(half.queries);
+  assert.equal(rows.length, 1);
+  const sizing = JSON.parse(String(rows[0]!.values[9])) as { regimeMul: number };
+  assert.equal(sizing.regimeMul, 0.5);
+  assert.match(String(rows[0]!.values[11]), /regime ×0.5/);
+  const none = fakeDb();
+  await new DecisionLoop(deps({ db: none.db, regime: () => regime(0) }), CFG).tick();
+  assert.equal(intentRows(none.queries).length, 0, "no new entries under regime ×0");
+});

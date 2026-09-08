@@ -12,7 +12,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { ChainAdapter } from "@wick/core/chain";
-import type { Features, GateResult, Mode } from "@wick/core/contracts";
+import type { Features, GateResult, Mode, Regime } from "@wick/core/contracts";
 import {
   evaluateEntry,
   evaluateExit,
@@ -52,6 +52,8 @@ export type LoopDeps = {
   cashSol?: () => number | null;
   /** The engine's health self-halt (RISK_HALT reason "health"). */
   selfHalt: () => boolean;
+  /** The regime writer's current row; absent or null means ×1 (ENGINE §11). */
+  regime?: () => Regime | null;
   /** The evaluator's effective weight and disable flag per rule; absent means the file's weight. */
   ruleState?: (ruleId: string) => { weight: number; disabled: boolean } | null;
   /** Keep a mint at the active cadence while it has an intent out. */
@@ -160,8 +162,9 @@ export class DecisionLoop {
         m.funnel.inc({ layer: "sieve", outcome: "in" });
         if (!sieve(f, this.entries)) continue;
         m.funnel.inc({ layer: "sieve", outcome: "out" });
-        // The regime layer lands later in Phase 2; until then every candidate passes at ×1.
         m.funnel.inc({ layer: "regime", outcome: "in" });
+        // Regime ×0 means no new entries; exits below keep running.
+        if ((this.deps.regime?.()?.sizeMul ?? 1) === 0) continue;
         m.funnel.inc({ layer: "regime", outcome: "out" });
         for (const rule of this.entries) {
           if (this.deps.ruleState?.(rule.id)?.disabled) continue;
@@ -269,7 +272,7 @@ export class DecisionLoop {
       solUsd,
       tokenCapSol: (equity * r.maxTokenExposurePct) / 100,
       openExposureSol: book.openExposureSol,
-      regimeMul: 1,
+      regimeMul: this.deps.regime?.()?.sizeMul ?? 1,
       socialMul: 1,
       weightMul: this.weightMul(rule.id, v.weight),
     });
@@ -299,6 +302,7 @@ export class DecisionLoop {
     const why = [v.why, ...v.notes];
     if (sized.sizing.weightMul != null && sized.sizing.weightMul !== 1)
       why.push(`weight ×${sized.sizing.weightMul}`);
+    if (sized.sizing.regimeMul !== 1) why.push(`regime ×${sized.sizing.regimeMul}`);
     if (rule.params.sizeMul < 1) why.push(`rule size ×${rule.params.sizeMul}`);
     for (const g of run.results)
       if (g.adjustment) why.push(`${g.gate} ×${g.adjustment.sizeMul}: ${g.adjustment.reason}`);

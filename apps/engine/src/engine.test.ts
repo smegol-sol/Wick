@@ -333,6 +333,8 @@ test("reason codes stay inside the ADR-0008 budget", () => {
 
 type FakeChain = ChainAdapter & {
   audits: number;
+  resumeCalls: { address: string; until: string | null }[];
+  resumeRefs: { signature: string; slot: number; err: unknown; blockTime: number | null }[];
   tradesBySig: Map<string, Trade[]>;
   summaries: Map<string, TxSummary>;
   launches: number;
@@ -417,6 +419,12 @@ function fakeChain(): FakeChain {
     },
     async trades(sig: string) {
       return chain.tradesBySig.get(sig) ?? [];
+    },
+    resumeCalls: [] as { address: string; until: string | null }[],
+    resumeRefs: [] as { signature: string; slot: number; err: unknown; blockTime: number | null }[],
+    async signaturesSince(address: string, until: string | null) {
+      chain.resumeCalls.push({ address, until });
+      return chain.resumeRefs;
     },
     async txSummary(sig: string) {
       return chain.summaries.get(sig) ?? null;
@@ -840,11 +848,13 @@ function fakeSocket() {
   return sock;
 }
 
-test("log stream subscribes to the wanted set, maps notifications, and resubscribes after a drop", () => {
+test("log stream subscribes to the wanted set, maps notifications, and resubscribes after a drop", async () => {
   const events: LogEvent[] = [];
   const sockets: ReturnType<typeof fakeSocket>[] = [];
+  const reconnects: { address: string; lastSig: string | null }[][] = [];
   const stream = new LogStream("wss://rpc.example", {
     onEvent: (e) => events.push(e),
+    onReconnect: (seen) => reconnects.push(seen),
     connect: () => {
       const s = fakeSocket();
       sockets.push(s);
@@ -882,9 +892,27 @@ test("log stream subscribes to the wanted set, maps notifications, and resubscri
   stream.setAddresses(["B", "C"]);
   const after = s1.sent.slice(2).map((m) => m.method);
   assert.deepEqual(after, ["logsSubscribe", "logsUnsubscribe"]);
+  assert.equal(stream.lastSeen("B"), "sigB", "the resume point follows the notifications");
+  assert.equal(stream.lastSeen("C"), null);
+  stream.seedLastSeen("C", "seeded");
+  stream.seedLastSeen("B", "older");
+  assert.equal(stream.lastSeen("B"), "sigB", "a seed never overrides a live signature");
   assert.equal(stream.state.subscribed, 1);
   s1.emit("close");
   assert.equal(stream.state.connected, false);
+  await new Promise((r) => setTimeout(r, 5));
+  const s2 = sockets[1]!;
+  s2.emit("open");
+  assert.deepEqual(
+    reconnects,
+    [
+      [
+        { address: "B", lastSig: "sigB" },
+        { address: "C", lastSig: "seeded" },
+      ],
+    ],
+    "after a reconnect the collector gets every wanted address with its last signature",
+  );
   stream.stop();
   assert.equal(
     wsUrlOf("https://mainnet.helius-rpc.com/?api-key=k"),
@@ -1056,4 +1084,64 @@ test("collector: prints from followed wallets, migrations from the authority, tr
   assert.equal(micro.values[8], 1, "sells_1m");
   assert.equal(micro.values[11], null, "unique buyers stay unknown");
   assert.ok(c.book.features(MINT, Date.now()), "features assemble for the active mint");
+});
+
+test("collector: after a reconnect the followed wallets and the authority are replayed since the last signature, oldest first", async () => {
+  const queries: { sql: string; values: unknown[] }[] = [];
+  const db = {
+    query: async (sql: string, values: unknown[] = []) => {
+      queries.push({ sql, values });
+      if (sql.includes("from wallets")) return { rows: [{ pk: "Follower" }] };
+      return { rows: [] };
+    },
+  } as unknown as Db;
+  const chain = fakeChain();
+  for (const sig of ["p1", "p2"])
+    chain.tradesBySig.set(sig, [
+      {
+        sig,
+        slot: 9,
+        ts: 1_700_000_000_000,
+        wallet: "Follower",
+        mint: "M2",
+        side: "buy",
+        sol: 0.5,
+        amount: 1,
+      },
+    ]);
+  chain.resumeRefs = [
+    { signature: "p2", slot: 11, err: null, blockTime: 1_700_000_100 },
+    { signature: "p1", slot: 10, err: null, blockTime: 1_700_000_050 },
+  ];
+  const c = new Collector(db, chain, {
+    activeSampleMs: 5,
+    coolingSampleMs: 60_000,
+    activeWindowMs: 7_200_000,
+    coolingWindowMs: 86_400_000,
+    auditEveryMs: 600_000,
+    slotPollMs: 5000,
+    launchPerTick: 0,
+    launchRetryMs: 60_000,
+    followRefreshMs: 0,
+    migrationAuthority: MIGRATOR,
+  });
+  await c.tick();
+  await c.resume([
+    { address: "Follower", lastSig: "p0" },
+    { address: MIGRATOR, lastSig: null }, // nothing seen yet: nothing to resume
+    { address: "SomeMint", lastSig: "x" }, // active mints are not resumed
+  ]);
+  assert.deepEqual(chain.resumeCalls, [{ address: "Follower", until: "p0" }]);
+  const prints = queries.filter((q) => q.sql.includes("insert into wallet_prints"));
+  assert.deepEqual(
+    prints.map((q) => q.values[0]),
+    ["p1", "p2"],
+    "replayed oldest first, one print each",
+  );
+  await c.resume([{ address: "Follower", lastSig: "p2" }]);
+  assert.equal(
+    queries.filter((q) => q.sql.includes("insert into wallet_prints")).length,
+    2,
+    "a signature already seen is not replayed twice",
+  );
 });

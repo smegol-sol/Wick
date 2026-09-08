@@ -12,6 +12,7 @@ import type {
   ReplayRunView,
   RuleView,
   TokenView,
+  WalletView,
 } from "@wick/core/api";
 import { adjustedMulOf } from "@wick/core/api";
 import type { Features, GateResult, Intent } from "@wick/core/contracts";
@@ -400,6 +401,31 @@ export function mockReplays(now: number): ReplayRunView[] {
       startedAt: now - 3600_000,
       finishedAt: now - 3500_000,
       summary: { intents: 188, executed: 41, expectancy: 0.05, winRate: 0.46, worstDd: -0.14 },
+    },
+  ];
+}
+
+export function mockWallets(now: number): WalletView[] {
+  return [
+    {
+      pk: "ExAmpLeWaLLet111111111111111111111111111111",
+      label: "example alpha",
+      status: "follow",
+      trackedSince: now - 9 * 86_400_000,
+      copies: 10,
+      meanRetPct: 3.4,
+      lastCopyAt: now - 40 * 60_000,
+      demotedReason: null,
+    },
+    {
+      pk: "ExAmpLeWaLLet222222222222222222222222222222",
+      label: null,
+      status: "watch",
+      trackedSince: now - 20 * 86_400_000,
+      copies: 10,
+      meanRetPct: -1.8,
+      lastCopyAt: now - 3 * 86_400_000,
+      demotedReason: "mean -1.8% over the last 10 copies",
     },
   ];
 }

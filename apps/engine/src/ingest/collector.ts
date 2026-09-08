@@ -91,6 +91,8 @@ export class Collector {
   private tickSeq = 0;
   private phase = "idle";
 
+  /** Every print of a followed wallet, after it is booked; the decision loop mirrors it. */
+  onPrint: ((trade: Trade, seenAt: number) => void) | null = null;
   private readonly db: Db;
   private readonly chain: ChainAdapter;
   private readonly cfg: CollectorConfig;
@@ -590,6 +592,11 @@ export class Collector {
     }
     for (const t of mine) {
       this.book.notePrint(t, e.at);
+      try {
+        this.onPrint?.(t, e.at);
+      } catch (err) {
+        log.warn("print hook failed", { err: errText(err) });
+      }
       try {
         await this.db.query(
           `insert into wallet_prints (sig, wallet, ts, seen_at, mint, side, sol, amount)

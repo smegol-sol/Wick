@@ -78,6 +78,7 @@ test("rules.yaml loads with a stable hash and the decision env has safe defaults
     [
       "confirmed-entry:confirmed-entry:shadow",
       "migration-snipe:migration-snipe:shadow",
+      "mirror-follow:mirror-follow:shadow",
       "exit-policy:exit-policy:shadow",
     ],
   );

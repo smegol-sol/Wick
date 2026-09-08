@@ -61,7 +61,7 @@ Exit condition: 72 hours of uninterrupted stream, the Operations board showing e
 - [x] A decision fingerprint on every intent: the rules-file hash, the code version and the price source next to the stored features, so any decision can be reproduced after the rules change (migration 0004).
 - [x] A resume point for the log stream: after a reconnect, the followed wallets' and the migration authority's signatures since the last seen one are fetched, so a dropped connection loses no print and no migration (seeded from `wallet_prints` and `chain_events` at boot, so a restart resumes too).
 - [x] Before the first real SOL, moved up from Phase 5: a short written threat model (`docs/THREAT-MODEL.md`), secret scanning in CI (gitleaks over the tree and the history), and the failure drills as a script (`apps/engine/deploy/drill.sh`: RPC cut, Postgres stopped, unattended restart), each ending in a safe stop. The drills' first run on the host is recorded in `docs/STATE.md`.
-- [ ] mirror-follow on webhooks with the copy gap measured.
+- [x] mirror-follow with the copy gap measured: prints of the owner's followed wallets (Engine → Followed wallets, six at most) become intents through the full gate chain at half size, sells close the position, every copy is an `events` row with its gap, and the evaluator demotes a wallet whose last ten copies lost money. On the log stream the collector already holds rather than a separate webhook.
 - [ ] Integration tests for the full path on devnet.
 
 Exit condition: 30 days in suggest mode with a 3 SOL wallet, 50 executed intents with no double signing and no expired transaction, the reason-code distribution readable on the console, and a first honest replay over a month of collected data.
@@ -70,7 +70,7 @@ Exit condition: 30 days in suggest mode with a 3 SOL wallet, 50 executed intents
 
 - [ ] `shadow` mode: a rule runs on the live stream and is evaluated without executing; the precondition before suggest for every new rule.
 - [x] The daily `evaluator`: 14-day rule stats, bounded weight moves, disabling negative rules, every change with a recorded reason (landed in Phase 2 with the outcomes, since shadow intents are exactly what it consumes).
-- [ ] Followed-wallet evaluation by copy gap and slippage, with demotion.
+- [x] Followed-wallet evaluation by copy gap and slippage, with demotion (landed in Phase 2 with mirror-follow: the daily pass over the last ten copies' 30-minute outcomes).
 - [ ] Promotion to auto per rule under the ADR-0004 conditions, and automatic demotion to suggest.
 - [ ] `migration-snipe` over a webhook in suggest mode.
 - [ ] Size reduction after a losing day and the exposure cap on tokens younger than 90 minutes.

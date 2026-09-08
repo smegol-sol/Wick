@@ -324,3 +324,101 @@ test("decision loop: a candidate a rule likes asks for a live supply map when th
   await new DecisionLoop(d, CFG).tick();
   assert.deepEqual(asked, [MINT], "the launch-time map is older than four minutes");
 });
+
+const WALLET = "FoLLow11111111111111111111111111111111111111";
+function trade(
+  side: "buy" | "sell",
+  ts: number | null = NOW - 800,
+): import("@wick/core/chain").Trade {
+  return {
+    sig: `sig-${side}`,
+    slot: 9,
+    ts,
+    wallet: WALLET,
+    mint: MINT,
+    side,
+    sol: 0.4,
+    amount: 1e6,
+  };
+}
+const copyRows = (queries: Query[]) =>
+  queries.filter((q) => q.sql.includes("insert into events") && q.sql.includes("'copy'"));
+
+test("mirror-follow: a followed wallet's buy becomes an entry at half size with a copy event; a stale print is not copied", async () => {
+  const { db, queries } = fakeDb();
+  const d = deps({ db });
+  const loop = new DecisionLoop(d, CFG);
+  await loop.onPrint(trade("buy"), NOW);
+  const rows = intentRows(queries);
+  assert.equal(rows.length, 1);
+  const v = rows[0]!.values;
+  assert.equal(v[3], "mirror-follow");
+  assert.equal(v[4], "mirror-follow");
+  assert.equal(v[7], "buy");
+  assert.equal(v[12], "shadow");
+  assert.match(String(v[11]), /copy FoLL…1111 buy 0\.400 SOL, gap 800 ms/);
+  assert.match(String(v[11]), /rule size ×0\.5/);
+  assert.equal(gateRows(queries).length, 6, "the full gate chain runs on a copy");
+  const copies = copyRows(queries);
+  assert.equal(copies.length, 1);
+  const data = JSON.parse(String(copies[0]!.values[1])) as Record<string, unknown>;
+  assert.equal(data.wallet, WALLET);
+  assert.equal(data.sig, "sig-buy");
+  assert.equal(data.gapMs, 800);
+  assert.equal(data.intentId, v[0]);
+  assert.equal(data.side, "buy");
+
+  await loop.onPrint(trade("buy"), NOW);
+  assert.equal(intentRows(queries).length, 1, "the cooldown holds for the same mint and rule");
+
+  const stale = fakeDb();
+  await new DecisionLoop(deps({ db: stale.db }), CFG).onPrint(trade("buy", NOW - 31_000), NOW);
+  assert.equal(intentRows(stale.queries).length, 0, "older than maxCopyGapMs is not copied");
+
+  const noTs = fakeDb();
+  await new DecisionLoop(deps({ db: noTs.db }), CFG).onPrint(trade("buy", null), NOW);
+  assert.equal(
+    intentRows(noTs.queries).length,
+    1,
+    "a print without a block time is copied with gap n/a",
+  );
+  assert.match(String(intentRows(noTs.queries)[0]!.values[11]), /gap n\/a/);
+});
+
+test("mirror-follow: a followed wallet's sell closes our position through the quote gate; no position, nothing", async () => {
+  const { db, queries } = fakeDb((sql) =>
+    sql.includes("from positions")
+      ? [
+          {
+            mint: MINT,
+            wallet: "W",
+            opened_at: new Date(NOW - 60_000),
+            cost_sol: 0.3,
+            created_at: new Date(NOW - 600_000),
+          },
+        ]
+      : [],
+  );
+  const loop = new DecisionLoop(deps({ db }), CFG);
+  await loop.tick();
+  const before = intentRows(queries).length;
+  await loop.onPrint(trade("sell"), NOW);
+  const exit = intentRows(queries)
+    .slice(before)
+    .find((q) => q.values[2] === "exit");
+  assert.ok(exit, "an exit intent is written");
+  assert.equal(exit.values[3], "mirror-follow");
+  assert.equal(exit.values[7], "sell");
+  assert.equal(exit.values[8], 0.3);
+  assert.match(String(exit.values[11]), /copy FoLL…1111 sell 0\.400 SOL, gap 800 ms; sell 100%/);
+  const gates = queries.filter(
+    (q) => q.sql.includes("insert into gate_results") && q.values[0] === exit.values[0],
+  );
+  assert.equal(gates.length, 1);
+  assert.equal(gates[0]!.values.length, 6, "only the quote gate runs for a sell");
+  assert.equal(copyRows(queries).length, 1);
+
+  const flat = fakeDb();
+  await new DecisionLoop(deps({ db: flat.db }), CFG).onPrint(trade("sell"), NOW);
+  assert.equal(intentRows(flat.queries).length, 0, "no position in that mint, no exit");
+});

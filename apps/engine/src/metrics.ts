@@ -255,6 +255,19 @@ export const replayRuns = new client.Counter({
   registers: [registry],
 });
 
+export const mirrorPrints = new client.Counter({
+  name: "wick_mirror_prints_total",
+  help: "Prints of followed wallets by what the mirror did: copied, stale, no-features, no-position, no-rule",
+  labelNames: ["outcome"] as const,
+  registers: [registry],
+});
+
+export const walletDemotions = new client.Counter({
+  name: "wick_wallet_demotions_total",
+  help: "Followed wallets sent back to watch by the evaluator (mean of the last ten copies negative)",
+  registers: [registry],
+});
+
 export const outcomes = new client.Counter({
   name: "wick_outcomes_total",
   help: "Outcome rows written, by horizon and whether a price was measured",

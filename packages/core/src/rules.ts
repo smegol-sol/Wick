@@ -37,6 +37,16 @@ export type ExitParams = {
   takeProfit: { atPct: number; sellPct: number }[];
 };
 
+/** mirror-follow (ENGINE §9): every print of a followed wallet becomes an intent through the full gate chain. */
+export type MirrorParams = {
+  /** A print seen later than this after its block time is not copied; the gap is recorded either way. */
+  maxCopyGapMs: number;
+  /** Share of the normal size; copies are smaller than the engine's own entries. */
+  sizeMul: number;
+  /** Followed wallets at most, mirror plus smart-copy (ENGINE §9). */
+  maxWallets: number;
+};
+
 export type RuleDef =
   | {
       id: string;
@@ -45,6 +55,7 @@ export type RuleDef =
       weight: number;
       params: EntryParams;
     }
+  | { id: string; strategy: "mirror-follow"; mode: Mode; weight: number; params: MirrorParams }
   | { id: string; strategy: "exit-policy"; mode: Mode; weight: number; params: ExitParams };
 
 export type RulesFile = {
@@ -57,9 +68,17 @@ export type RulesFile = {
 };
 
 const MODES: Mode[] = ["shadow", "suggest", "auto"];
-/** The strategies the first release runs from the rules file; mirror-follow and smart-copy come later. */
-export type RuleStrategy = Extract<Strategy, "confirmed-entry" | "migration-snipe" | "exit-policy">;
-const STRATEGIES: RuleStrategy[] = ["confirmed-entry", "migration-snipe", "exit-policy"];
+/** The strategies the rules file can carry; smart-copy arrives with the profiler's scores (Phase 4). */
+export type RuleStrategy = Extract<
+  Strategy,
+  "confirmed-entry" | "migration-snipe" | "mirror-follow" | "exit-policy"
+>;
+const STRATEGIES: RuleStrategy[] = [
+  "confirmed-entry",
+  "migration-snipe",
+  "mirror-follow",
+  "exit-policy",
+];
 
 function num(obj: Record<string, unknown>, key: string, where: string, min = -Infinity): number {
   const v = obj[key];
@@ -90,6 +109,19 @@ function entryParams(raw: unknown, where: string): EntryParams {
   if (out.volLiqMax <= out.volLiqMin)
     throw new Error(`rules.yaml: ${where}: volLiqMax must exceed volLiqMin`);
   if (out.sizeMul > 1) throw new Error(`rules.yaml: ${where}: sizeMul cannot exceed 1`);
+  return out;
+}
+
+function mirrorParams(raw: unknown, where: string): MirrorParams {
+  const p = (raw ?? {}) as Record<string, unknown>;
+  const out: MirrorParams = {
+    maxCopyGapMs: num(p, "maxCopyGapMs", where, 0),
+    sizeMul: num(p, "sizeMul", where, 0),
+    maxWallets: num(p, "maxWallets", where, 1),
+  };
+  if (out.sizeMul > 1) throw new Error(`rules.yaml: ${where}: sizeMul cannot exceed 1`);
+  if (out.maxWallets > 6)
+    throw new Error(`rules.yaml: ${where}: maxWallets cannot exceed 6 (ENGINE §9)`);
   return out;
 }
 
@@ -144,6 +176,8 @@ export function validateRules(raw: unknown): RulesFile {
     const weight = num(b, "weight", id, 0);
     if (strategy === "exit-policy")
       rules.push({ id, strategy, mode, weight, params: exitParams(b.params, id) });
+    else if (strategy === "mirror-follow")
+      rules.push({ id, strategy, mode, weight, params: mirrorParams(b.params, id) });
     else rules.push({ id, strategy, mode, weight, params: entryParams(b.params, id) });
   }
   if (!rules.length) throw new Error("rules.yaml: no rules");
@@ -152,7 +186,16 @@ export function validateRules(raw: unknown): RulesFile {
 
 export function entryRules(file: RulesFile): Extract<RuleDef, { params: EntryParams }>[] {
   return file.rules.filter(
-    (r): r is Extract<RuleDef, { params: EntryParams }> => r.strategy !== "exit-policy",
+    (r): r is Extract<RuleDef, { params: EntryParams }> =>
+      r.strategy === "confirmed-entry" || r.strategy === "migration-snipe",
+  );
+}
+
+export function mirrorRule(file: RulesFile): Extract<RuleDef, { params: MirrorParams }> | null {
+  return (
+    file.rules.find(
+      (r): r is Extract<RuleDef, { params: MirrorParams }> => r.strategy === "mirror-follow",
+    ) ?? null
   );
 }
 

@@ -27,6 +27,7 @@ import { startHttp } from "./http.ts";
 import { Collector } from "./ingest/collector.ts";
 import { LogStream, wsUrlOf } from "./ingest/stream.ts";
 import type { RuleView } from "@wick/core/api";
+import { mirrorRule } from "@wick/core/rules";
 import { rpcUrls } from "@wick/core/rpc";
 import { errText, logger, setLogLevel } from "./log.ts";
 import * as m from "./metrics.ts";
@@ -202,6 +203,7 @@ async function main(): Promise<void> {
     regime: () => regime.current(),
     enableRule: (id, by) => evaluator.enable(id, by),
     notify: (text) => notify(text),
+    maxFollowed: mirrorRule(loaded.rules)?.params.maxWallets ?? 6,
     token,
     exec: {
       vault: () => vault.state,
@@ -313,6 +315,7 @@ async function main(): Promise<void> {
       "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID unset; no bot, alerts still go through Alertmanager",
     );
   m.up.set(1);
+  collector.onPrint = (trade, seenAt) => void decision.onPrint(trade, seenAt);
   await collector.seedResume();
   stream.start();
   collector.start();

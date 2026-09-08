@@ -822,3 +822,104 @@ test(
     }
   },
 );
+
+test(
+  "followed wallets on Postgres: copies with their outcomes make the view, and the evaluator demotes a losing wallet",
+  { skip: !url },
+  async () => {
+    const { followWallet, listWallets, removeWallet, walletCopies } =
+      await import("../api/queries.ts");
+    const { Evaluator } = await import("../evaluator/evaluator.ts");
+    const db = makePool(url!);
+    const pk = "UtqNfV56F4cph21o2DcV7masPXNWvHwdDDe3EeKQ7Gz";
+    const mint = "MiRRorMint11111111111111111111111111111111";
+    try {
+      await migrate(db);
+      await db.query(
+        "delete from outcomes where intent_id in (select id from intents where mint = $1)",
+        [mint],
+      );
+      await db.query("delete from intents where mint = $1", [mint]);
+      await db.query("delete from events where msg = 'copy' and data ->> 'wallet' = $1", [pk]);
+      await db.query("delete from wallets where pk = $1", [pk]);
+      // Other tests leave followed wallets behind locally; the cap is relative to them.
+      const others = Number(
+        (
+          await db.query<{ n: string }>(
+            "select count(*)::text as n from wallets where kind = 'owner' and status = 'follow' and pk <> $1",
+            [pk],
+          )
+        ).rows[0]!.n,
+      );
+      assert.equal(await followWallet(db, pk, "test", others), "full");
+      assert.equal(await followWallet(db, pk, "test", others + 1), "ok");
+      assert.equal(
+        await followWallet(db, pk, null, others + 1),
+        "ok",
+        "re-following does not count itself",
+      );
+      let view = (await listWallets(db)).find((w) => w.pk === pk)!;
+      assert.equal(view.status, "follow");
+      assert.equal(view.label, "test");
+      assert.equal(view.copies, 0);
+      assert.equal(view.meanRetPct, null);
+      assert.equal(view.lastCopyAt, null);
+      // Eleven copied buys, the oldest a winner, the last ten losers; one sell copy without an outcome.
+      for (let i = 0; i < 11; i++) {
+        const id = `copy-${pk}-${i}`;
+        await db.query(
+          `insert into intents (id, ts, kind, strategy, rule_id, mode, mint, side, size_sol, features, why, status)
+           values ($1, now() - make_interval(mins => $2), 'entry', 'mirror-follow', 'mirror-follow', 'shadow', $3, 'buy', 0.1, '{}', 'copy', 'shadow')`,
+          [id, 120 - i * 10, mint],
+        );
+        await db.query(
+          `insert into outcomes (intent_id, horizon_sec, ret_pct) values ($1, 1800, $2)`,
+          [id, i === 0 ? 40 : -2],
+        );
+        await db.query(
+          `insert into events (ts, level, component, msg, data) values (now() - make_interval(mins => $1), 'info', 'decision', 'copy', $2)`,
+          [
+            120 - i * 10,
+            JSON.stringify({ wallet: pk, sig: `s${i}`, gapMs: 500, intentId: id, side: "buy" }),
+          ],
+        );
+      }
+      await db.query(
+        `insert into events (ts, level, component, msg, data) values (now(), 'info', 'decision', 'copy', $1)`,
+        [JSON.stringify({ wallet: pk, sig: "sell", gapMs: 700, intentId: "none", side: "sell" })],
+      );
+      const copies = await walletCopies(db, pk);
+      assert.equal(copies.length, 12);
+      assert.equal(copies[0]!.side, "sell");
+      assert.equal(copies[0]!.retPct, null);
+      view = (await listWallets(db)).find((w) => w.pk === pk)!;
+      assert.equal(view.copies, 10, "the last ten measured buys");
+      assert.equal(view.meanRetPct, -2);
+      assert.ok(view.lastCopyAt != null);
+      const evaluator = new Evaluator(
+        { db, rules: loadRules("config/rules.yaml").rules },
+        { outcomesEveryMs: 60_000, statsEveryMs: 3_600_000 },
+      );
+      await evaluator.demoteWallets();
+      view = (await listWallets(db)).find((w) => w.pk === pk)!;
+      assert.equal(view.status, "watch");
+      assert.match(view.demotedReason ?? "", /mean -2% over the last 10 copies/);
+      assert.equal(await followWallet(db, pk, null, others + 1), "ok");
+      view = (await listWallets(db)).find((w) => w.pk === pk)!;
+      assert.equal(view.status, "follow");
+      assert.equal(view.demotedReason, null, "following again clears the reason");
+      assert.equal(await removeWallet(db, pk), true);
+      assert.equal(await removeWallet(db, pk), false);
+    } finally {
+      await db
+        .query("delete from outcomes where intent_id like $1", [`copy-${pk}-%`])
+        .catch(() => {});
+      await db.query("delete from intents where mint = $1", [mint]).catch(() => {});
+      await db
+        .query("delete from events where msg = 'copy' and data ->> 'wallet' = $1", [pk])
+        .catch(() => {});
+      await db.query("delete from wallets where pk = $1", [pk]).catch(() => {});
+      await db.end();
+    }
+  },
+);

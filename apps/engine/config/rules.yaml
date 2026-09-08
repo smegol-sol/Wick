@@ -42,6 +42,15 @@ rules:
       minNetFlowSol5m: 0
       followBoost: 1.5
       sizeMul: 0.5
+  # Every print of a followed wallet (Engine → Followed wallets) becomes an intent through the full gate chain.
+  mirror-follow:
+    strategy: mirror-follow
+    mode: shadow
+    weight: 1
+    params:
+      maxCopyGapMs: 30000
+      sizeMul: 0.5
+      maxWallets: 6
   exit-policy:
     strategy: exit-policy
     mode: shadow

@@ -13,6 +13,7 @@ import {
   type ReplayRunView,
   type RuleView,
   type TokenView,
+  type WalletView,
   type WsMessage,
 } from "@wick/core/api";
 import * as mock from "./mock.ts";
@@ -116,6 +117,26 @@ export const api = {
     isMock() ? delay(120).then(() => mock.mockRules(Date.now())) : request(API_ROUTES.rules),
   replays: (): Promise<ReplayRunView[]> =>
     isMock() ? delay(120).then(() => mock.mockReplays(Date.now())) : request(API_ROUTES.replays),
+  wallets: (): Promise<WalletView[]> =>
+    isMock() ? delay(120).then(() => mock.mockWallets(Date.now())) : request(API_ROUTES.wallets),
+  followWallet: (pk: string, label: string, code: string): Promise<{ ok: true }> =>
+    isMock()
+      ? delay(150).then(() => ({ ok: true as const }))
+      : request(API_ROUTES.wallets, {
+          method: "POST",
+          body: JSON.stringify({ pk, label: label || null, code }),
+        }),
+  walletStatus: (pk: string, status: "follow" | "watch", code?: string): Promise<{ ok: true }> =>
+    isMock()
+      ? delay(150).then(() => ({ ok: true as const }))
+      : request(`${API_ROUTES.wallet(pk)}/status`, {
+          method: "POST",
+          body: JSON.stringify({ status, code }),
+        }),
+  removeWallet: (pk: string): Promise<{ ok: true }> =>
+    isMock()
+      ? delay(150).then(() => ({ ok: true as const }))
+      : request(API_ROUTES.wallet(pk), { method: "DELETE" }),
   approve: (id: string, body: IntentDecision): Promise<IntentView> =>
     isMock()
       ? delay(200).then(() => {

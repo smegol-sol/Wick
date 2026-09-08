@@ -50,7 +50,7 @@ Exit condition: 72 hours of uninterrupted stream, the Operations board showing e
 - [ ] The four microstructure features: net flow, organic volume, depth in both directions, holder divergence (ENGINE.md §10).
 - [x] The regime layer with one size multiplier for the whole engine, and the funnel metric per layer (ENGINE.md §3 and §11).
 - [ ] The defensive MEV policy in the executor for tier 1, and the `mev-suspect` flag on fills worse than the quote (ENGINE.md §12).
-- [ ] `replay`: the decision and gates run over stored snapshots with a conservative execution model, results labelled `replay` (ADR-0007).
+- [x] `replay`: the decision and gates run over stored snapshots with a conservative execution model, results labelled `replay` (ADR-0007). Version 1 scores entries at the evaluator's 30-minute horizon; the exit policy in replay is a later slice.
 - [x] `executor` through `ChainAdapter`: quote, build (Jupiter, priority fee under the risk.yaml cap), simulate, sign with the sealed key, send, confirm, read balances before and after, the fill and the position written, `mev-suspect` flagged; one intent at a time, locked by its status and one execution row per intent; entries wait and expire under a halt, exits keep running. The `execution` gate and its three codes.
 - [x] The vault on the host (`vault:init`) unsealed from the API with the passphrase and a TOTP code, the kill-switch file checked every second, wallet caps in code (per transaction, per day, operating balance).
 - [x] Every mutating API call writes an `events` row; approve, halt, halt-clear (second factor), unseal (second factor) and seal wired to the executor (ADR-0009).

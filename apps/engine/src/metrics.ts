@@ -248,6 +248,13 @@ export const telegram = new client.Counter({
   registers: [registry],
 });
 
+export const replayRuns = new client.Counter({
+  name: "wick_replay_runs_total",
+  help: "Replay runs by status (finished, failed)",
+  labelNames: ["status"] as const,
+  registers: [registry],
+});
+
 export const outcomes = new client.Counter({
   name: "wick_outcomes_total",
   help: "Outcome rows written, by horizon and whether a price was measured",

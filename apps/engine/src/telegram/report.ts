@@ -85,7 +85,7 @@ export async function dailyReport(db: Db, dayStartMs: number): Promise<DailyRepo
       weight: number;
       disabled: boolean;
     }>(
-      `select distinct on (rule_id) rule_id, n, win_rate, expectancy, weight, disabled from rule_stats order by rule_id, changed_at desc`,
+      `select distinct on (rule_id) rule_id, n, win_rate, expectancy, weight, disabled from rule_stats where replay_run_id is null order by rule_id, changed_at desc`,
     ),
   ]);
   const byStatus: Record<string, number> = {};

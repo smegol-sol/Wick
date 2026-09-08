@@ -657,3 +657,168 @@ test(
     }
   },
 );
+
+test(
+  "replay on Postgres: the production rules and gates over stored rows, fills from the model, outcomes and a labelled run",
+  { skip: !url },
+  async () => {
+    const { replay } = await import("../replay/replay.ts");
+    const { listIntents } = await import("../api/queries.ts");
+    const db = makePool(url!);
+    const mint = "RePLay111111111111111111111111111111111111";
+    const T0 = Date.UTC(2032, 0, 1, 0, 0, 0);
+    const risk = loadRisk("config/risk.yaml");
+    const loaded = loadRules("config/rules.yaml");
+    try {
+      await migrate(db);
+      await db.query(
+        "delete from outcomes where intent_id in (select id from intents where mint = $1)",
+        [mint],
+      );
+      await db.query(
+        "delete from gate_results where intent_id in (select id from intents where mint = $1)",
+        [mint],
+      );
+      await db.query("delete from intents where mint = $1", [mint]);
+      await db.query("delete from rule_stats where replay_run_id like 'replay-%'");
+      await db.query("delete from replay_runs where window_start = $1", [new Date(T0)]);
+      for (const t of ["token_snapshots", "audits", "launch_txs", "tokens", "sol_price"])
+        await db
+          .query(
+            `delete from ${t} where ${t === "sol_price" ? "ts >= $1 and ts < $2" : "mint = $3"}`,
+            [new Date(T0 - 600_000), new Date(T0 + 7_200_000), mint],
+          )
+          .catch(() => {});
+      // A bonding token ten minutes old at T0 that satisfies confirmed-entry, sampled once a second for 40 minutes.
+      await db.query(
+        `insert into tokens (mint, symbol, name, creator, created_at, stage) values ($1, 'RPL', 'Replay', 'Dev1111111111111111111111111111111111111111', $2, 'bonding')`,
+        [mint, new Date(T0 - 600_000)],
+      );
+      await db.query(
+        `insert into audits (mint, at, program, mint_auth, freeze_auth, extensions, lp_state, decimals, supply)
+         values ($1, $2, 'token', false, false, $3, 'curve', 6, 1000000000)`,
+        [
+          mint,
+          new Date(T0 - 500_000),
+          JSON.stringify({
+            transferFeeBps: 0,
+            hook: false,
+            permanentDelegate: false,
+            defaultFrozen: false,
+          }),
+        ],
+      );
+      await db.query(
+        `insert into launch_txs (mint, slot, creator, buyers, bundle_pct, sniper_pct) values ($1, 1, 'Dev1111111111111111111111111111111111111111', $2, 6, 6)`,
+        [
+          mint,
+          JSON.stringify([
+            { wallet: "Dev1111111111111111111111111111111111111111", slot: 1, sol: 2, pct: 6 },
+          ]),
+        ],
+      );
+      const snapValues: unknown[] = [];
+      const tuples: string[] = [];
+      let n = 0;
+      for (let s = -300; s < 2400; s++) {
+        const ts = T0 + s * 1000;
+        // Liquidity climbs (positive net flow), price climbs 20% over the first half hour then holds.
+        const liq = 6000 + Math.max(0, s + 300) * 1;
+        const price = 0.001 * (1 + Math.min(0.2, (Math.max(0, s) / 1800) * 0.2));
+        const k = n * 12;
+        tuples.push(
+          `($${k + 1},$${k + 2},$${k + 3},$${k + 4},$${k + 5},$${k + 6},$${k + 7},$${k + 8},$${k + 9},$${k + 10},$${k + 11},$${k + 12})`,
+        );
+        snapValues.push(new Date(ts), mint, price, 50_000, liq, 2000, null, null, 30, 10, 120, 20);
+        n++;
+        if (n === 500 || s === 2399) {
+          await db.query(
+            `insert into token_snapshots (ts, mint, price, mc, liq, vol5m, vol24, tx24, buys5m, sells5m, holders, top10, source) values ${tuples.map((t) => t.replace(")", ",'test')")).join(",")}`,
+            snapValues,
+          );
+          snapValues.length = 0;
+          tuples.length = 0;
+          n = 0;
+        }
+      }
+      for (let mnt = -10; mnt < 45; mnt++)
+        await db.query("insert into sol_price (ts, usd) values ($1, 100) on conflict do nothing", [
+          new Date(T0 + mnt * 60_000),
+        ]);
+
+      const view = await replay(db, {
+        fromMs: T0,
+        toMs: T0 + 600_000,
+        rules: loaded.rules,
+        rulesHash: loaded.hash,
+        risk,
+        equitySol: 15,
+        codeVersion: "test",
+      });
+      assert.ok(view.id.startsWith("replay-"));
+      assert.ok(view.finishedAt);
+      assert.ok(view.summary, "a summary is written");
+      assert.ok(view.summary!.intents >= 1, "the rule fired at least once in ten minutes");
+      assert.ok(view.summary!.executed >= 1, "and the model filled it");
+      assert.ok(
+        view.summary!.expectancy != null && view.summary!.expectancy > 0,
+        "the price rose after the fill",
+      );
+      const rows = await db.query<{
+        status: string;
+        replay_run_id: string;
+        why: string;
+        price_source: string;
+      }>(
+        "select status, replay_run_id, why, price_source from intents where mint = $1 order by ts",
+        [mint],
+      );
+      assert.equal(rows.rows[0]!.replay_run_id, view.id);
+      assert.equal(rows.rows[0]!.status, "executed");
+      assert.equal(rows.rows[0]!.price_source, "replay");
+      assert.match(rows.rows[0]!.why, /replay fill/);
+      const oc = await db.query<{ n: string }>(
+        "select count(*)::text as n from outcomes o join intents i on i.id = o.intent_id where i.mint = $1 and o.ret_pct is not null",
+        [mint],
+      );
+      assert.ok(Number(oc.rows[0]!.n) >= 3, "three horizons per executed intent");
+      const live = await listIntents(db, null, 500);
+      assert.equal(
+        live.some((v) => v.intent.mint === mint),
+        false,
+        "replay rows never reach the live list",
+      );
+      const rs = await db.query<{ n: string }>(
+        "select count(*)::text as n from rule_stats where replay_run_id = $1",
+        [view.id],
+      );
+      assert.equal(Number(rs.rows[0]!.n), 2, "one row per entry rule");
+    } finally {
+      await db
+        .query("delete from outcomes where intent_id in (select id from intents where mint = $1)", [
+          mint,
+        ])
+        .catch(() => {});
+      await db
+        .query(
+          "delete from gate_results where intent_id in (select id from intents where mint = $1)",
+          [mint],
+        )
+        .catch(() => {});
+      await db.query("delete from intents where mint = $1", [mint]).catch(() => {});
+      await db.query("delete from rule_stats where replay_run_id like 'replay-%'").catch(() => {});
+      await db
+        .query("delete from replay_runs where window_start = $1", [new Date(T0)])
+        .catch(() => {});
+      for (const t of ["token_snapshots", "audits", "launch_txs", "tokens"])
+        await db.query(`delete from ${t} where mint = $1`, [mint]).catch(() => {});
+      await db
+        .query("delete from sol_price where ts >= $1 and ts < $2", [
+          new Date(T0 - 600_000),
+          new Date(T0 + 3_600_000),
+        ])
+        .catch(() => {});
+      await db.end();
+    }
+  },
+);

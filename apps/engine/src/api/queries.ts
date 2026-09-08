@@ -120,10 +120,13 @@ export async function listIntents(
 ): Promise<IntentView[]> {
   const res = status
     ? await db.query<IntentRow>(
-        `${INTENT_SELECT} where i.status = $1 order by i.ts desc limit $2`,
+        `${INTENT_SELECT} where i.replay_run_id is null and i.status = $1 order by i.ts desc limit $2`,
         [status, limit],
       )
-    : await db.query<IntentRow>(`${INTENT_SELECT} order by i.ts desc limit $1`, [limit]);
+    : await db.query<IntentRow>(
+        `${INTENT_SELECT} where i.replay_run_id is null order by i.ts desc limit $1`,
+        [limit],
+      );
   const gates = await gatesFor(
     db,
     res.rows.map((r) => r.id),
@@ -244,7 +247,7 @@ export async function countOpenPositions(db: Db): Promise<number> {
 
 export async function countPending(db: Db): Promise<number> {
   const res = await db.query<{ n: string }>(
-    `select count(*)::text as n from intents where status = 'proposed' and ts + make_interval(secs => coalesce(ttl_ms, ${DEFAULT_TTL}) / 1000.0) > now()`,
+    `select count(*)::text as n from intents where replay_run_id is null and status = 'proposed' and ts + make_interval(secs => coalesce(ttl_ms, ${DEFAULT_TTL}) / 1000.0) > now()`,
   );
   return Number(res.rows[0]?.n ?? 0);
 }
@@ -342,7 +345,10 @@ export async function tokenView(db: Db, mint: string): Promise<TokenView | null>
       depth_sell_2pct: number | null;
     }>("select * from microstructure where mint = $1 order by at desc limit 1", [mint]),
     candlesFor(db, mint, 6 * 3600),
-    db.query<IntentRow>(`${INTENT_SELECT} where i.mint = $1 order by i.ts desc limit 20`, [mint]),
+    db.query<IntentRow>(
+      `${INTENT_SELECT} where i.replay_run_id is null and i.mint = $1 order by i.ts desc limit 20`,
+      [mint],
+    ),
   ]);
   const s = snap.rows[0];
   const a = audit.rows[0];
@@ -451,12 +457,12 @@ export async function funnelView(
   const [rej, adj] = await Promise.all([
     db.query<{ gate: string; reason: string; n: string }>(
       `select g.gate, g.reason_code as reason, count(*)::text as n from gate_results g join intents i on i.id = g.intent_id
-        where g.passed = false and i.ts > $1 group by g.gate, g.reason_code order by count(*) desc`,
+        where g.passed = false and i.ts > $1 and i.replay_run_id is null group by g.gate, g.reason_code order by count(*) desc`,
       [new Date(sinceMs)],
     ),
     db.query<{ gate: string; n: string }>(
       `select g.gate, count(*)::text as n from gate_results g join intents i on i.id = g.intent_id
-        where g.adjustment is not null and i.ts > $1 group by g.gate order by count(*) desc`,
+        where g.adjustment is not null and i.ts > $1 and i.replay_run_id is null group by g.gate order by count(*) desc`,
       [new Date(sinceMs)],
     ),
   ]);

@@ -9,14 +9,14 @@ Every new rule goes through the same order: replay, then shadow, then suggest, t
 ## Phase 0: governance and quality gates (one week)
 
 - [x] GitHub Actions on every PR: typecheck, lint, format:check, test, audit, build, smoke.
-- [ ] `main` protection: no direct pushes, one review, green CI, squash merge. (A manual GitHub setting; steps in CONTRIBUTING.md.)
+- [x] `main` protection: no direct pushes, green CI on four checks, squash merge, zero required approvals while there is one maintainer (a PR's author cannot approve it). Ruleset active 2026-09-08; a direct push was refused with `GH013`.
 - [x] Conventional Commits with commitlint on the PR title.
 - [x] PR and issue templates, CODEOWNERS, SECURITY.md, CONTRIBUTING.md.
 - [x] Weekly Dependabot and `npm audit --audit-level=high` in CI.
 - [x] The state ledger `docs/STATE.md` and the rule to update it in every PR.
 - [x] A light monorepo: `apps/desk` (the original), `apps/engine`, `packages/core`.
 
-Exit condition: a PR fails when it breaks a test and cannot merge without review.
+Exit condition: a PR fails when it breaks a test and cannot merge until the checks are green; nothing lands on `main` outside a pull request. Met 2026-09-08.
 
 ## Phase 1: host and data (two weeks)
 

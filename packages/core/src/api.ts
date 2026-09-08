@@ -32,6 +32,8 @@ export const API_ROUTES = {
   rules: "/api/rules",
   replays: "/api/replays",
   ruleEnable: (id: string) => `/api/rules/${encodeURIComponent(id)}/enable`,
+  wallets: "/api/wallets",
+  wallet: (pk: string) => `/api/wallets/${encodeURIComponent(pk)}`,
   halt: "/api/halt",
   haltClear: "/api/halt/clear",
   unseal: "/api/vault/unseal",
@@ -181,6 +183,20 @@ export type RuleView = {
   /** Disabled by the evaluator (ADR-0004); only the operator re-enables. */
   disabled: boolean;
   disabledReason: string | null;
+};
+
+/** A followed wallet (ENGINE §9): the owner types it in; the evaluator may demote it to `watch`. */
+export type WalletView = {
+  pk: string;
+  label: string | null;
+  status: "follow" | "watch";
+  trackedSince: number;
+  /** Copies with a measured 30-minute outcome, their mean signed return in percent, and the last copy. */
+  copies: number;
+  meanRetPct: number | null;
+  lastCopyAt: number | null;
+  /** Why the evaluator demoted it, null while followed. */
+  demotedReason: string | null;
 };
 
 export type ReplayRunView = {

@@ -11,12 +11,59 @@ function pct(v: number | null | undefined, digits = 0): string {
   return v == null ? "n/a" : formatPct(v * 100, digits);
 }
 
+const shortPk = (pk: string) => `${pk.slice(0, 4)}…${pk.slice(-4)}`;
+/** Base58 alphabet and a plausible length; the engine checks the 32 bytes. */
+const pkLooksValid = (pk: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(pk.trim());
+
 export function EngineScreen() {
   const qc = useQueryClient();
   const state = useQuery({ queryKey: ["state"], queryFn: api.state, retry: 1 });
   const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules, retry: 1 });
   const funnel = useQuery({ queryKey: ["funnel"], queryFn: api.funnel, retry: 1 });
   const replays = useQuery({ queryKey: ["replays"], queryFn: api.replays, retry: 1 });
+  const wallets = useQuery({ queryKey: ["wallets"], queryFn: api.wallets, retry: 1 });
+  const [walletPk, setWalletPk] = useState("");
+  const [walletLabel, setWalletLabel] = useState("");
+  const [walletCode, setWalletCode] = useState("");
+  const [walletNotice, setWalletNotice] = useState<{ tone: "up" | "down"; text: string } | null>(
+    null,
+  );
+  const refreshWallets = () => void qc.invalidateQueries({ queryKey: ["wallets"] });
+  const follow = useMutation({
+    mutationFn: (v: { pk: string; label: string; code: string }) =>
+      api.followWallet(v.pk, v.label, v.code),
+    onSuccess: (_r, v) => {
+      setWalletPk("");
+      setWalletLabel("");
+      setWalletCode("");
+      setWalletNotice({ tone: "up", text: `${t("following")} ${v.label || v.pk}` });
+      refreshWallets();
+    },
+    onError: (e) => setWalletNotice({ tone: "down", text: failureText(e) }),
+  });
+  const walletStatus = useMutation({
+    mutationFn: (v: { pk: string; status: "follow" | "watch"; code?: string }) =>
+      api.walletStatus(v.pk, v.status, v.code),
+    onSuccess: (_r, v) => {
+      setWalletCode("");
+      setWalletNotice({
+        tone: v.status === "follow" ? "up" : "down",
+        text: `${v.status === "follow" ? t("following") : t("watching")} ${v.pk}`,
+      });
+      refreshWallets();
+    },
+    onError: (e) => setWalletNotice({ tone: "down", text: failureText(e) }),
+  });
+  const removeWallet = useMutation({
+    mutationFn: (pk: string) => api.removeWallet(pk),
+    onSuccess: (_r, pk) => {
+      setWalletNotice({ tone: "down", text: `${t("remove").toLowerCase()} ${pk}` });
+      refreshWallets();
+    },
+    onError: (e) => setWalletNotice({ tone: "down", text: failureText(e) }),
+  });
+  const walletCodeOk = normalizeCode(walletCode) != null;
+  const walletBusy = follow.isPending || walletStatus.isPending || removeWallet.isPending;
   const [reason, setReason] = useState("");
   const [token, setToken] = useState(readToken());
   const [mock, setMockState] = useState(isMock());
@@ -257,6 +304,122 @@ export function EngineScreen() {
               </div>
             ))
           )}
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <Kicker>{t("wallets")}</Kicker>
+        <div className="panel flex flex-col gap-3 p-4">
+          {wallets.isError ? (
+            <Empty>{t("offline")}</Empty>
+          ) : (wallets.data ?? []).length === 0 ? (
+            <Empty>{t("noWallets")}</Empty>
+          ) : (
+            <ul className="flex flex-col divide-y divide-border">
+              {wallets.data!.map((w) => (
+                <li
+                  key={w.pk}
+                  className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:gap-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{w.label ?? shortPk(w.pk)}</span>
+                      <Pill tone={w.status === "follow" ? "up" : "muted"}>
+                        {w.status === "follow" ? t("following") : t("watching")}
+                      </Pill>
+                    </div>
+                    <div className="font-mono text-2xs text-muted">{w.pk}</div>
+                    <div className="text-2xs text-muted">
+                      {w.copies} {t("copies")} · {t("meanRet")}{" "}
+                      {w.meanRetPct == null ? "n/a" : formatPct(w.meanRetPct, 1)} · {t("lastCopy")}{" "}
+                      {w.lastCopyAt == null ? "n/a" : new Date(w.lastCopyAt).toLocaleString()}
+                      {w.demotedReason ? ` · ${w.demotedReason}` : ""}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {w.status === "follow" ? (
+                      <Button
+                        disabled={walletBusy}
+                        onClick={() => walletStatus.mutate({ pk: w.pk, status: "watch" })}
+                      >
+                        {t("watch")}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="up"
+                        disabled={walletBusy || !walletCodeOk}
+                        onClick={() =>
+                          walletStatus.mutate({
+                            pk: w.pk,
+                            status: "follow",
+                            code: normalizeCode(walletCode)!,
+                          })
+                        }
+                      >
+                        {t("follow")}
+                      </Button>
+                    )}
+                    <Button
+                      variant="danger"
+                      disabled={walletBusy}
+                      onClick={() => removeWallet.mutate(w.pk)}
+                    >
+                      {t("remove")}
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={walletPk}
+              onChange={(e) => setWalletPk(e.target.value)}
+              placeholder={t("walletPk")}
+              autoComplete="off"
+              className="h-10 flex-1 rounded-sm bg-elevated px-3 font-mono text-sm outline-none"
+            />
+            <input
+              value={walletLabel}
+              onChange={(e) => setWalletLabel(e.target.value)}
+              placeholder={t("walletLabel")}
+              maxLength={40}
+              className="h-10 rounded-sm bg-elevated px-3 text-sm outline-none sm:w-40"
+            />
+            <input
+              value={walletCode}
+              onChange={(e) => setWalletCode(e.target.value)}
+              placeholder={t("code")}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={7}
+              className="h-10 w-full rounded-sm bg-elevated px-3 font-mono text-sm outline-none sm:w-36"
+            />
+            <Button
+              variant="up"
+              disabled={walletBusy || !walletCodeOk || !pkLooksValid(walletPk)}
+              onClick={() =>
+                follow.mutate({
+                  pk: walletPk.trim(),
+                  label: walletLabel.trim(),
+                  code: normalizeCode(walletCode)!,
+                })
+              }
+            >
+              {t("follow")}
+            </Button>
+          </div>
+          {walletNotice ? (
+            <p
+              className={cn(
+                "font-mono text-2xs",
+                walletNotice.tone === "up" ? "text-up" : "text-down",
+              )}
+            >
+              {walletNotice.text}
+            </p>
+          ) : null}
+          <p className="text-2xs text-subtle">{t("walletHint")}</p>
         </div>
       </section>
 

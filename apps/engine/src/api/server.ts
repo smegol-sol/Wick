@@ -40,6 +40,8 @@ export type ApiDeps = {
   enableRule: (id: string, by: string) => Promise<boolean>;
   /** One line to the owner's phone for what changed (the Telegram bot); optional. */
   notify?: (text: string) => void;
+  /** Followed wallets at most (the mirror rule's cap; ENGINE §9 says six). */
+  maxFollowed?: number;
   /** Bearer token; when null (local dev) every caller is the owner. */
   token: string | null;
   /** The executor's side: vault state, wallet reads and the second factor. */
@@ -189,6 +191,8 @@ export function createApi(deps: ApiDeps) {
         if (path === API_ROUTES.rules) return (json(res, 200, deps.rules()), true);
         if (path === API_ROUTES.replays)
           return (json(res, 200, await q.listReplays(deps.db)), true);
+        if (path === API_ROUTES.wallets)
+          return (json(res, 200, await q.listWallets(deps.db)), true);
         const tk = path.match(/^\/api\/tokens\/([^/]+)$/);
         if (tk) {
           const view = await q.tokenView(deps.db, decodeURIComponent(tk[1]!));
@@ -239,6 +243,63 @@ export function createApi(deps: ApiDeps) {
           broadcast({ type: "state", state: await state() });
           return (json(res, 200, { ok: true }), true);
         }
+        if (path === API_ROUTES.wallets) {
+          const body = await readJson(req);
+          const pk = typeof body.pk === "string" ? body.pk.trim() : "";
+          const label =
+            typeof body.label === "string" && body.label.trim()
+              ? body.label.trim().slice(0, 40)
+              : null;
+          const code = typeof body.code === "string" ? body.code : "";
+          if (!(await deps.exec.secondFactor(code)))
+            return (json(res, 403, { error: "second factor rejected", status: 403 }), true);
+          const r = await q.followWallet(deps.db, pk, label, deps.maxFollowed ?? 6);
+          if (r === "invalid")
+            return (json(res, 400, { error: "not a Solana public key", status: 400 }), true);
+          if (r === "full")
+            return (
+              json(res, 409, { error: `already following ${deps.maxFollowed ?? 6}`, status: 409 }),
+              true
+            );
+          await audit("wallet followed", { wallet: pk, label });
+          deps.notify?.(`following ${label ?? pk}`);
+          broadcast({
+            type: "alert",
+            level: "info",
+            msg: `following ${label ?? pk}`,
+            ts: Date.now(),
+          });
+          return (json(res, 200, { ok: true }), true);
+        }
+        const ws = path.match(/^\/api\/wallets\/([^/]+)\/status$/);
+        if (ws) {
+          const pk = decodeURIComponent(ws[1]!);
+          const body = await readJson(req);
+          const status =
+            body.status === "follow" ? "follow" : body.status === "watch" ? "watch" : null;
+          if (!status)
+            return (json(res, 400, { error: "status must be follow or watch", status: 400 }), true);
+          if (status === "follow") {
+            const code = typeof body.code === "string" ? body.code : "";
+            if (!(await deps.exec.secondFactor(code)))
+              return (json(res, 403, { error: "second factor rejected", status: 403 }), true);
+            const r = await q.followWallet(deps.db, pk, null, deps.maxFollowed ?? 6);
+            if (r === "invalid")
+              return (json(res, 400, { error: "not a Solana public key", status: 400 }), true);
+            if (r === "full")
+              return (
+                json(res, 409, {
+                  error: `already following ${deps.maxFollowed ?? 6}`,
+                  status: 409,
+                }),
+                true
+              );
+          } else if (!(await q.watchWallet(deps.db, pk, "set to watch by the owner")))
+            return (json(res, 404, { error: "unknown wallet", status: 404 }), true);
+          await audit("wallet status", { wallet: pk, status });
+          deps.notify?.(`wallet ${pk.slice(0, 4)}…${pk.slice(-4)} now ${status}`);
+          return (json(res, 200, { ok: true }), true);
+        }
         if (path === API_ROUTES.halt) {
           const body = await readJson(req);
           const reason =
@@ -287,6 +348,17 @@ export function createApi(deps: ApiDeps) {
           deps.notify?.("vault sealed");
           broadcast({ type: "alert", level: "warn", msg: "vault sealed", ts: Date.now() });
           broadcast({ type: "state", state: await state() });
+          return (json(res, 200, { ok: true }), true);
+        }
+      }
+      if (req.method === "DELETE") {
+        const w = path.match(/^\/api\/wallets\/([^/]+)$/);
+        if (w) {
+          const pk = decodeURIComponent(w[1]!);
+          if (!(await q.removeWallet(deps.db, pk)))
+            return (json(res, 404, { error: "unknown wallet", status: 404 }), true);
+          await audit("wallet removed", { wallet: pk });
+          deps.notify?.(`wallet ${pk.slice(0, 4)}…${pk.slice(-4)} removed`);
           return (json(res, 200, { ok: true }), true);
         }
       }

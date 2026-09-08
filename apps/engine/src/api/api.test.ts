@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { candleBucketSec } from "./queries.ts";
+import type { Db } from "../db/pool.ts";
+import { candleBucketSec, followWallet, isPublicKey } from "./queries.ts";
 import { authorized, matchIntentAction, modeCounts } from "./server.ts";
 
 test("bearer auth is exact and optional only when no token is configured", () => {
@@ -44,4 +45,32 @@ test("mode counts come from the rules, every mode present", () => {
     ]),
     { shadow: 2, suggest: 1, auto: 0 },
   );
+});
+
+test("followed wallets: a public key is base58 of 32 bytes, and the cap holds", async () => {
+  assert.equal(isPublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"), true);
+  assert.equal(isPublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wE"), false, "too short for 32 bytes");
+  assert.equal(isPublicKey("0OIl"), false, "not base58");
+  assert.equal(isPublicKey(""), false);
+  const writes: string[] = [];
+  const dbWith = (following: number): Db =>
+    ({
+      query: async (sql: string) => {
+        if (sql.includes("count(*)")) return { rows: [{ n: String(following) }], rowCount: 1 };
+        writes.push(sql);
+        return { rows: [], rowCount: 1 };
+      },
+    }) as unknown as Db;
+  assert.equal(await followWallet(dbWith(0), "nope", null, 6), "invalid");
+  assert.equal(
+    await followWallet(dbWith(6), "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", null, 6),
+    "full",
+  );
+  assert.equal(writes.length, 0, "nothing written when refused");
+  assert.equal(
+    await followWallet(dbWith(5), "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "x", 6),
+    "ok",
+  );
+  assert.equal(writes.length, 1);
+  assert.match(writes[0]!, /insert into wallets/);
 });

@@ -18,11 +18,12 @@ import {
   evaluateExit,
   sieve,
   type EntryRule,
-  type EntryVerdict,
   type PositionState,
 } from "@wick/core/decide";
 import { runGates, type GateBook, type GateLimits, type GateQuote } from "@wick/core/gates";
-import { entryRules, exitRule, type RulesFile } from "@wick/core/rules";
+import { entryRules, exitRule, mirrorRule, type RulesFile } from "@wick/core/rules";
+import { copyGapMs } from "@wick/core/mirror";
+import type { Trade } from "@wick/core/chain";
 import { sizeEntry } from "@wick/core/sizing";
 import type { IntentView } from "@wick/core/api";
 import { getIntent, realizedPnl } from "../api/queries.ts";
@@ -254,11 +255,82 @@ export class DecisionLoop {
     };
   }
 
+  /**
+   * mirror-follow (ENGINE §9): a print of a followed wallet, as soon as the stream delivers it.
+   * A buy becomes an entry through the full gate chain at the rule's share of the normal size;
+   * a sell closes our position in that mint through the quote gate. The copy gap is recorded
+   * on every copy; a print older than the rule's limit is not copied.
+   */
+  async onPrint(trade: Trade, seenAt: number): Promise<void> {
+    const rule = mirrorRule(this.deps.rules);
+    if (!rule) return void m.mirrorPrints.inc({ outcome: "no-rule" });
+    if (this.deps.ruleState?.(rule.id)?.disabled)
+      return void m.mirrorPrints.inc({ outcome: "disabled" });
+    const now = this.now();
+    const gap = copyGapMs(trade.ts, seenAt);
+    if (gap != null && gap > rule.params.maxCopyGapMs) {
+      log.info("print too old to copy", { gapMs: gap, side: trade.side });
+      return void m.mirrorPrints.inc({ outcome: "stale" });
+    }
+    const f = this.deps.book.features(trade.mint, now);
+    if (!f) return void m.mirrorPrints.inc({ outcome: "no-features" });
+    const who = `${trade.wallet.slice(0, 4)}…${trade.wallet.slice(-4)}`;
+    const copy = `copy ${who} ${trade.side} ${trade.sol.toFixed(3)} SOL, gap ${gap == null ? "n/a" : `${gap} ms`}`;
+    if (trade.side === "buy") {
+      if (this.coolingDown(trade.mint, rule.id, now))
+        return void m.mirrorPrints.inc({ outcome: "cooldown" });
+      m.mirrorPrints.inc({ outcome: "copied" });
+      await this.proposeEntry(rule, f, { why: copy, weight: rule.weight, notes: [] }, now, {
+        wallet: trade.wallet,
+        sig: trade.sig,
+        gapMs: gap,
+      });
+      return;
+    }
+    const pos = this.bookState.positions.find((p) => p.mint === trade.mint);
+    if (!pos) return void m.mirrorPrints.inc({ outcome: "no-position" });
+    m.mirrorPrints.inc({ outcome: "copied" });
+    const equity = this.equity();
+    const sizeSol = round(pos.costSol);
+    const base = {
+      features: f,
+      mode: rule.mode,
+      side: "sell" as const,
+      sizeSol,
+      solUsd: this.deps.solUsd(),
+      book: this.gateBook(trade.mint, equity, now),
+      limits: this.limits(equity),
+      now,
+    };
+    let quote: GateQuote | null | undefined;
+    if (rule.mode !== "shadow") {
+      const q = await this.quoteFor(trade.mint, sizeSol, now);
+      if (q === "throttled") return;
+      quote = q;
+    }
+    const run = runGates({ ...base, quote, only: ["quote"] });
+    const why = [copy, "sell 100%"];
+    if (run.rejected) why.push(`rejected by ${run.rejected.gate}: ${run.rejected.reasonCode}`);
+    await this.writeIntent({
+      kind: "exit",
+      rule: { id: rule.id, strategy: rule.strategy, mode: rule.mode },
+      f,
+      side: "sell",
+      sizeSol,
+      sizing: null,
+      why: why.join("; "),
+      results: run.results,
+      now,
+      copy: { wallet: trade.wallet, sig: trade.sig, gapMs: gap },
+    });
+  }
+
   private async proposeEntry(
-    rule: EntryRule,
+    rule: { id: string; strategy: string; mode: Mode; params: { sizeMul: number } },
     f: Features,
-    v: Extract<EntryVerdict, { ok: true }>,
+    v: { why: string; weight: number; notes: string[] },
     now: number,
+    copy?: { wallet: string; sig: string; gapMs: number | null },
   ): Promise<void> {
     const t0 = performance.now();
     const solUsd = this.deps.solUsd();
@@ -322,6 +394,7 @@ export class DecisionLoop {
       why: why.join("; "),
       results: run.results,
       now,
+      copy,
     });
     m.decisionDuration.observe((performance.now() - t0) / 1000);
   }
@@ -427,6 +500,8 @@ export class DecisionLoop {
     why: string;
     results: GateResult[];
     now: number;
+    /** The followed wallet's print this intent copies (mirror-follow); written as a `copy` event. */
+    copy?: { wallet: string; sig: string; gapMs: number | null };
   }): Promise<void> {
     const rejected = x.results.find((g) => !g.passed) ?? null;
     const status = rejected
@@ -483,6 +558,14 @@ export class DecisionLoop {
         values,
       );
     }
+    if (x.copy)
+      await this.deps.db.query(
+        `insert into events (ts, level, component, msg, data) values ($1, 'info', 'decision', 'copy', $2)`,
+        [
+          new Date(x.now),
+          JSON.stringify({ ...x.copy, intentId: id, side: x.side, mint: x.f.mint, status }),
+        ],
+      );
     this.cooldown.set(`${x.f.mint}|${x.rule.id}`, x.now);
     this.state.written++;
     m.intents.inc({ mode: x.rule.mode, status });

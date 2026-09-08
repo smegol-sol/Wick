@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { adjustedMulOf, rejectedBy, ttlLeftMs } from "@wick/core/api";
 import { ApiFailure } from "./api.ts";
-import { mockFunnel, mockIntents, mockState, mockToken } from "./mock.ts";
+import { mockFunnel, mockIntents, mockState, mockToken, mockWallets } from "./mock.ts";
 import { failureText, normalizeCode, passphraseOk } from "./second-factor.ts";
 
 test("mock data is deterministic and labelled as example", () => {
@@ -14,6 +14,7 @@ test("mock data is deterministic and labelled as example", () => {
   assert.ok(mockFunnel(now).example);
   assert.ok(mockToken(a[0]!.intent.mint, now).example);
   assert.ok(a.every((v) => v.intent.mint.startsWith("ExAmpLe")));
+  assert.ok(mockWallets(now).every((w) => w.pk.startsWith("ExAmpLe")));
 });
 
 test("contract helpers: ttl, adjusted size and rejecting gate", () => {

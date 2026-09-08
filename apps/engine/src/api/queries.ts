@@ -12,8 +12,12 @@ import type {
   PositionView,
   ReplayRunView,
   TokenView,
+  WalletView,
 } from "@wick/core/api";
 import { adjustedMulOf } from "@wick/core/api";
+import { fromB58 } from "@wick/core/base58";
+import { mirrorDemotion } from "@wick/core/mirror";
+import { SCORING_HORIZON_SEC } from "@wick/core/evaluator";
 import type { Audit, GateResult, Intent, Snapshot } from "@wick/core/contracts";
 import type { Db } from "../db/pool.ts";
 
@@ -493,4 +497,105 @@ export async function listReplays(db: Db): Promise<ReplayRunView[]> {
     finishedAt: ms(r.finished_at),
     summary: r.summary,
   }));
+}
+
+type WalletRow = {
+  pk: string;
+  label: string | null;
+  status: string;
+  tracked_since: Date;
+  stats: { demotedReason?: string } | null;
+};
+
+export type WalletCopy = { at: number; side: "buy" | "sell"; retPct: number | null };
+
+/**
+ * The last `limit` copies of a wallet's prints, newest first: every `copy` event with the
+ * intent's scoring-horizon outcome where the intent was a live buy. A sell copy has no outcome
+ * of its own; it counts as a copy, never as a measurement.
+ */
+export async function walletCopies(db: Db, pk: string, limit = 50): Promise<WalletCopy[]> {
+  const res = await db.query<{ ts: Date; side: string; ret_pct: number | null }>(
+    `select e.ts, e.data ->> 'side' as side, o.ret_pct
+       from events e
+       left join intents i on i.id = e.data ->> 'intentId' and i.replay_run_id is null and i.side = 'buy'
+       left join outcomes o on o.intent_id = i.id and o.horizon_sec = $3
+      where e.component = 'decision' and e.msg = 'copy' and e.data ->> 'wallet' = $1
+      order by e.ts desc limit $2`,
+    [pk, limit, SCORING_HORIZON_SEC],
+  );
+  return res.rows.map((r) => ({
+    at: r.ts.getTime(),
+    side: r.side === "sell" ? "sell" : "buy",
+    retPct: r.ret_pct,
+  }));
+}
+
+function walletView(row: WalletRow, copies: WalletCopy[]): WalletView {
+  const d = mirrorDemotion([...copies].reverse().filter((c) => c.side === "buy"));
+  return {
+    pk: row.pk,
+    label: row.label,
+    status: row.status === "follow" ? "follow" : "watch",
+    trackedSince: row.tracked_since.getTime(),
+    copies: d.copies,
+    meanRetPct: d.meanRetPct,
+    lastCopyAt: copies[0]?.at ?? null,
+    demotedReason: row.status === "follow" ? null : (row.stats?.demotedReason ?? null),
+  };
+}
+
+/** The owner's wallets (kind owner), followed first, with their copy statistics. */
+export async function listWallets(db: Db): Promise<WalletView[]> {
+  const res = await db.query<WalletRow>(
+    `select pk, label, status, tracked_since, stats from wallets where kind = 'owner'
+      order by (status = 'follow') desc, tracked_since`,
+  );
+  return Promise.all(res.rows.map(async (r) => walletView(r, await walletCopies(db, r.pk))));
+}
+
+/** A valid Solana public key: base58 of exactly 32 bytes. */
+export function isPublicKey(pk: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(pk) && fromB58(pk)?.length === 32;
+}
+
+/**
+ * Follow a wallet: a new owner row, or an existing one back to follow. `maxFollowed` is the
+ * mirror rule's cap (ENGINE §9: six). Returns the reason when nothing changed.
+ */
+export async function followWallet(
+  db: Db,
+  pk: string,
+  label: string | null,
+  maxFollowed: number,
+): Promise<"ok" | "invalid" | "full"> {
+  if (!isPublicKey(pk)) return "invalid";
+  const n = await db.query<{ n: string }>(
+    `select count(*)::text as n from wallets where kind = 'owner' and status = 'follow' and pk <> $1`,
+    [pk],
+  );
+  if (Number(n.rows[0]?.n ?? 0) >= maxFollowed) return "full";
+  await db.query(
+    `insert into wallets (pk, label, kind, status, stats) values ($1, $2, 'owner', 'follow', '{}'::jsonb)
+     on conflict (pk) do update set label = coalesce(excluded.label, wallets.label), kind = 'owner',
+       status = 'follow', stats = wallets.stats - 'demotedReason' - 'demotedAt'`,
+    [pk, label],
+  );
+  return "ok";
+}
+
+/** Demote to watch (the evaluator or the owner) with the reason kept on the row; false when no such wallet. */
+export async function watchWallet(db: Db, pk: string, reason: string): Promise<boolean> {
+  const res = await db.query(
+    `update wallets set status = 'watch',
+       stats = stats || jsonb_build_object('demotedReason', $2::text, 'demotedAt', now())
+     where pk = $1 and kind = 'owner'`,
+    [pk, reason],
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+export async function removeWallet(db: Db, pk: string): Promise<boolean> {
+  const res = await db.query(`delete from wallets where pk = $1 and kind = 'owner'`, [pk]);
+  return (res.rowCount ?? 0) > 0;
 }

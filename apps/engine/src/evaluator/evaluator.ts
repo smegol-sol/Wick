@@ -16,7 +16,9 @@ import {
   type OutcomeRow,
   type RuleStats,
 } from "@wick/core/evaluator";
-import type { RulesFile } from "@wick/core/rules";
+import { mirrorDemotion } from "@wick/core/mirror";
+import { mirrorRule, type RulesFile } from "@wick/core/rules";
+import { walletCopies, watchWallet } from "../api/queries.ts";
 import type { Db } from "../db/pool.ts";
 import { errText, logger } from "../log.ts";
 import * as m from "../metrics.ts";
@@ -66,6 +68,7 @@ export class Evaluator {
   private timers: NodeJS.Timeout[] = [];
   private busy = false;
   private lastStatsAt = 0;
+  private walletsDay = "";
 
   constructor(deps: EvaluatorDeps, cfg: EvaluatorConfig) {
     this.deps = deps;
@@ -250,6 +253,37 @@ export class Evaluator {
       }
     }
     await this.load();
+    if (this.walletsDay !== dayKey(now)) {
+      this.walletsDay = dayKey(now);
+      await this.demoteWallets();
+    }
+  }
+
+  /**
+   * mirror-follow (ENGINE §9): a followed wallet whose last ten measured copies lost money on
+   * average goes back to watch; only the owner follows it again. Public for tests.
+   */
+  async demoteWallets(): Promise<void> {
+    if (!mirrorRule(this.deps.rules)) return;
+    try {
+      const res = await this.deps.db.query<{ pk: string; label: string | null }>(
+        `select pk, label from wallets where kind = 'owner' and status = 'follow'`,
+      );
+      for (const w of res.rows) {
+        const copies = (await walletCopies(this.deps.db, w.pk))
+          .reverse()
+          .filter((c) => c.side === "buy");
+        const d = mirrorDemotion(copies);
+        if (!d.demote) continue;
+        await watchWallet(this.deps.db, w.pk, d.reason);
+        m.walletDemotions.inc();
+        log.warn("wallet demoted", { wallet: w.pk, reason: d.reason });
+        this.deps.onChange?.(`wallet ${w.label ?? w.pk} demoted to watch: ${d.reason}`);
+      }
+    } catch (e) {
+      m.dbErrors.inc({ op: "wallets" });
+      log.error("wallet demotion failed", { err: errText(e) });
+    }
   }
 
   private async write(

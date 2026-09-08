@@ -142,6 +142,22 @@ export function makeSolanaAdapter(): ChainAdapter {
       return tradesOf(sig, await fetchTx(sig, signal));
     },
 
+    async signaturesSince(address, untilSig, limit, signal) {
+      const res = await rpcAny<
+        { signature: string; slot: number; err: unknown; blockTime: number | null }[]
+      >(
+        "getSignaturesForAddress",
+        [address, { limit, commitment: "confirmed", ...(untilSig ? { until: untilSig } : {}) }],
+        signal,
+      );
+      return (res ?? []).map((r) => ({
+        signature: r.signature,
+        slot: r.slot,
+        err: r.err ?? null,
+        blockTime: r.blockTime ?? null,
+      }));
+    },
+
     async txSummary(sig, signal) {
       return summaryOf(sig, await fetchTx(sig, signal));
     },

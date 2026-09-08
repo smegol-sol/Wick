@@ -56,6 +56,9 @@ test(
       const at = Date.now();
       const chain: ChainAdapter = {
         chain: "solana",
+        async signaturesSince() {
+          return [];
+        },
         async poll() {
           return [
             {

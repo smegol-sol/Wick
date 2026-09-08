@@ -13,6 +13,7 @@ import { migrate } from "./db/migrate.ts";
 import { makePool, ping } from "./db/pool.ts";
 import { DecisionLoop } from "./decision/loop.ts";
 import { Evaluator } from "./evaluator/evaluator.ts";
+import { RegimeWriter } from "./decision/regime.ts";
 import { Executor } from "./executor/executor.ts";
 import { KillSwitch } from "./executor/killswitch.ts";
 import { Vault } from "./executor/vault.ts";
@@ -74,7 +75,11 @@ async function main(): Promise<void> {
 
   const chain = makeSolanaAdapter();
   const wsUrl = cfg.solanaWsUrl ?? wsUrlOf(rpcUrls()[0]!);
-  const stream = new LogStream(wsUrl, { onEvent: (e) => void collector.onLog(e), pingMs: 20_000 });
+  const stream = new LogStream(wsUrl, {
+    onEvent: (e) => void collector.onLog(e),
+    onReconnect: (seen) => void collector.resume(seen),
+    pingMs: 20_000,
+  });
   const collector = new Collector(
     db,
     chain,
@@ -144,6 +149,11 @@ async function main(): Promise<void> {
     { outcomesEveryMs: 60_000, statsEveryMs: 3_600_000 },
   );
   const rulesView = (): RuleView[] => evaluator.view();
+  const regime = new RegimeWriter({
+    db,
+    solUsd: () => collector.state.solUsd,
+    activeMints: () => collector.sampler.active(Date.now()),
+  });
   const stopLoop = m.watchEventLoop();
   const token = process.env.DASHBOARD_TOKEN?.trim() || null;
   if (!token)
@@ -162,6 +172,7 @@ async function main(): Promise<void> {
     walletCapSol: risk.executionWalletCapSol,
     solUsd: () => collector.state.solUsd,
     rules: rulesView,
+    regime: () => regime.current(),
     enableRule: (id, by) => evaluator.enable(id, by),
     token,
     exec: {
@@ -218,6 +229,7 @@ async function main(): Promise<void> {
       cashSol: () => executor.state.walletSol,
       selfHalt: () => health().selfHalt || kill.state.active,
       ruleState: (id) => evaluator.state(id),
+      regime: () => regime.current(),
       pin: (mint) => collector.sampler.pin(mint, true, Date.now()),
       onIntent: (view) => api.broadcast({ type: "intent", intent: view }),
     },
@@ -225,8 +237,10 @@ async function main(): Promise<void> {
   );
   const server = startHttp(cfg.httpHost, cfg.httpPort, { health, version: version(), api });
   m.up.set(1);
+  await collector.seedResume();
   stream.start();
   collector.start();
+  regime.start();
   decision.start();
   evaluator.start();
   kill.start();
@@ -261,6 +275,7 @@ async function main(): Promise<void> {
     vault.seal();
     decision.stop();
     evaluator.stop();
+    regime.stop();
     collector.stop();
     stream.stop();
     stopLoop();

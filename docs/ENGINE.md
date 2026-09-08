@@ -396,6 +396,8 @@ A background writer computes `Regime` every minute from our own data and writes 
 
 The regime never rejects a token; it scales the whole engine. Its reason is shown on the dashboard next to every intent it touched. No external source is needed; the CEX order book for SOL was considered and dropped.
 
+As built: the writer samples SOL/USD into `sol_price` once a minute and reads the one-hour change from it; breadth is the share of active tokens whose latest price is at or above their price five minutes earlier, null under 10 tokens; launches and migrations per hour come from `chain_events`; the 7-day median needs 24 hourly buckets; the safety-reject rate needs 10 gate rows in the hour. An unknown input never triggers and is named in the reason. Under ×0 the loop proposes no entry and the funnel's `regime` layer shows it; exits keep running.
+
 ## 12. Execution and the MEV policy
 
 The executor is the only code that signs (ADR-0003). Its order is fixed: quote → build → simulate → sign with the key in memory → send → confirm → read balances → write `Fill`.
@@ -472,6 +474,7 @@ Never a label with a token address, wallet or signature; details go to `events`.
 | `wick_adjustments_total{gate}`              | counter   |
 | `wick_sizing_binding_total{term}`           | counter   |
 | `wick_regime_size_mul`                      | gauge     |
+| `wick_stream_resumed_total{kind}`           | counter   |
 | `wick_realized_slippage_pct`                | histogram |
 | `wick_copy_gap_seconds`                     | histogram |
 | `wick_open_positions`                       | gauge     |

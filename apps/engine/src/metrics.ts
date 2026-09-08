@@ -214,6 +214,19 @@ export const halted = new client.Gauge({
   registers: [registry],
 });
 
+export const regimeSizeMul = new client.Gauge({
+  name: "wick_regime_size_mul",
+  help: "The regime's size multiplier for the whole engine (ENGINE §11)",
+  registers: [registry],
+});
+
+export const streamResumed = new client.Counter({
+  name: "wick_stream_resumed_total",
+  help: "Signatures replayed after a reconnect, by address kind",
+  labelNames: ["kind"] as const,
+  registers: [registry],
+});
+
 export const outcomes = new client.Counter({
   name: "wick_outcomes_total",
   help: "Outcome rows written, by horizon and whether a price was measured",

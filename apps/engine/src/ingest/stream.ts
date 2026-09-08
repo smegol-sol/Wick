@@ -40,6 +40,8 @@ type SocketLike = {
 
 export type StreamOptions = {
   onEvent: (e: LogEvent) => void;
+  /** After a reconnect (not the first connection): every wanted address with the last signature seen on it. */
+  onReconnect?: (seen: { address: string; lastSig: string | null }[]) => void;
   connect?: (url: string) => SocketLike;
   pingMs?: number;
   staleMs?: number;
@@ -59,7 +61,10 @@ export class LogStream {
     reconnects: 0,
   };
   private readonly url: string;
-  private readonly opts: Required<StreamOptions>;
+  private readonly opts: Required<Omit<StreamOptions, "onReconnect">> &
+    Pick<StreamOptions, "onReconnect">;
+  private readonly lastSig = new Map<string, string>();
+  private connectedOnce = false;
   private ws: SocketLike | null = null;
   private wanted = new Set<string>();
   private byAddress = new Map<string, number>();
@@ -74,6 +79,7 @@ export class LogStream {
     this.url = url;
     this.opts = {
       onEvent: opts.onEvent,
+      onReconnect: opts.onReconnect,
       connect: opts.connect ?? ((u) => new WebSocket(u) as unknown as SocketLike),
       pingMs: opts.pingMs ?? 30_000,
       staleMs: opts.staleMs ?? 90_000,
@@ -94,6 +100,16 @@ export class LogStream {
     this.ws?.close();
     this.ws = null;
     this.state.connected = false;
+  }
+
+  /** The last signature a notification carried for this address; the resume point. */
+  lastSeen(address: string): string | null {
+    return this.lastSig.get(address) ?? null;
+  }
+
+  /** Seed the resume point from storage at boot, so a restart resumes too. */
+  seedLastSeen(address: string, sig: string): void {
+    if (!this.lastSig.has(address)) this.lastSig.set(address, sig);
   }
 
   /** Make the live subscription set equal to `addresses`. Cheap when nothing changed. */
@@ -130,6 +146,11 @@ export class LogStream {
       this.pending.clear();
       for (const a of this.wanted) this.subscribe(a);
       log.info("stream connected", { subscriptions: this.wanted.size });
+      if (this.connectedOnce && this.opts.onReconnect)
+        this.opts.onReconnect(
+          [...this.wanted].map((address) => ({ address, lastSig: this.lastSeen(address) })),
+        );
+      this.connectedOnce = true;
     });
     ws.on("message", (data) => this.onMessage(String(data)));
     ws.on("pong", () => {
@@ -232,6 +253,7 @@ export class LogStream {
     const v = msg.params?.result?.value;
     const address = sub == null ? undefined : this.bySub.get(sub);
     if (!address || !v?.signature) return;
+    this.lastSig.set(address, v.signature);
     this.opts.onEvent({
       address,
       signature: v.signature,

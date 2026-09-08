@@ -5,7 +5,14 @@
  * migrate, LP state), and feeds source heartbeats and slot lag to health and
  * metrics. It decides nothing.
  */
-import type { ChainAdapter, LaunchTx, SourceToken, Trade, TxSummary } from "@wick/core/chain";
+import type {
+  ChainAdapter,
+  LaunchTx,
+  SigRef,
+  SourceToken,
+  Trade,
+  TxSummary,
+} from "@wick/core/chain";
 import type { Audit, Snapshot, Stage } from "@wick/core/contracts";
 import type { Db } from "../db/pool.ts";
 import { slotLagOf } from "../health.ts";
@@ -38,6 +45,8 @@ const LAUNCH_TRIES = 3;
 /** A poll-side migrate event is skipped when the stream reported the same mint within this window. */
 const STREAM_MIGRATE_GRACE_MS = 10 * 60_000;
 const SEEN_SIGS_CAP = 5000;
+/** Signatures fetched per address after a reconnect; the RPC allows 1000, a minute of a busy wallet is far under this. */
+const RESUME_LIMIT = 200;
 
 export type CollectorState = {
   lastOk: Record<string, number>;
@@ -466,6 +475,66 @@ export class Collector {
     m.streamConnected.set(st.connected ? 1 : 0);
     m.streamSubscriptions.set(st.subscribed);
     if (st.connected && st.lastMessageAt != null) this.mark("stream", st.lastMessageAt);
+  }
+
+  /**
+   * The resume point (ROADMAP Phase 2): after a reconnect, every followed wallet's and the
+   * migration authority's signatures since the last seen one are fetched and replayed through
+   * `onLog`, oldest first, so a dropped connection loses no print and no migration. Active
+   * mints are not resumed: polling covers their prices, and their prints are counts only.
+   */
+  async resume(seen: { address: string; lastSig: string | null }[]): Promise<void> {
+    for (const { address, lastSig } of seen) {
+      const kind =
+        address === this.cfg.migrationAuthority
+          ? "migration"
+          : this.followed.has(address)
+            ? "followed"
+            : null;
+      if (!kind || !lastSig) continue;
+      const ctrl = new AbortController();
+      const kill = setTimeout(() => ctrl.abort(), 8000);
+      let refs: SigRef[];
+      try {
+        refs = await this.chain.signaturesSince(address, lastSig, RESUME_LIMIT, ctrl.signal);
+      } catch (e) {
+        log.warn("resume fetch failed", { err: errText(e), kind });
+        continue;
+      } finally {
+        clearTimeout(kill);
+      }
+      if (!refs.length) continue;
+      log.info("resuming after a reconnect", { kind, missed: refs.length });
+      for (const r of [...refs].reverse()) {
+        m.streamResumed.inc({ kind });
+        await this.onLog({
+          address,
+          signature: r.signature,
+          slot: r.slot,
+          err: r.err,
+          logs: [],
+          at: r.blockTime != null ? r.blockTime * 1000 : Date.now(),
+        });
+      }
+    }
+  }
+
+  /** At boot: the last print per followed wallet and the last stream migration seed the resume point. */
+  async seedResume(): Promise<void> {
+    if (!this.stream) return;
+    try {
+      const prints = await this.db.query<{ wallet: string; sig: string }>(
+        `select distinct on (wallet) wallet, sig from wallet_prints order by wallet, ts desc`,
+      );
+      for (const r of prints.rows) this.stream.seedLastSeen(r.wallet, r.sig);
+      const mig = await this.db.query<{ sig: string }>(
+        `select sig from chain_events where kind = 'migrate' and sig is not null order by ts desc limit 1`,
+      );
+      if (mig.rows[0]) this.stream.seedLastSeen(this.cfg.migrationAuthority, mig.rows[0].sig);
+    } catch (e) {
+      m.dbErrors.inc({ op: "resume_seed" });
+      log.error("resume seed failed", { err: errText(e) });
+    }
   }
 
   /** One notification from the log stream. Never throws; the stream must stay up. */

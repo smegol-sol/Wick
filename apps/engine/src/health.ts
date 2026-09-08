@@ -86,3 +86,26 @@ export function evaluateHealth(input: HealthInputs, limits: HealthLimits): Healt
     dbOk: input.dbOk,
   };
 }
+
+/**
+ * What changed between two evaluations, for the log line that the first night on the VPS
+ * lacked: a self-halt that began at 02:00 UTC was visible on `/healthz` and nowhere else.
+ */
+export type HealthTransition =
+  | { kind: "halt"; reasons: string[] }
+  | { kind: "changed"; reasons: string[] }
+  | { kind: "clear"; sinceMs: number }
+  | null;
+
+export function healthTransition(
+  prev: { selfHalt: boolean; reasons: string[]; since: number } | null,
+  next: Health,
+  now: number,
+): HealthTransition {
+  const was = prev?.selfHalt ?? false;
+  if (!was && next.selfHalt) return { kind: "halt", reasons: next.reasons };
+  if (was && !next.selfHalt) return { kind: "clear", sinceMs: now - (prev?.since ?? now) };
+  if (was && next.selfHalt && prev && prev.reasons.join("|") !== next.reasons.join("|"))
+    return { kind: "changed", reasons: next.reasons };
+  return null;
+}

@@ -17,7 +17,7 @@ import { KillSwitch } from "./executor/killswitch.ts";
 import { Vault } from "./executor/vault.ts";
 import { addHalt, clearHalts } from "./api/queries.ts";
 import { verifyTotp } from "@wick/core/totp";
-import { evaluateHealth, type Health } from "./health.ts";
+import { evaluateHealth, healthTransition, type Health } from "./health.ts";
 import { startHttp } from "./http.ts";
 import { Collector } from "./ingest/collector.ts";
 import { LogStream, wsUrlOf } from "./ingest/stream.ts";
@@ -104,6 +104,23 @@ async function main(): Promise<void> {
       },
       { ...risk.health, requiredSources: REQUIRED_SOURCES },
     );
+
+  // Every self-halt transition is said once, and the gauge the alert reads is published.
+  for (const kind of ["health", "kill", "manual"]) m.halted.set({ kind }, 0);
+  let lastHealth: { selfHalt: boolean; reasons: string[]; since: number } | null = null;
+  const healthTimer = setInterval(() => {
+    const now = Date.now();
+    const h = health();
+    const t = healthTransition(lastHealth, h, now);
+    if (t?.kind === "halt") log.warn("self-halt", { reasons: t.reasons });
+    else if (t?.kind === "changed") log.warn("self-halt reasons changed", { reasons: t.reasons });
+    else if (t?.kind === "clear") log.info("self-halt cleared", { afterMs: t.sinceMs });
+    m.halted.set({ kind: "health" }, h.selfHalt ? 1 : 0);
+    if (t?.kind === "halt" || lastHealth == null)
+      lastHealth = { selfHalt: h.selfHalt, reasons: h.reasons, since: now };
+    else lastHealth = { ...lastHealth, selfHalt: h.selfHalt, reasons: h.reasons };
+  }, 1000);
+  healthTimer.unref();
 
   const kill = new KillSwitch(cfg.killSwitchFile, (k) => {
     if (k.active) {
@@ -247,6 +264,7 @@ async function main(): Promise<void> {
     stream.stop();
     stopLoop();
     clearInterval(dbTimer);
+    clearInterval(healthTimer);
     if (deadman) clearInterval(deadman);
     server.close();
     db.end().finally(() => process.exit(0));

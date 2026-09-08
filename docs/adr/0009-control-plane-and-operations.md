@@ -19,6 +19,9 @@ The engine runs unattended on one VPS (ADR-0003) and signs with a sealed key. Wh
 | ----------------------- | ------------------------------------------- |
 | engine down             | `wick_up == 0` for 60 s                     |
 | source stale            | `wick_source_heartbeat_age_seconds > 30`    |
+| ingest stalled          | last completed tick older than 60 s         |
+| ingest slow             | median tick > 3 s for 10 min                |
+| self-halt               | `wick_halted{kind="health"} == 1` for 2 min |
 | slot lag                | `wick_slot_lag > 20`                        |
 | decision slow           | p99 `wick_decision_duration_seconds > 0.05` |
 | event loop lag          | > 100 ms for 30 s                           |

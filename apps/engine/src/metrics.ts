@@ -13,11 +13,26 @@ export const up = new client.Gauge({
   registers: [registry],
 });
 
+/**
+ * The collector hands over its `lastOk` map; the age is computed at scrape time, so a
+ * stalled tick shows as a growing age instead of a frozen one (the first-night finding).
+ */
+let sourceLastOk: () => Record<string, number> = () => ({});
+export function bindSourceLastOk(f: () => Record<string, number>): void {
+  sourceLastOk = f;
+}
+
 export const sourceHeartbeatAge = new client.Gauge({
   name: "wick_source_heartbeat_age_seconds",
-  help: "Seconds since a source last answered with usable data",
+  help: "Seconds since a source last answered with usable data, at scrape time",
   labelNames: ["source"] as const,
   registers: [registry],
+  collect() {
+    const now = Date.now();
+    for (const [source, at] of Object.entries(sourceLastOk())) {
+      this.set({ source }, Math.max(0, (now - at) / 1000));
+    }
+  },
 });
 
 export const sourceCallDuration = new client.Histogram({
@@ -108,6 +123,27 @@ export const ingestCycle = new client.Histogram({
   name: "wick_ingest_cycle_duration_seconds",
   help: "One ingest tick, poll to commit",
   buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  registers: [registry],
+});
+
+export const ingestPhase = new client.Histogram({
+  name: "wick_ingest_phase_duration_seconds",
+  help: "One phase of the ingest tick",
+  labelNames: ["phase"] as const,
+  buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
+  registers: [registry],
+});
+
+export const ingestLastTick = new client.Gauge({
+  name: "wick_ingest_last_tick_timestamp_seconds",
+  help: "Unix time of the last ingest tick that ran to the end; its age is the liveness alert",
+  registers: [registry],
+});
+
+export const ingestStalls = new client.Counter({
+  name: "wick_ingest_stalls_total",
+  help: "Ticks the watchdog gave up on, by the phase they were in",
+  labelNames: ["phase"] as const,
   registers: [registry],
 });
 

@@ -455,6 +455,10 @@ Never a label with a token address, wallet or signature; details go to `events`.
 | `wick_up`                                   | gauge     |
 | `wick_source_heartbeat_age_seconds{source}` | gauge     |
 | `wick_source_call_duration_seconds{source}` | histogram |
+| `wick_ingest_cycle_duration_seconds`        | histogram |
+| `wick_ingest_phase_duration_seconds{phase}` | histogram |
+| `wick_ingest_last_tick_timestamp_seconds`   | gauge     |
+| `wick_ingest_stalls_total{phase}`           | counter   |
 | `wick_slot_lag`                             | gauge     |
 | `wick_event_loop_lag_seconds`               | gauge     |
 | `wick_active_tokens`                        | gauge     |
@@ -474,6 +478,8 @@ Never a label with a token address, wallet or signature; details go to `events`.
 | `wick_realized_pnl_sol_day`                 | gauge     |
 | `wick_halted{kind}`                         | gauge     |
 | `wick_replay_runs_total{status}`            | counter   |
+
+Source ages and the halt gauge are computed when scraped, never cached by the loop they watch: a stalled loop must show as a growing age, not a frozen one (learned on the first night, 2026-09-08).
 
 Host and service metrics come from `node_exporter`, `postgres_exporter` and `redis_exporter` (§16). Three Grafana boards: Operations (is it alive?), Quality (is it working?), Host (is the box healthy?). Alerts are for liveness and infrastructure; the brakes are in code.
 

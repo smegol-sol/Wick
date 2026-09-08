@@ -50,17 +50,20 @@ Nothing listens on a public interface. The only public port on the host is SSH, 
 
 ## 4. Alerts and what to do
 
-| Alert                       | First action                                                                           |
-| --------------------------- | -------------------------------------------------------------------------------------- |
-| EngineDown                  | `docker compose ps`, `logs engine`; if the box is dead, healthchecks.io also fired     |
-| SourceStale pump.fun        | pump.fun blocks datacenter IPs at times; check from the laptop; nothing to fix in code |
-| SourceStale rpc             | RPC provider status page; the fallback endpoints are public and slow                   |
-| SlotLag                     | primary RPC is behind; the engine self-halts entries above 20 slots                    |
-| DecisionSlow / EventLoopLag | look at ingest cycle p99; too many active tokens or a slow database                    |
-| DbErrors                    | `logs engine` shows the failing statement; disk full is the usual cause                |
-| DiskFull / DiskWillFill     | check retention policies ran (`SELECT * FROM timescaledb_information.jobs`)            |
-| PostgresDown                | `docker compose logs db`                                                               |
-| backup check red            | `docker compose logs backup`; the dump failed or the volume is full                    |
+| Alert                       | First action                                                                                                                                                                              |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EngineDown                  | `docker compose ps`, `logs engine`; if the box is dead, healthchecks.io also fired                                                                                                        |
+| IngestStalled               | the collector's tick did not run to the end; `logs engine \| grep stalled` names the phase; the watchdog abandons it and the next tick runs, so a repeat means the phase itself is broken |
+| IngestSlow                  | the median tick is over 3 s against a 1 s budget; `wick_ingest_phase_duration_seconds` on the Operations board says which phase                                                           |
+| SelfHalt                    | entries are halted on health; `/healthz` lists the reasons, the log has `self-halt` and `self-halt cleared` lines                                                                         |
+| SourceStale pump.fun        | pump.fun blocks datacenter IPs at times; check from the laptop; nothing to fix in code                                                                                                    |
+| SourceStale rpc             | RPC provider status page; the fallback endpoints are public and slow                                                                                                                      |
+| SlotLag                     | primary RPC is behind; the engine self-halts entries above 20 slots                                                                                                                       |
+| DecisionSlow / EventLoopLag | look at ingest cycle p99; too many active tokens or a slow database                                                                                                                       |
+| DbErrors                    | `logs engine` shows the failing statement; disk full is the usual cause                                                                                                                   |
+| DiskFull / DiskWillFill     | check retention policies ran (`SELECT * FROM timescaledb_information.jobs`)                                                                                                               |
+| PostgresDown                | `docker compose logs db`                                                                                                                                                                  |
+| backup check red            | `docker compose logs backup`; the dump failed or the volume is full                                                                                                                       |
 
 ## 5. Backups and restore
 

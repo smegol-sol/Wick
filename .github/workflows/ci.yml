@@ -2,6 +2,8 @@ name: ci
 
 on:
   pull_request:
+    # `edited` so a fixed PR title re-runs the commitlint step
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
 

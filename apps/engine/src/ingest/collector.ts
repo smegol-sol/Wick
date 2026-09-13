@@ -80,6 +80,7 @@ export class Collector {
   private latest = new Map<string, SourceToken>();
   private followed = new Set<string>();
   private followedAt = 0;
+  private readonly emptyLoggedAt = new Map<string, number>();
   private streamMigrated = new Map<string, number>();
   private seenSigs = new Set<string>();
   private stages = new Map<string, Stage>();
@@ -143,6 +144,21 @@ export class Collector {
     this.state.lastOk[source] = at;
   }
 
+  /** A poll that returned no tokens: counted by reason, and said in the log once a minute per source. */
+  private noteEmpty(source: string, failure: string, now: number): void {
+    m.sourceFailures.inc({ source, reason: failure.split(" ")[0] ?? "empty" });
+    const last = this.emptyLoggedAt.get(source) ?? 0;
+    if (now - last < 60_000) return;
+    this.emptyLoggedAt.set(source, now);
+    log.warn("source answered nothing", {
+      source,
+      reason: failure,
+      sinceOkSec: this.state.lastOk[source]
+        ? Math.round((now - this.state.lastOk[source]!) / 1000)
+        : null,
+    });
+  }
+
   /** One second: poll sources, refresh cooling stats when due, write rows. */
   async tick(): Promise<void> {
     if (this.stopped || this.ticking) return;
@@ -161,6 +177,7 @@ export class Collector {
       for (const b of batches) {
         m.sourceCallDuration.observe({ source: b.source }, (performance.now() - t0) / 1000);
         if (b.tokens.length) this.mark(b.source, b.at);
+        else this.noteEmpty(b.source, b.failure ?? "empty", now);
         if (b.solUsd != null) {
           this.mark("jupiter-price", b.at);
           this.state.solUsd = b.solUsd;

@@ -28,7 +28,13 @@ type PumpCoin = {
   total_supply?: number;
 };
 
-export type Pulse = { tokens: Token[]; solUsd: number | null; at: number };
+export type Pulse = {
+  tokens: Token[];
+  solUsd: number | null;
+  at: number;
+  /** Why the token list is empty when it is: `http 429`, `timeout`, `body`, `backoff`; null otherwise. */
+  failure: string | null;
+};
 
 const PUMP = "https://frontend-api-v3.pump.fun/coins";
 const SUPPLY = 1_000_000_000;
@@ -36,6 +42,36 @@ const PULSE_TTL = 3_200;
 
 let pulseCache: Pulse | null = null;
 let pulseInflight: Promise<Pulse> | null = null;
+/** The last reason pump.fun gave nothing, and until when it is not asked again (429/403 back off). */
+let pumpFailure: { at: number; reason: string } | null = null;
+let pumpBackoffUntil = 0;
+const BACKOFF_429_MS = 30_000;
+const BACKOFF_403_MS = 60_000;
+const BACKOFF_MAX_MS = 300_000;
+
+export function pumpStatus(): {
+  failure: string | null;
+  failedAt: number | null;
+  backoffUntil: number;
+} {
+  return {
+    failure: pumpFailure?.reason ?? null,
+    failedAt: pumpFailure?.at ?? null,
+    backoffUntil: pumpBackoffUntil,
+  };
+}
+
+function pumpFailed(reason: string, backoffMs = 0): PumpCoin[] {
+  pumpFailure = { at: Date.now(), reason };
+  if (backoffMs > 0) pumpBackoffUntil = Math.max(pumpBackoffUntil, Date.now() + backoffMs);
+  return [];
+}
+
+function retryAfterMs(res: Response, fallback: number): number {
+  const h = res.headers.get("retry-after");
+  const secs = h ? Number(h) : NaN;
+  return Number.isFinite(secs) && secs > 0 ? Math.min(BACKOFF_MAX_MS, secs * 1000) : fallback;
+}
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
@@ -127,7 +163,14 @@ function coinToToken(coin: PumpCoin, now: number, sol: number | null): Token | n
   };
 }
 
+/**
+ * One page of pump.fun's frontend API. A failure never throws: it returns an empty list and
+ * records why in `pumpStatus()`, because the first four days on the VPS (2026-09-09 to 13)
+ * were spent polling a source that answered every request with nothing and no line said so.
+ * 429 and 403 back off (Retry-After when given) so a rate limit is not fed.
+ */
 async function getPump(sort: string, extra = "", limit = 24): Promise<PumpCoin[]> {
+  if (Date.now() < pumpBackoffUntil) return pumpFailed(pumpFailure?.reason ?? "backoff");
   const url = `${PUMP}?offset=0&limit=${limit}&sort=${sort}&order=DESC&includeNsfw=false${extra}`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 4000);
@@ -136,12 +179,15 @@ async function getPump(sort: string, extra = "", limit = 24): Promise<PumpCoin[]
       signal: ctrl.signal,
       headers: { accept: "application/json", "user-agent": "WICK/1" },
     });
-    if (!res.ok) return [];
+    if (res.status === 429) return pumpFailed("http 429", retryAfterMs(res, BACKOFF_429_MS));
+    if (res.status === 403) return pumpFailed("http 403", BACKOFF_403_MS);
+    if (!res.ok) return pumpFailed(`http ${res.status}`);
     const data = (await res.json()) as unknown;
-    if (!Array.isArray(data)) return [];
+    if (!Array.isArray(data)) return pumpFailed("body");
+    pumpFailure = null;
     return (data as PumpCoin[]).slice(0, limit);
-  } catch {
-    return [];
+  } catch (e) {
+    return pumpFailed((e as { name?: string })?.name === "AbortError" ? "timeout" : "network");
   } finally {
     clearTimeout(t);
   }
@@ -203,7 +249,12 @@ async function fetchPulse(): Promise<Pulse> {
         }
       }
     }
-    return { tokens, solUsd: sol, at: now };
+    return {
+      tokens,
+      solUsd: sol,
+      at: now,
+      failure: tokens.length ? null : (pumpFailure?.reason ?? "empty"),
+    };
   } finally {
     clearTimeout(t);
   }

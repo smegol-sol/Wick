@@ -83,7 +83,9 @@ export function makeSolanaAdapter(): ChainAdapter {
         pair: tk.pair,
         snapshot: tokenToSnapshot(tk, pulse.at),
       }));
-      return [{ source: "pump.fun", at: pulse.at, tokens, solUsd: pulse.solUsd }];
+      return [
+        { source: "pump.fun", at: pulse.at, tokens, solUsd: pulse.solUsd, failure: pulse.failure },
+      ];
     },
 
     async stats(mints, signal): Promise<Snapshot[]> {

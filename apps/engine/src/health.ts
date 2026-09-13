@@ -97,6 +97,11 @@ export type HealthTransition =
   | { kind: "clear"; sinceMs: number }
   | null;
 
+/** Reasons compared without their numbers: `stale 40s` and `stale 41s` are the same halt, not a change. */
+function reasonKey(reasons: string[]): string {
+  return reasons.map((r) => r.replace(/\d+(\.\d+)?/g, "#")).join("|");
+}
+
 export function healthTransition(
   prev: { selfHalt: boolean; reasons: string[]; since: number } | null,
   next: Health,
@@ -105,7 +110,7 @@ export function healthTransition(
   const was = prev?.selfHalt ?? false;
   if (!was && next.selfHalt) return { kind: "halt", reasons: next.reasons };
   if (was && !next.selfHalt) return { kind: "clear", sinceMs: now - (prev?.since ?? now) };
-  if (was && next.selfHalt && prev && prev.reasons.join("|") !== next.reasons.join("|"))
+  if (was && next.selfHalt && prev && reasonKey(prev.reasons) !== reasonKey(next.reasons))
     return { kind: "changed", reasons: next.reasons };
   return null;
 }

@@ -35,6 +35,13 @@ export const sourceHeartbeatAge = new client.Gauge({
   },
 });
 
+export const sourceFailures = new client.Counter({
+  name: "wick_source_failures_total",
+  help: "Polls a source answered with nothing, by reason (http, timeout, body, backoff, empty)",
+  labelNames: ["source", "reason"] as const,
+  registers: [registry],
+});
+
 export const sourceCallDuration = new client.Histogram({
   name: "wick_source_call_duration_seconds",
   help: "Duration of one call to a source",

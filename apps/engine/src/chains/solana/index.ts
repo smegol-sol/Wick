@@ -71,8 +71,8 @@ export function makeSolanaAdapter(): ChainAdapter {
   return {
     chain: "solana",
 
-    async poll(): Promise<SourceBatch[]> {
-      const pulse = await loadSolanaPulse();
+    async poll(signal): Promise<SourceBatch[]> {
+      const pulse = await loadSolanaPulse({ signal });
       const tokens: SourceToken[] = pulse.tokens.map((tk) => ({
         mint: tk.mint,
         symbol: tk.symbol,
@@ -83,7 +83,9 @@ export function makeSolanaAdapter(): ChainAdapter {
         pair: tk.pair,
         snapshot: tokenToSnapshot(tk, pulse.at),
       }));
-      return [{ source: "pump.fun", at: pulse.at, tokens, solUsd: pulse.solUsd }];
+      return [
+        { source: "pump.fun", at: pulse.at, tokens, solUsd: pulse.solUsd, failure: pulse.failure },
+      ];
     },
 
     async stats(mints, signal): Promise<Snapshot[]> {

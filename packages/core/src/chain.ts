@@ -27,6 +27,8 @@ export type SourceBatch = {
   tokens: SourceToken[];
   /** SOL/USD the source or a sibling reported alongside, when any. */
   solUsd: number | null;
+  /** Why `tokens` is empty when it is (`http 429`, `timeout`, `body`, `backoff`); null or absent otherwise. */
+  failure?: string | null;
 };
 
 /** Whoever received the mint in the first ten slots after creation (ENGINE §7). */

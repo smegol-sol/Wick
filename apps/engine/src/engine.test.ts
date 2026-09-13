@@ -153,6 +153,12 @@ test("health transitions: halt once, changed reasons once, clear once with the d
   assert.deepEqual(t1, { kind: "halt", reasons: ["source pump.fun stale 40s"] });
   const prev = { selfHalt: true, reasons: halted.reasons, since: 1000 };
   assert.equal(healthTransition(prev, halted, 2000), null, "the same halt is not repeated");
+  const older = { ...halted, reasons: ["source pump.fun stale 41s"] };
+  assert.equal(
+    healthTransition(prev, older, 2500),
+    null,
+    "an older age is the same halt, not a change",
+  );
   const more = { ...halted, reasons: ["source pump.fun stale 70s", "slot lag 30"] };
   assert.deepEqual(healthTransition(prev, more, 3000), { kind: "changed", reasons: more.reasons });
   assert.deepEqual(healthTransition(prev, base, 61_000), { kind: "clear", sinceMs: 60_000 });
@@ -1160,4 +1166,38 @@ test("the pool survives a lost connection: the error is counted and logged, neve
   assert.match(after, /op="pool"\} 1/);
   assert.doesNotMatch(before, /op="pool"\} 1/);
   await pool.end();
+});
+
+test("collector: a poll that returns nothing is counted by reason and logged, and never marks the source", async () => {
+  const db = { query: async () => ({ rows: [] }) } as unknown as Db;
+  const chain = {
+    chain: "solana",
+    async poll() {
+      return [{ source: "pump.fun", at: Date.now(), tokens: [], solUsd: 150, failure: "http 429" }];
+    },
+    async stats() {
+      return [];
+    },
+    async slots() {
+      return [];
+    },
+  } as unknown as ChainAdapter;
+  const c = new Collector(db, chain, {
+    activeSampleMs: 1000,
+    coolingSampleMs: 60_000,
+    activeWindowMs: 7_200_000,
+    coolingWindowMs: 86_400_000,
+    auditEveryMs: 600_000,
+    slotPollMs: 5000,
+    launchPerTick: 2,
+    launchRetryMs: 60_000,
+    followRefreshMs: 30_000,
+    migrationAuthority: MIGRATOR,
+  });
+  await c.tick();
+  await c.tick();
+  assert.equal(c.state.lastOk["pump.fun"], undefined, "nothing usable, nothing marked");
+  assert.ok(c.state.lastOk["jupiter-price"], "the SOL price that came alongside still counts");
+  const scraped = await registry.getSingleMetricAsString("wick_source_failures_total");
+  assert.match(scraped, /source="pump.fun",reason="http"\} 2/);
 });

@@ -15,6 +15,10 @@ FAILED=0
 healthz() { curl -s --max-time 5 "${BASE}/healthz" || echo '{}'; }
 field() { healthz | python3 -c "import json,sys; d=json.loads(sys.stdin.read() or '{}'); print(d.get('$1'))"; }
 restarts() { docker inspect --format '{{.RestartCount}}' "$(docker compose ps -q engine)" 2>/dev/null || echo "?"; }
+# `grep -q` closes the pipe on the first match, `docker compose logs` then dies of SIGPIPE, and with
+# pipefail the whole pipeline reads as false: the third drill run (2026-09-13) reported two lines missing
+# that the log plainly had. Count instead, which reads the log to its end.
+logs_has() { local pattern=$1; shift; [ "$(docker compose logs "$@" engine 2>/dev/null | grep -c "$pattern")" -gt 0 ]; }
 metric() { curl -s --max-time 5 -H "$AUTH" "${BASE}/metrics" | grep -E "^$1" | head -1 | awk '{print $NF}'; }
 
 drill_rpc_cut() {
@@ -48,7 +52,7 @@ drill_db_stop() {
   [ "$(field dbOk)" = "True" ] && pass "dbOk=true again" || fail "dbOk not back: $(healthz)"
   after=$(metric 'wick_db_errors_total' || echo 0)
   echo "   db errors before ${before:-0}, after ${after:-0} (errors are expected while it was down)"
-  docker compose logs --since 3m engine | grep -q '"msg":"self-halt cleared"' && pass "self-halt cleared logged" || fail "no 'self-halt cleared' line"
+  logs_has '"msg":"self-halt cleared"' --since 3m && pass "self-halt cleared logged" || fail "no 'self-halt cleared' line"
 }
 
 drill_restart() {
@@ -62,8 +66,8 @@ drill_restart_check() {
   up=$(docker compose ps --format '{{.Status}}' | grep -c Up)
   total=$(docker compose ps --format '{{.Name}}' | wc -l)
   [ "$up" = "$total" ] && pass "all $total services up" || fail "$up of $total services up"
-  docker compose logs engine | grep -q '"msg":"vault sealed"' && pass "vault sealed at boot" || fail "no 'vault sealed' line"
-  docker compose logs engine | grep -q '"msg":"migrations applied"' && fail "migrations ran again (should be a no-op)" || pass "migrations a no-op"
+  logs_has '"msg":"vault sealed"' && pass "vault sealed at boot" || fail "no 'vault sealed' line"
+  logs_has '"msg":"migrations applied"' --since 10m && fail "migrations ran again (should be a no-op)" || pass "migrations a no-op"
   [ "$(curl -s --max-time 5 -H "$AUTH" "${BASE}/api/state" | python3 -c "import json,sys; print(json.load(sys.stdin)['vault'])")" = "sealed" ] && pass "API says sealed" || fail "API does not say sealed"
 }
 

@@ -1201,3 +1201,37 @@ test("collector: a poll that returns nothing is counted by reason and logged, an
   const scraped = await registry.getSingleMetricAsString("wick_source_failures_total");
   assert.match(scraped, /source="pump.fun",reason="http"\} 2/);
 });
+
+test("logger: a warn line that repeats past the cap is dropped and counted, other lines still pass", async () => {
+  const { logger, setRepeatCap } = await import("./log.ts");
+  const lines: string[] = [];
+  const real = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    lines.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    setRepeatCap(3);
+    const log = logger("test");
+    for (let i = 0; i < 10; i++) log.warn("storm", { i });
+    log.warn("another");
+    log.error("storm");
+    assert.equal(
+      lines.filter((l) => l.includes('"msg":"storm"') && l.includes('"level":"warn"')).length,
+      3,
+    );
+    assert.equal(
+      lines.filter((l) => l.includes('"msg":"another"')).length,
+      1,
+      "a different line is not affected",
+    );
+    assert.equal(
+      lines.filter((l) => l.includes('"level":"error"')).length,
+      1,
+      "the cap is per level",
+    );
+  } finally {
+    process.stderr.write = real;
+    setRepeatCap(30);
+  }
+});

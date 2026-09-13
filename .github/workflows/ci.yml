@@ -110,6 +110,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      - name: build the engine image (the host's update.sh runs this build; a file the Dockerfile copies must exist)
+        run: docker build -f apps/engine/Dockerfile -t wick-engine:ci .
       - run: npx playwright install --with-deps chromium
       - name: build the console in mock mode and smoke it
         run: |

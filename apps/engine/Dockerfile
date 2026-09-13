@@ -5,7 +5,6 @@ WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
 COPY apps/engine/package.json apps/engine/
-COPY apps/desk/package.json apps/desk/
 RUN npm ci --ignore-scripts --omit=dev --workspace @wick/engine --workspace @wick/core
 
 FROM node:22-alpine

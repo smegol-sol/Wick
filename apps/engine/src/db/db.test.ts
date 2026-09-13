@@ -264,13 +264,18 @@ test(
         lpRead: null,
       });
       const loaded = loadRules("config/rules.yaml");
+      // The shipped file runs two rules in suggest; this test exercises the shadow path.
+      const shadowRules = {
+        ...loaded.rules,
+        rules: loaded.rules.rules.map((r) => ({ ...r, mode: "shadow" as const })),
+      };
       const loop = new DecisionLoop(
         {
           db,
           chain,
           book,
           activeMints: () => [mint],
-          rules: loaded.rules,
+          rules: shadowRules,
           rulesHash: loaded.hash,
           codeVersion: "test",
           risk: loadRisk("config/risk.yaml"),

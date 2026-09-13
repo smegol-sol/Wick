@@ -76,10 +76,10 @@ test("rules.yaml loads with a stable hash and the decision env has safe defaults
   assert.deepEqual(
     a.rules.rules.map((r) => `${r.id}:${r.strategy}:${r.mode}`),
     [
-      "confirmed-entry:confirmed-entry:shadow",
+      "confirmed-entry:confirmed-entry:suggest",
       "migration-snipe:migration-snipe:shadow",
       "mirror-follow:mirror-follow:shadow",
-      "exit-policy:exit-policy:shadow",
+      "exit-policy:exit-policy:suggest",
     ],
   );
   const cfg = parseEnv({ DATABASE_URL: "postgres://x" });

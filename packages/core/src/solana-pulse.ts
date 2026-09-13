@@ -49,6 +49,14 @@ const BACKOFF_429_MS = 30_000;
 const BACKOFF_403_MS = 60_000;
 const BACKOFF_MAX_MS = 300_000;
 
+/** Tests only: forget the last failure and any back-off. */
+export function resetPumpState(): void {
+  pumpFailure = null;
+  pumpBackoffUntil = 0;
+  pulseCache = null;
+  pulseInflight = null;
+}
+
 export function pumpStatus(): {
   failure: string | null;
   failedAt: number | null;
@@ -169,14 +177,20 @@ function coinToToken(coin: PumpCoin, now: number, sol: number | null): Token | n
  * were spent polling a source that answered every request with nothing and no line said so.
  * 429 and 403 back off (Retry-After when given) so a rate limit is not fed.
  */
-async function getPump(sort: string, extra = "", limit = 24): Promise<PumpCoin[]> {
+async function getPump(
+  sort: string,
+  extra = "",
+  limit = 24,
+  parent?: AbortSignal,
+): Promise<PumpCoin[]> {
   if (Date.now() < pumpBackoffUntil) return pumpFailed(pumpFailure?.reason ?? "backoff");
   const url = `${PUMP}?offset=0&limit=${limit}&sort=${sort}&order=DESC&includeNsfw=false${extra}`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 4000);
+  const signal = parent ? AbortSignal.any([parent, ctrl.signal]) : ctrl.signal;
   try {
     const res = await fetch(url, {
-      signal: ctrl.signal,
+      signal,
       headers: { accept: "application/json", "user-agent": "WICK/1" },
     });
     if (res.status === 429) return pumpFailed("http 429", retryAfterMs(res, BACKOFF_429_MS));
@@ -193,16 +207,17 @@ async function getPump(sort: string, extra = "", limit = 24): Promise<PumpCoin[]
   }
 }
 
-async function fetchPulse(): Promise<Pulse> {
+async function fetchPulse(parent?: AbortSignal): Promise<Pulse> {
   const now = Date.now();
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 6_500);
+  const signal = parent ? AbortSignal.any([parent, ctrl.signal]) : ctrl.signal;
   try {
     const [sol, created, bonding, traded] = await Promise.all([
-      solUsd(ctrl.signal),
-      getPump("created_timestamp", "", 36),
-      getPump("last_trade_timestamp", "&complete=false", 24),
-      getPump("last_trade_timestamp", "&complete=true", 16),
+      solUsd(signal),
+      getPump("created_timestamp", "", 36, signal),
+      getPump("last_trade_timestamp", "&complete=false", 24, signal),
+      getPump("last_trade_timestamp", "&complete=true", 16, signal),
     ]);
     const seen = new Set<string>();
     const tokens: Token[] = [];
@@ -214,10 +229,7 @@ async function fetchPulse(): Promise<Pulse> {
       if (tokens.length >= 56) break;
     }
     const mints = tokens.map((tk) => tk.mint);
-    const [flags, stats] = await Promise.all([
-      auditMints(mints),
-      fetchDexStats(mints, ctrl.signal),
-    ]);
+    const [flags, stats] = await Promise.all([auditMints(mints), fetchDexStats(mints, signal)]);
     for (const tk of tokens) {
       const chain = flags.get(tk.mint);
       if (chain) {
@@ -260,16 +272,48 @@ async function fetchPulse(): Promise<Pulse> {
   }
 }
 
-export async function loadSolanaPulse(): Promise<Pulse> {
+/** The whole pulse must settle inside this, whatever any inner call does. */
+export const PULSE_DEADLINE_MS = 12_000;
+
+/**
+ * The pulse, shared by every caller inside `PULSE_TTL`, and never a promise that waits
+ * forever: on the VPS (2026-09-09 to 13) one in-flight pulse never settled and every poll
+ * for four days waited on it, 30 s at a time, 10,800 times. The deadline resolves an empty
+ * pulse with `failure: "deadline"`, drops the stuck attempt, and the next call starts a
+ * fresh one on fresh connections. It never rejects: a failure is a pulse with a reason.
+ */
+export async function loadSolanaPulse(
+  opts: {
+    signal?: AbortSignal;
+    deadlineMs?: number;
+  } = {},
+): Promise<Pulse> {
   const now = Date.now();
   if (pulseCache && now - pulseCache.at < PULSE_TTL) return pulseCache;
   if (pulseInflight) return pulseInflight;
-  pulseInflight = fetchPulse()
+  const deadlineMs = opts.deadlineMs ?? PULSE_DEADLINE_MS;
+  let timer: NodeJS.Timeout | undefined;
+  const empty = (reason: string): Pulse => {
+    pumpFailure = { at: Date.now(), reason };
+    return { tokens: [], solUsd: null, at: Date.now(), failure: reason };
+  };
+  const attempt = fetchPulse(opts.signal);
+  attempt.catch(() => {}); // an attempt the deadline abandoned must not become an unhandled rejection
+  const deadline = new Promise<Pulse>((resolve) => {
+    timer = setTimeout(() => resolve(empty("deadline")), deadlineMs);
+  });
+  pulseInflight = Promise.race([
+    attempt.catch((e: unknown) =>
+      empty((e as { name?: string })?.name === "AbortError" ? "timeout" : "network"),
+    ),
+    deadline,
+  ])
     .then((pulse) => {
       if (pulse.tokens.length) pulseCache = pulse;
       return pulse;
     })
     .finally(() => {
+      clearTimeout(timer);
       pulseInflight = null;
     });
   return pulseInflight;

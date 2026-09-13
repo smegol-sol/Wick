@@ -9,9 +9,10 @@ intentTtlMs: 90000
 # Minimum gap between two intents for the same mint and rule, whatever the outcome.
 intentCooldownMs: 300000
 rules:
+  # Suggest since 2026-09-13 (owner decision): every entry is proposed to the owner and executes only on approval.
   confirmed-entry:
     strategy: confirmed-entry
-    mode: shadow
+    mode: suggest
     weight: 1
     params:
       ageMinSec: 180
@@ -51,9 +52,10 @@ rules:
       maxCopyGapMs: 30000
       sizeMul: 0.5
       maxWallets: 6
+  # Suggest with confirmed-entry: an exit of a real position must be able to execute, and in shadow it never would.
   exit-policy:
     strategy: exit-policy
-    mode: shadow
+    mode: suggest
     weight: 1
     params:
       trailingStopPct: 22

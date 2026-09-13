@@ -27,7 +27,9 @@ docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$REPO":/repo -w /repo no
 if grep -q '^WICK_COMMIT=' .env; then sed -i "s/^WICK_COMMIT=.*/WICK_COMMIT=${after}/" .env; else echo "WICK_COMMIT=${after}" >> .env; fi
 
 echo "== engine"
-docker compose up -d --build --quiet-pull engine prometheus 2>&1 | grep -E 'Started|Running|Error|error' || true
+# Not filtered and not masked: a failed build or a container that did not restart must stop the script.
+docker compose up -d --build --quiet-pull engine prometheus
+echo "   engine $(docker compose ps --format '{{.Status}}' engine 2>/dev/null | head -1)"
 
 echo "== waiting for /healthz"
 for i in $(seq 1 30); do
@@ -39,5 +41,7 @@ for i in $(seq 1 30); do
   sleep 3
   [ "$i" = 30 ] && echo "   no answer after 90 s: docker compose logs --since 3m engine"
 done
-docker compose logs --since 3m engine 2>/dev/null | grep -E '"msg":"(migrations applied|telegram bot polling|self-halt|self-halt cleared)"' | sed 's/^/   /' | tail -6
+# grep exits 1 on no match and pipefail would end the script before "done": the first run on the
+# host (2026-09-13) stopped exactly there, so the pipeline is allowed to find nothing.
+{ docker compose logs --since 3m engine 2>/dev/null | grep -E '"msg":"(migrations applied|telegram bot polling|vault sealed|self-halt|self-halt cleared)"' | sed 's/^/   /' | tail -6; } || true
 echo "== done: ${after}"

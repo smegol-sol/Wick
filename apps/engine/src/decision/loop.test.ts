@@ -132,7 +132,7 @@ function gateRows(queries: Query[]): unknown[][] {
 
 test("decision loop: a shadow rule writes the intent, six gate rows and the fingerprint, then cools down", async () => {
   const { db, queries } = fakeDb();
-  const d = deps({ db });
+  const d = deps({ db, rules: withModes(loadRules("config/rules.yaml").rules, "shadow") });
   const loop = new DecisionLoop(d, CFG);
   await loop.tick();
   const intents = intentRows(queries);
@@ -239,7 +239,7 @@ test("decision loop: an open position past the time exit gets a sell intent thro
         ]
       : [],
   );
-  const d = deps({ db });
+  const d = deps({ db, rules: withModes(loadRules("config/rules.yaml").rules, "shadow") });
   await new DecisionLoop(d, CFG).tick();
   const intents = intentRows(queries);
   const exit = intents.find((q) => q.values[2] === "exit");

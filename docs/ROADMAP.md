@@ -55,7 +55,7 @@ Exit condition: 72 hours of uninterrupted stream, the Operations board showing e
 - [x] The vault on the host (`vault:init`) unsealed from the API with the passphrase and a TOTP code, the kill-switch file checked every second, wallet caps in code (per transaction, per day, operating balance).
 - [x] Every mutating API call writes an `events` row; approve, halt, halt-clear (second factor), unseal (second factor) and seal wired to the executor (ADR-0009).
 - [x] The console in live mode: intents with their reasons, adjustments and regime reason; approve and reject; funnel; halt; unseal and halt-clear with the second factor; fills on executed intents.
-- [ ] The desk retires (end of Phase 2, ADR-0010).
+- [x] The desk retired on 2026-09-13 (ADR-0010): `apps/desk` deleted, the console is the only surface; the core modules only it used stay until Phase 4 decides which the engine reuses.
 - [x] The Telegram bot: alerts (Alertmanager), the daily report, `/status` and `/halt`, restricted to the owner's chat id, plus pushes for suggest intents, executions, halts, self-halt, the vault and rule changes. No `/approve` in v1: approval stays in the console on the tailnet (ADR-0009, amended).
 - [x] `outcomes` for every intent at 5, 30 and 120 minutes, executed or rejected.
 - [x] A decision fingerprint on every intent: the rules-file hash, the code version and the price source next to the stored features, so any decision can be reproduced after the rules change (migration 0004).

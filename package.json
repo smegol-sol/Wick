@@ -10,8 +10,8 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm -w @wick/desk run dev",
-    "build": "npm -w @wick/desk run build",
+    "dev": "npm -w @wick/console run dev",
+    "build": "npm -w @wick/console run build",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "format": "prettier --write .",

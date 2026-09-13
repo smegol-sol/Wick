@@ -1,88 +1,67 @@
 # WICK
 
-Self-custodied Solana meme spot desk. Live pump.fun pulse, on-chain audit, Jupiter execution from a browser hot wallet, wallet copy trading, snipes, ladders, DCA, exits and risk limits.
+An autonomous trading engine for Solana memecoins, run by one owner from a phone. It watches launches on pump.fun and the chain, measures every token it sees once a second, decides through a fixed chain of gates, and executes only what the rules and the owner allow. The console is the control surface; the engine does the work on a small VPS.
 
-**This is a real-money desk.** Every buy, sell, snipe, copy, ladder slice and DCA slice signs and broadcasts a Jupiter swap from the desk wallet. There is no paper mode.
+**This trades real SOL.** Nothing signs without passing every gate, a number without a source is `null` and renders `n/a`, and every decision is written down with the features it saw and the rules that judged it.
+
+## Read first
+
+- [`docs/STATE.md`](docs/STATE.md): where the project is, what was decided, what is open, how to verify the tree.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): the phases and their exit conditions.
+- [`docs/ENGINE.md`](docs/ENGINE.md): the architecture. [`docs/adr/`](docs/adr/): the decisions. [`docs/OPS.md`](docs/OPS.md): the host runbook. [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md): the security model.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md): the rules and the checks.
 
 ## Where every number comes from
 
-| Field                                                                     | Source                                           | When missing                        |
-| ------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------- |
-| Launches, bonding %, market cap, replies, X handle                        | pump.fun frontend API                            | token not listed                    |
-| Mint / freeze authority, supply                                           | Solana RPC `getMultipleAccounts` on the mint     | audit "not read yet"                |
-| 24h volume, 5m volume, tx counts, 5m/1h change, pool liquidity (migrated) | DexScreener                                      | `n/a`                               |
-| Top holders, top-10 share                                                 | RPC `getTokenLargestAccounts` + `getTokenSupply` | `n/a`; public RPCs refuse this call |
-| Holder count                                                              | RPC `getProgramAccounts` (dedicated RPC only)    | `n/a`                               |
-| Followed-wallet swaps ("smart money")                                     | RPC `getSignaturesForAddress` + `getTransaction` | empty list                          |
-| Quotes and swap transactions                                              | Jupiter lite-api                                 | "No Jupiter route"                  |
-| SOL/USD                                                                   | Jupiter price API                                | equity shows cash only              |
+| Field                                                | Source                                               | When missing                      |
+| ---------------------------------------------------- | ---------------------------------------------------- | --------------------------------- |
+| Launches, bonding progress, market cap               | pump.fun frontend API                                | the pulse is empty, with a reason |
+| Mint and freeze authority, supply, Token-2022 flags  | Solana RPC (`getMultipleAccounts`)                   | `SAFETY_UNKNOWN`                  |
+| Volume, transactions, pool liquidity after migration | DexScreener                                          | `n/a`                             |
+| Holders, the supply map, wallet classes              | RPC (`getTokenLargestAccounts`, transaction history) | `SUPPLY_UNKNOWN`                  |
+| Prints of followed wallets, migrations, creates      | the RPC log stream, resumed after every reconnect    | counted as a gap                  |
+| Quotes and swap transactions                         | Jupiter                                              | no execution                      |
+| SOL/USD                                              | Jupiter price API                                    | no sizing                         |
 
-A field nobody reported is `null` in the model and `n/a` in the UI. A filter or sieve rule on an unreported field fails rather than passing. Sentiment, setups and fraud cards are heuristics over reported fields only; each card says how many checks had data.
+There are no simulated wallets, prints, holders or prices anywhere.
 
-There are no simulated wallets, tweets, prints or holders anywhere in the app.
+## Layout
 
-## Project state
+npm workspaces, one lockfile at the root:
 
-Progress, decisions and open items live in [`docs/STATE.md`](docs/STATE.md). Read it first; the roadmap is [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- `packages/core`: chain-agnostic contracts and pure logic (gates, sizing, rules, the evaluator, replay, the vault and signer, the sources). Imported as `@wick/core/<module>`; nothing in it touches a browser or a database.
+- `apps/engine`: the engine (ingest, decision loop, executor, evaluator, regime, supply map, Telegram bot, replay) and the host stack under `deploy/` (compose, Prometheus and Alertmanager, Grafana, Caddy on the tailnet, backups, the failure drills, `update.sh`).
+- `apps/console`: the owner's console (Vite, React, TanStack Router, a PWA): Now, Engine and a token detail, on the API contract in core, with a labelled mock mode.
+- `scripts/`: the test loader the workspaces share and the Playwright render smoke.
 
-## Run it
+## Run the checks
 
-```sh
-cp apps/desk/.env.example apps/desk/.env   # set SOLANA_RPC_URL
-npm install                                # one install for every workspace
-npm run dev                                # http://127.0.0.1:8080
-```
-
-Checks, all from the repository root:
+All from the repository root; CI runs the same set:
 
 ```sh
-npm run typecheck      # every workspace
-npm run lint
-npm test               # packages/core and apps/desk, node --test
-npm run build          # the desk; nitro, vercel preset by default
-npm run smoke          # Playwright render check against a running server
+npm install
+npm run typecheck && npm run lint && npm run format:check && npm test && npm run audit
+VITE_MOCK=1 npm run build && (cd apps/console && npx vite preview --port 8091 &) && npm run smoke -- http://127.0.0.1:8091/ screenshots/console
 ```
 
-Engine, locally (any Postgres 16; the TimescaleDB migration skips itself when the extension is missing):
+The engine's database tests run when `TEST_DATABASE_URL` points at a Postgres 16 (CI uses TimescaleDB); the devnet tests run when `DEVNET_RPC_URL` is set. `docs/STATE.md` has both lines.
+
+## Run the engine
+
+Locally, against any Postgres 16 (the TimescaleDB migration skips itself when the extension is missing):
 
 ```sh
 cd apps/engine
 DATABASE_URL=postgres://wick@127.0.0.1:5432/wick npm run migrate
 DATABASE_URL=postgres://wick@127.0.0.1:5432/wick SOLANA_RPC_URL=https://... npm start
 curl -s http://127.0.0.1:9464/healthz
-TEST_DATABASE_URL=postgres://wick@127.0.0.1:5432/wick npm test   # adds the database integration test
 ```
 
-Deploying the desk to Vercel: set the project's Root Directory to `apps/desk` (the build still runs from the workspace root through npm).
+On the host, `docs/OPS.md` is the whole story: one VPS reachable over Tailscale only, the engine sealed until the owner unseals it with a passphrase and a six-digit code, `update.sh` for every deploy, `drill.sh` for the failure drills.
 
-## Configuration
+## Safety model, in short
 
-Server-only environment variables (never `VITE_` prefixed):
-
-- `SOLANA_RPC_URL`: a dedicated RPC (Helius, Triton, QuickNode). Strongly recommended. Without it the app falls back to the public endpoints, which are rate-limited, refuse holder queries, and are too slow to win a snipe.
-- `NITRO_PRESET`: deploy target, defaults to `vercel`. Use `node-server` for a plain Node host.
-- `HOST`, `PORT`: dev server bind, defaults `127.0.0.1:8080`.
-
-## Safety model
-
-- **Custody.** The desk wallet is an ed25519 key generated or imported in the browser, sealed with PBKDF2 (400k iterations) and AES-GCM bound to the public key, stored in `localStorage`. It unlocks into memory only, auto-locks after 8 minutes idle or 45 seconds hidden, and lockouts after repeated bad passphrases. Keep only what you are ready to lose in it.
-- **No third-party scripts.** The page loads no external JavaScript. Fonts come from Google Fonts as CSS only.
-- **Signing.** The signer refuses any transaction whose fee payer is not the desk wallet. Buys are capped by max trade size, book heat and the fee reserve. Sells never exceed the on-chain balance.
-- **Arming.** Manual tickets always sign (with a confirmation step you can turn off). Auto snipes, copies, ladder and DCA slices sign only while "Live snipe" is on in the desk panel.
-- **Server routes.** `/api/swap` and `/api/send` only relay unsigned and signed transactions the caller already controls, require a same-origin browser caller, and are rate-limited in memory per instance. On serverless hosts the in-memory limiter resets per instance; put a real limiter (Upstash, a WAF) in front for public deployments.
-
-## Layout
-
-npm workspaces, one lockfile at the root:
-
-- `packages/core`: chain-agnostic contracts and the pure logic both apps share. Sources (`solana-pulse.ts`, `dex-stats.ts`, `mint-audit.ts`, `sol-price.ts`, `rpc.ts`), risk and exits, entry ladders, guards, the vault and signer (`hot-wallet.ts`), Jupiter, fraud and tape heuristics, copy rules. Imported as `@wick/core/<module>`. Tests in `src/core.test.ts`.
-- `apps/desk`: the browser desk (TanStack Start). `src/lib/store.ts` is desk state and the tick loop and queues intent only; `src/lib/live-auto.ts` is the one place in the desk that signs; `src/routes/api/*` are pulse, holders, quote, swap, send and wallet bag. Tests in `src/lib/desk.test.ts`.
-- `apps/engine`: the autonomous engine (see `docs/ENGINE.md`). Phase 1 so far: config with the capital ladder check, ingest into Postgres/TimescaleDB (tokens, second-resolution snapshots, mint audits with Token-2022 extensions), health and `/metrics`, and the host stack under `deploy/` (compose, Prometheus alerts, Alertmanager to Telegram, Grafana boards, Caddy on the tailnet, nightly backups). `docs/OPS.md` is the runbook.
-- `scripts/`: the test loader shared by the workspaces and the Playwright smoke.
-
-## Known limits
-
-- pump.fun's frontend API is unofficial and sometimes blocks datacenter IPs. When it fails the pulse is empty, not made up.
-- Very new tokens are not on DexScreener yet, so volume and tx show `n/a` for the first minutes.
-- Candles are built from live polls while the desk is open. There is no historical OHLC source.
-- Rate limiting and the caches are per server instance.
+- **Custody.** The execution wallet's key lives in a sealed vault on the host and is opened into memory only, with a second factor. The engine boots sealed; nothing executes until the owner unseals it.
+- **Gates.** Every intent passes safety, supply, liquidity, manipulation, quote, risk and execution gates; a reject carries a reason code. Rules run in shadow, then suggest (the owner approves each intent), then auto, and only after the evaluator's numbers earn it.
+- **Caps in code.** Per transaction, per day and an operating balance; a kill-switch file the engine reads every second; a self-halt on stale sources, slot lag, a lost database or a lost primary RPC.
+- **No secret in the repository.** CI scans the tree and the history.

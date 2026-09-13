@@ -14,7 +14,7 @@ updates:
         patterns: ["eslint", "@eslint/*", "typescript-eslint", "eslint-plugin-*"]
         update-types: [major]
     ignore:
-      # The desk's signing path is frozen until it retires (ADR-0010); 2.x renames the subpath exports.
+      # The engine's vault and signer are on 1.x; 2.x renames the subpath exports. Taken by hand with a signing test.
       - dependency-name: "@noble/curves"
         update-types: ["version-update:semver-major"]
       # The engine runs on Node 22 with type stripping (`engines` in package.json); a Node 24 types

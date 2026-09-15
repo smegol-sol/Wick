@@ -27,27 +27,49 @@ export function hasPrivateRpc(): boolean {
 
 export type RpcError = { code?: number; message?: string };
 
+/** How one call ended: a result, an empty result, an HTTP status, or a transport error (thrown). */
+export type RpcOutcome = "ok" | "empty" | "http" | "error";
+export type RpcObserver = (call: { method: string; url: string; outcome: RpcOutcome }) => void;
+let observer: RpcObserver | null = null;
+
+/** Every call to every endpoint is reported here (the engine counts them per method); null turns it off. */
+export function observeRpc(fn: RpcObserver | null): void {
+  observer = fn;
+}
+
 export async function rpcCall<T>(
   url: string,
   method: string,
   params: unknown[],
   signal: AbortSignal,
 ): Promise<T | null> {
-  const res = await fetch(url, {
-    method: "POST",
-    signal,
-    headers: {
-      "content-type": "application/json",
-      accept: "application/json",
-      "user-agent": "WICK/1",
-    },
-    redirect: "error",
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-  });
-  if (!res.ok) return null;
-  const data = (await res.json()) as { result?: T; error?: RpcError };
-  if (data.error) return null;
-  return data.result ?? null;
+  let outcome: RpcOutcome = "error";
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      signal,
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        "user-agent": "WICK/1",
+      },
+      redirect: "error",
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    });
+    if (!res.ok) {
+      outcome = "http";
+      return null;
+    }
+    const data = (await res.json()) as { result?: T; error?: RpcError };
+    if (data.error) {
+      outcome = "error";
+      return null;
+    }
+    outcome = data.result == null ? "empty" : "ok";
+    return data.result ?? null;
+  } finally {
+    observer?.({ method, url, outcome });
+  }
 }
 
 /** Try each RPC in order until one answers. */

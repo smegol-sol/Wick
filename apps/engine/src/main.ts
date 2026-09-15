@@ -28,7 +28,7 @@ import { Collector } from "./ingest/collector.ts";
 import { LogStream, wsUrlOf } from "./ingest/stream.ts";
 import type { RuleView } from "@wick/core/api";
 import { mirrorRule } from "@wick/core/rules";
-import { rpcUrls } from "@wick/core/rpc";
+import { observeRpc, rpcUrls } from "@wick/core/rpc";
 import { errText, logger, setLogLevel } from "./log.ts";
 import * as m from "./metrics.ts";
 
@@ -81,6 +81,10 @@ async function main(): Promise<void> {
   const dbTimer = setInterval(() => void ping(db).then((ok) => (dbOk = ok)), 10_000);
 
   const chain = makeSolanaAdapter();
+  // Every RPC call counted per method, so a provider's bill can be read off /metrics.
+  observeRpc(({ method, url, outcome }) =>
+    m.rpcCalls.inc({ method, endpoint: url === cfg.solanaRpcUrl ? "primary" : "public", outcome }),
+  );
   const wsUrl = cfg.solanaWsUrl ?? wsUrlOf(rpcUrls()[0]!);
   const stream = new LogStream(wsUrl, {
     onEvent: (e) => void collector.onLog(e),
@@ -101,6 +105,8 @@ async function main(): Promise<void> {
       launchRetryMs: 60_000,
       followRefreshMs: cfg.followRefreshMs,
       migrationAuthority: cfg.migrationAuthority,
+      candidateMinLiqUsd: cfg.candidateMinLiqUsd,
+      candidateMinTrades5m: cfg.candidateMinTrades5m,
     },
     stream,
   );

@@ -34,6 +34,15 @@ export type CollectorConfig = SamplerConfig & {
   followRefreshMs: number;
   migrationAuthority: string;
   /**
+   * A mint earns RPC work (its audit, its launch parse, a log subscription) once it shows
+   * this much liquidity or this many trades in five minutes, or is pinned by a position or an
+   * intent. Everything else is sampled from the poll only. On the host (2026-09-15) the active
+   * set was every pump.fun launch of the last two hours, 4,767 mints, and every one of them
+   * was audited and parsed; the rules cannot enter any of them below `minLiqUsd`.
+   */
+  candidateMinLiqUsd: number;
+  candidateMinTrades5m: number;
+  /**
    * How long a tick may run before the watchdog gives up on it: logs the phase it is in,
    * counts a stall, and lets the next tick start. Default 30 sample periods. The first
    * night on the VPS a tick hung forever with no error and nothing said so.
@@ -47,6 +56,10 @@ const STREAM_MIGRATE_GRACE_MS = 10 * 60_000;
 const SEEN_SIGS_CAP = 5000;
 /** Signatures fetched per address after a reconnect; the RPC allows 1000, a minute of a busy wallet is far under this. */
 const RESUME_LIMIT = 200;
+/** An unchanged active snapshot is still written this often, so no reader sees a gap longer than the cooling cadence. */
+const SNAPSHOT_REPEAT_MS = 60_000;
+/** An unchanged token row is re-upserted this often, for `last_seen`. */
+const TOKEN_REPEAT_MS = 10 * 60_000;
 
 export type CollectorState = {
   lastOk: Record<string, number>;
@@ -64,6 +77,17 @@ function ts(ms: number | null): Date | null {
 
 function auditKey(a: Audit): string {
   return JSON.stringify([a.authorities, a.extensions, a.lp, a.decimals]);
+}
+
+/** Everything a snapshot row carries except the write time. */
+function snapshotKey(s: Snapshot): string {
+  const { ts: _ts, ...rest } = s;
+  return JSON.stringify(rest);
+}
+
+/** The columns the upsert updates on conflict (`created_at` is insert-only). */
+function tokenKey(t: SourceToken): string {
+  return JSON.stringify([t.symbol, t.name, t.creator, t.stage]);
 }
 
 export class Collector {
@@ -86,6 +110,10 @@ export class Collector {
   private stages = new Map<string, Stage>();
   private auditedAt = new Map<string, { at: number; key: string; lp: Audit["lp"] }>();
   private launches = new Map<string, { tries: number; at: number; done: boolean }>();
+  /** Mints that earned RPC work, with when; sticky while the mint stays sampled. */
+  private candidates = new Map<string, number>();
+  private snapshotWritten = new Map<string, { key: string; at: number }>();
+  private tokenWritten = new Map<string, { key: string; at: number }>();
   private timers: NodeJS.Timeout[] = [];
   private stopped = false;
   private ticking = false;
@@ -196,9 +224,22 @@ export class Collector {
 
       const due = this.sampler.due(now);
       const rows: Snapshot[] = [];
+      const fresh: Snapshot[] = [];
       for (const mint of due.active) {
         const tk = this.latest.get(mint);
-        if (tk) rows.push({ ...tk.snapshot, ts: now });
+        if (!tk) continue;
+        const row = { ...tk.snapshot, ts: now };
+        rows.push(row);
+        if (
+          this.changed(
+            this.snapshotWritten,
+            mint,
+            snapshotKey(tk.snapshot),
+            now,
+            SNAPSHOT_REPEAT_MS,
+          )
+        )
+          fresh.push(row);
       }
       if (due.cooling.length) {
         try {
@@ -206,7 +247,10 @@ export class Collector {
             this.chain.stats(due.cooling, ctrl.signal),
           );
           if (cooled.length) this.mark("dexscreener", now);
-          for (const s of cooled) rows.push({ ...s, ts: now });
+          for (const s of cooled) {
+            rows.push({ ...s, ts: now });
+            fresh.push({ ...s, ts: now });
+          }
         } catch (e) {
           log.warn("cooling stats failed", { err: errText(e), n: due.cooling.length });
         }
@@ -214,20 +258,28 @@ export class Collector {
 
       for (const r of rows) this.book.noteSnapshot(r, this.state.solUsd);
       await this.step("tokens", () =>
-        this.upsertTokens([...this.latest.values()].filter((t) => due.active.includes(t.mint))),
+        this.upsertTokens(
+          [...this.latest.values()].filter(
+            (t) =>
+              due.active.includes(t.mint) &&
+              this.changed(this.tokenWritten, t.mint, tokenKey(t), now, TOKEN_REPEAT_MS),
+          ),
+        ),
       );
-      await this.step("snapshots", () => this.writeSnapshots(rows));
+      await this.step("snapshots", () => this.writeSnapshots(fresh));
       this.sampler.sampled([...due.active, ...due.cooling], now);
-      await this.step("audits", () => this.auditDue(due.active, now, ctrl.signal));
-      await this.step("launches", () => this.launchDue(due.active, now, ctrl.signal));
+      const candidates = this.candidatesAmong(due.active, now);
+      await this.step("audits", () => this.auditDue(candidates, now, ctrl.signal));
+      await this.step("launches", () => this.launchDue(candidates, now, ctrl.signal));
       await this.step("followed", () => this.refreshFollowed(now));
       this.phase = "stream";
-      this.syncStream(due.active);
+      this.syncStream([...this.candidates.keys()]);
       await this.step("micro", () => this.writeMicro(due.active, now));
 
       const counts = this.sampler.counts(now);
       m.activeTokens.set({ state: "active" }, counts.active);
       m.activeTokens.set({ state: "cooling" }, counts.cooling);
+      m.activeTokens.set({ state: "candidate" }, this.candidates.size);
       this.state.lastTickAt = Date.now();
       m.ingestLastTick.set(this.state.lastTickAt / 1000);
     } catch (e) {
@@ -259,6 +311,50 @@ export class Collector {
     this.tickSeq++;
     this.phase = "idle";
     this.ticking = false;
+  }
+
+  /** True when `key` differs from the last one written for `mint`, or the last write is older than `repeatMs`; records it. */
+  private changed(
+    seen: Map<string, { key: string; at: number }>,
+    mint: string,
+    key: string,
+    now: number,
+    repeatMs: number,
+  ): boolean {
+    const last = seen.get(mint);
+    if (last && last.key === key && now - last.at < repeatMs) return false;
+    seen.set(mint, { key, at: now });
+    return true;
+  }
+
+  /** A poll snapshot's own numbers say whether the mint is worth RPC work; pinned mints always are. */
+  private qualifies(mint: string): boolean {
+    if (this.sampler.mints.get(mint)?.pinned) return true;
+    const snap = this.latest.get(mint)?.snapshot;
+    if (!snap) return false;
+    if ((snap.liq ?? 0) >= this.cfg.candidateMinLiqUsd) return true;
+    return (snap.buys5m ?? 0) + (snap.sells5m ?? 0) >= this.cfg.candidateMinTrades5m;
+  }
+
+  /**
+   * The candidates among `active`: those already admitted plus those that qualify now. A
+   * candidate stays one while the sampler still holds the mint; the bookkeeping of dropped
+   * mints goes with it.
+   */
+  private candidatesAmong(active: string[], now: number): string[] {
+    for (const map of [this.candidates, this.snapshotWritten, this.tokenWritten])
+      for (const mint of map.keys())
+        if (this.sampler.tierOf(mint, now) === "dropped") map.delete(mint);
+    const out: string[] = [];
+    for (const mint of active) {
+      if (!this.candidates.has(mint)) {
+        if (!this.qualifies(mint)) continue;
+        this.candidates.set(mint, now);
+        m.candidatesAdmitted.inc();
+      }
+      out.push(mint);
+    }
+    return out;
   }
 
   private async upsertTokens(tokens: SourceToken[]): Promise<void> {
@@ -323,7 +419,7 @@ export class Collector {
     }
   }
 
-  /** Audit new mints at once and every `auditEveryMs`; write only when something changed. */
+  /** Audit new candidates at once and every `auditEveryMs`; write only when something changed. */
   private async auditDue(active: string[], now: number, signal: AbortSignal): Promise<void> {
     const todo = active.filter((mint) => {
       const a = this.auditedAt.get(mint);
@@ -397,7 +493,7 @@ export class Collector {
     }
   }
 
-  /** Parse each active mint's launch once; retry a few times when the history is not readable yet. */
+  /** Parse each candidate's launch once; retry a few times when the history is not readable yet. */
   private async launchDue(active: string[], now: number, signal: AbortSignal): Promise<void> {
     const tries = (mint: string) => this.launches.get(mint)?.tries ?? 0;
     const todo = active
@@ -492,10 +588,10 @@ export class Collector {
     }
   }
 
-  /** Subscriptions: every active mint, every followed wallet, the migration authority. */
-  private syncStream(active: string[]): void {
+  /** Subscriptions: every candidate mint, every followed wallet, the migration authority. */
+  private syncStream(mints: string[]): void {
     if (!this.stream) return;
-    this.stream.setAddresses([...active, ...this.followed, this.cfg.migrationAuthority]);
+    this.stream.setAddresses([...mints, ...this.followed, this.cfg.migrationAuthority]);
     const st = this.stream.state;
     m.streamConnected.set(st.connected ? 1 : 0);
     m.streamSubscriptions.set(st.subscribed);

@@ -493,6 +493,8 @@ test("collector writes tokens, snapshots and one audit per change, and feeds hea
     launchRetryMs: 60_000,
     followRefreshMs: 30_000,
     migrationAuthority: MIGRATOR,
+    candidateMinLiqUsd: 0,
+    candidateMinTrades5m: 0,
   });
   await c.tick();
   await c.pollSlots();
@@ -538,6 +540,8 @@ test("collector: the watchdog names a stalled phase, abandons the tick and lets 
     launchRetryMs: 60_000,
     followRefreshMs: 30_000,
     migrationAuthority: MIGRATOR,
+    candidateMinLiqUsd: 0,
+    candidateMinTrades5m: 0,
     tickStallMs: 30,
   });
   const stuck = c.tick();
@@ -775,6 +779,8 @@ test("collector parses each launch once, and writes migrate and lp_state events 
     launchRetryMs: 0,
     followRefreshMs: 0,
     migrationAuthority: MIGRATOR,
+    candidateMinLiqUsd: 0,
+    candidateMinTrades5m: 0,
   });
   const tick = async () => {
     await new Promise((r) => setTimeout(r, 8));
@@ -1031,6 +1037,8 @@ test("collector: prints from followed wallets, migrations from the authority, tr
     launchRetryMs: 60_000,
     followRefreshMs: 0,
     migrationAuthority: MIGRATOR,
+    candidateMinLiqUsd: 0,
+    candidateMinTrades5m: 0,
   });
   await c.tick();
   const at = Date.now();
@@ -1135,6 +1143,8 @@ test("collector: after a reconnect the followed wallets and the authority are re
     launchRetryMs: 60_000,
     followRefreshMs: 0,
     migrationAuthority: MIGRATOR,
+    candidateMinLiqUsd: 0,
+    candidateMinTrades5m: 0,
   });
   await c.tick();
   await c.resume([
@@ -1193,6 +1203,8 @@ test("collector: a poll that returns nothing is counted by reason and logged, an
     launchRetryMs: 60_000,
     followRefreshMs: 30_000,
     migrationAuthority: MIGRATOR,
+    candidateMinLiqUsd: 0,
+    candidateMinTrades5m: 0,
   });
   await c.tick();
   await c.tick();
@@ -1234,4 +1246,84 @@ test("logger: a warn line that repeats past the cap is dropped and counted, othe
     process.stderr.write = real;
     setRepeatCap(30);
   }
+});
+
+test("collector: only candidates earn RPC work, and an unchanged snapshot or token row is not rewritten", async () => {
+  const queries: { sql: string; values: unknown[] }[] = [];
+  const db = {
+    query: async (sql: string, values: unknown[] = []) => {
+      queries.push({ sql, values });
+      return { rows: [] };
+    },
+  } as unknown as Db;
+  const chain = fakeChain();
+  chain.launch = {
+    slot: 5,
+    sig: "createSig",
+    ts: 1_700_000_000_000,
+    creator: CREATOR,
+    buyers: [],
+    bundlePct: 0,
+    sniperPct: 0,
+    truncated: false,
+  };
+  const wanted: string[][] = [];
+  const stream = {
+    setAddresses: (a: Iterable<string>) => wanted.push([...a]),
+    state: { connected: false, subscribed: 0, lastMessageAt: null },
+  } as unknown as LogStream;
+  // The fixture's pulse says liq 500 and no trade counts: under both thresholds.
+  const c = new Collector(
+    db,
+    chain,
+    {
+      activeSampleMs: 5,
+      coolingSampleMs: 60_000,
+      activeWindowMs: 7_200_000,
+      coolingWindowMs: 86_400_000,
+      auditEveryMs: 0,
+      slotPollMs: 5000,
+      launchPerTick: 2,
+      launchRetryMs: 0,
+      followRefreshMs: 0,
+      migrationAuthority: MIGRATOR,
+      candidateMinLiqUsd: 2000,
+      candidateMinTrades5m: 10,
+    },
+    stream,
+  );
+  const tick = async () => {
+    await new Promise((r) => setTimeout(r, 8));
+    await c.tick();
+  };
+  const count = (table: string) =>
+    queries.filter((q) => q.sql.includes(`insert into ${table}`)).length;
+  await tick();
+  await tick();
+  assert.equal(chain.audits, 0, "a mint under the thresholds is not audited");
+  assert.equal(chain.launches, 0, "nor is its launch parsed");
+  assert.deepEqual(wanted.at(-1), [MIGRATOR], "nor subscribed to; the authority always is");
+  assert.equal(
+    count("token_snapshots"),
+    1,
+    "the same poll snapshot is written once, not once a tick",
+  );
+  assert.equal(count("tokens"), 1, "the token row likewise");
+  assert.deepEqual(c.sampler.counts(Date.now()), { active: 1, cooling: 0 });
+  assert.match(
+    await registry.getSingleMetricAsString("wick_active_tokens"),
+    /state="candidate"\} 0/,
+  );
+
+  c.sampler.pin(MINT, true, Date.now());
+  await tick();
+  assert.equal(chain.audits, 1, "a pinned mint is a candidate whatever its numbers");
+  assert.equal(chain.launches, 1);
+  assert.deepEqual(wanted.at(-1), [MINT, MIGRATOR]);
+  assert.match(
+    await registry.getSingleMetricAsString("wick_active_tokens"),
+    /state="candidate"\} 1/,
+  );
+  await tick();
+  assert.equal(count("token_snapshots"), 1, "still unchanged, still not rewritten");
 });

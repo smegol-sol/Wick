@@ -12,7 +12,7 @@ The decision layer is already pure (features in, intent out, no network). That m
 
 ### 1. Collection starts on day one of Phase 1 and is a deliverable, not a side effect
 
-- `token_snapshots` at 1-second resolution for every **active** token: seen in the last 2 hours, or with an open position, or with any intent in the last 24 hours. Inactive tokens are sampled every 60 seconds until 24 hours after last activity, then dropped from sampling.
+- `token_snapshots` at 1-second resolution for every **active** token: seen in the last 2 hours, or with an open position, or with any intent in the last 24 hours. Inactive tokens are sampled every 60 seconds until 24 hours after last activity, then dropped from sampling. Amended 2026-09-15: a row is written when the source's numbers changed or 60 seconds passed, not once a second regardless; a reader that steps by the second forward-fills, and the unchanged rows carried no information.
 - `chain_events`: create, migrate, LP add/remove/burn/lock, authority changes.
 - `launch_txs`: the parsed first blocks of every launch the engine saw (creator, buyers in the create slot and the next three, amounts, funding source of each buyer where known).
 - `wallet_prints` for followed and candidate wallets.

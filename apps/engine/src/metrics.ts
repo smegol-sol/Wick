@@ -42,6 +42,13 @@ export const sourceFailures = new client.Counter({
   registers: [registry],
 });
 
+export const rpcCalls = new client.Counter({
+  name: "wick_rpc_calls_total",
+  help: "JSON-RPC calls made, by method, endpoint (primary or public) and outcome",
+  labelNames: ["method", "endpoint", "outcome"] as const,
+  registers: [registry],
+});
+
 export const sourceCallDuration = new client.Histogram({
   name: "wick_source_call_duration_seconds",
   help: "Duration of one call to a source",
@@ -66,6 +73,12 @@ export const activeTokens = new client.Gauge({
   name: "wick_active_tokens",
   help: "Tokens sampled at the active cadence",
   labelNames: ["state"] as const,
+  registers: [registry],
+});
+
+export const candidatesAdmitted = new client.Counter({
+  name: "wick_candidates_admitted_total",
+  help: "Mints that earned RPC work (audit, launch parse, log subscription) by liquidity, trades or a pin",
   registers: [registry],
 });
 

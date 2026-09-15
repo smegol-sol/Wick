@@ -74,6 +74,9 @@ export type EngineConfig = {
   /** RPC budgets of the supply writer: holder lists per hour, wallet reads per hour (ADR-0008). */
   holderReadsPerHour: number;
   walletReadsPerHour: number;
+  /** A mint earns RPC work (audit, launch parse, log subscription) at this liquidity or this many trades in 5 minutes. */
+  candidateMinLiqUsd: number;
+  candidateMinTrades5m: number;
   /** The Telegram bot (ADR-0009 §4); both unset means no bot. */
   telegramBotToken: string | null;
   telegramChatId: string | null;
@@ -229,6 +232,8 @@ export function parseEnv(env: Record<string, string | undefined>): EngineConfig 
     quotesPerMinute: num(env.QUOTES_PER_MINUTE, 30),
     holderReadsPerHour: num(env.HOLDER_READS_PER_HOUR, 120),
     walletReadsPerHour: num(env.WALLET_READS_PER_HOUR, 300),
+    candidateMinLiqUsd: num(env.CANDIDATE_MIN_LIQ_USD, 2000),
+    candidateMinTrades5m: num(env.CANDIDATE_MIN_TRADES_5M, 10),
     telegramBotToken: env.TELEGRAM_BOT_TOKEN?.trim() || null,
     telegramChatId: env.TELEGRAM_CHAT_ID?.trim() || null,
     telegramReportHourUtc: num(env.TELEGRAM_REPORT_HOUR_UTC, 0),

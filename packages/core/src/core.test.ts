@@ -560,3 +560,33 @@ function sampleToken(over: Partial<Token> = {}): Token {
     ...over,
   };
 }
+
+test("rpc: every call reports its method, endpoint and outcome to the observer", async () => {
+  const { observeRpc, rpcCall } = await import("./rpc.ts");
+  const seen: { method: string; url: string; outcome: string }[] = [];
+  observeRpc((c) => seen.push(c));
+  const real = globalThis.fetch;
+  let status = 200;
+  let body: unknown = { jsonrpc: "2.0", id: 1, result: 42 };
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+  try {
+    const ctrl = new AbortController();
+    assert.equal(await rpcCall("https://rpc.example", "getSlot", [], ctrl.signal), 42);
+    status = 429;
+    assert.equal(await rpcCall("https://rpc.example", "getSlot", [], ctrl.signal), null);
+    status = 200;
+    body = { jsonrpc: "2.0", id: 1, error: { code: -32000, message: "no" } };
+    assert.equal(await rpcCall("https://rpc.example", "getTransaction", [], ctrl.signal), null);
+    body = { jsonrpc: "2.0", id: 1, result: null };
+    assert.equal(await rpcCall("https://rpc.example", "getTransaction", [], ctrl.signal), null);
+    assert.deepEqual(
+      seen.map((c) => `${c.method}:${c.outcome}`),
+      ["getSlot:ok", "getSlot:http", "getTransaction:error", "getTransaction:empty"],
+    );
+    assert.equal(seen[0]!.url, "https://rpc.example");
+  } finally {
+    globalThis.fetch = real;
+    observeRpc(null);
+  }
+});

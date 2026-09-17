@@ -179,6 +179,8 @@ test(
         launchRetryMs: 60_000,
         followRefreshMs: 30_000,
         migrationAuthority: "39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg",
+        candidateMinLiqUsd: 0,
+        candidateMinTrades5m: 0,
       });
       await c.tick();
       const tok = await db.query("select symbol, stage from tokens where mint = $1", [mint]);
